@@ -1,0 +1,88 @@
+-- Drop existing policies
+DO $$ 
+BEGIN
+  DROP POLICY IF EXISTS "Production plans access" ON production_plans;
+  DROP POLICY IF EXISTS "Store productions access" ON store_productions;
+  DROP POLICY IF EXISTS "Production items access" ON production_items;
+  DROP POLICY IF EXISTS "Box productions access" ON box_productions;
+END $$;
+
+-- Enable RLS
+ALTER TABLE production_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE store_productions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE production_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE box_productions ENABLE ROW LEVEL SECURITY;
+
+-- Create policies for production plans
+CREATE POLICY "Production plans access"
+  ON production_plans
+  FOR ALL
+  TO authenticated
+  USING (true)
+  WITH CHECK (
+    COALESCE(current_setting('request.jwt.claims', true)::jsonb->>'role', '') IN ('admin', 'production')
+  );
+
+-- Create policies for store productions
+CREATE POLICY "Store productions access"
+  ON store_productions
+  FOR ALL
+  TO authenticated
+  USING (
+    COALESCE(current_setting('request.jwt.claims', true)::jsonb->>'role', '') IN ('admin', 'production') OR
+    (
+      COALESCE(current_setting('request.jwt.claims', true)::jsonb->>'role', '') = 'store' AND
+      store_id = ANY((current_setting('request.jwt.claims', true)::jsonb->>'store_ids')::text[])
+    )
+  )
+  WITH CHECK (
+    COALESCE(current_setting('request.jwt.claims', true)::jsonb->>'role', '') IN ('admin', 'production')
+  );
+
+-- Create policies for production items
+CREATE POLICY "Production items access"
+  ON production_items
+  FOR ALL
+  TO authenticated
+  USING (
+    COALESCE(current_setting('request.jwt.claims', true)::jsonb->>'role', '') IN ('admin', 'production') OR
+    EXISTS (
+      SELECT 1 FROM store_productions sp
+      WHERE sp.id = store_production_id
+      AND sp.store_id = ANY((current_setting('request.jwt.claims', true)::jsonb->>'store_ids')::text[])
+    )
+  )
+  WITH CHECK (
+    COALESCE(current_setting('request.jwt.claims', true)::jsonb->>'role', '') IN ('admin', 'production') OR
+    EXISTS (
+      SELECT 1 FROM store_productions sp
+      WHERE sp.id = store_production_id
+      AND sp.store_id = ANY((current_setting('request.jwt.claims', true)::jsonb->>'store_ids')::text[])
+    )
+  );
+
+-- Create policies for box productions
+CREATE POLICY "Box productions access"
+  ON box_productions
+  FOR ALL
+  TO authenticated
+  USING (
+    COALESCE(current_setting('request.jwt.claims', true)::jsonb->>'role', '') IN ('admin', 'production') OR
+    EXISTS (
+      SELECT 1 FROM store_productions sp
+      WHERE sp.id = store_production_id
+      AND sp.store_id = ANY((current_setting('request.jwt.claims', true)::jsonb->>'store_ids')::text[])
+    )
+  )
+  WITH CHECK (
+    COALESCE(current_setting('request.jwt.claims', true)::jsonb->>'role', '') IN ('admin', 'production') OR
+    EXISTS (
+      SELECT 1 FROM store_productions sp
+      WHERE sp.id = store_production_id
+      AND sp.store_id = ANY((current_setting('request.jwt.claims', true)::jsonb->>'store_ids')::text[])
+    )
+  );
+
+-- Grant necessary permissions
+GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
