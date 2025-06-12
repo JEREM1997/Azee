@@ -47,28 +47,88 @@ Deno.serve(async (req) => {
 
     // Fetch all required data using service role (bypasses RLS)
     const [
-      { data: stores, error: storesError },
+      { data: storesData, error: storesError },
       { data: varieties, error: varietiesError },
       { data: forms, error: formsError },
-      { data: boxes, error: boxesError }
+      { data: boxes, error: boxesError },
+      { data: storeVarieties, error: storeVarietiesError },
+      { data: storeBoxes, error: storeBoxesError }
     ] = await Promise.all([
       supabase.from('stores').select('*').order('name'),
       supabase.from('donut_varieties').select('*').order('name'),
       supabase.from('donut_forms').select('*').order('name'),
-      supabase.from('box_configurations').select('*').order('name')
+      supabase.from('box_configurations').select('*').order('name'),
+      supabase.from('store_varieties').select('store_id, variety_id'),
+      supabase.from('store_boxes').select('store_id, box_id')
     ])
 
     if (storesError) throw storesError
     if (varietiesError) throw varietiesError
     if (formsError) throw formsError
     if (boxesError) throw boxesError
+    if (storeVarietiesError) throw storeVarietiesError
+    if (storeBoxesError) throw storeBoxesError
+
+    // Transform stores to include availableVarieties and availableBoxes arrays
+    const stores = (storesData || []).map(store => {
+      const availableVarieties = (storeVarieties || [])
+        .filter(sv => sv.store_id === store.id)
+        .map(sv => sv.variety_id)
+      
+      const availableBoxes = (storeBoxes || [])
+        .filter(sb => sb.store_id === store.id)
+        .map(sb => sb.box_id)
+
+      return {
+        id: store.id,
+        name: store.name,
+        location: store.location,
+        isActive: store.is_active,
+        availableVarieties,
+        availableBoxes,
+        createdAt: store.created_at,
+        updatedAt: store.updated_at
+      }
+    })
+
+    // Transform varieties to camelCase
+    const transformedVarieties = (varieties || []).map(variety => ({
+      id: variety.id,
+      name: variety.name,
+      description: variety.description,
+      isActive: variety.is_active,
+      formId: variety.form_id,
+      productionCost: parseFloat(variety.production_cost || '0'),
+      createdAt: variety.created_at,
+      updatedAt: variety.updated_at
+    }))
+
+    // Transform forms to camelCase
+    const transformedForms = (forms || []).map(form => ({
+      id: form.id,
+      name: form.name,
+      description: form.description,
+      isActive: form.is_active,
+      createdAt: form.created_at,
+      updatedAt: form.updated_at
+    }))
+
+    // Transform boxes to camelCase
+    const transformedBoxes = (boxes || []).map(box => ({
+      id: box.id,
+      name: box.name,
+      size: box.size,
+      isActive: box.is_active,
+      createdAt: box.created_at,
+      updatedAt: box.updated_at
+    }))
 
     return new Response(
       JSON.stringify({
         stores: stores || [],
-        varieties: varieties || [],
-        forms: forms || [],
-        boxes: boxes || []
+        varieties: transformedVarieties || [],
+        forms: transformedForms || [],
+        boxes: transformedBoxes || []
       }),
       {
         headers: {

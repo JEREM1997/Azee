@@ -51,7 +51,9 @@ const AdminPage: React.FC = () => {
     deleteStore,
     deleteVariety,
     deleteForm,
-    deleteBox
+    deleteBox,
+    loading,
+    error
   } = useAdmin();
 
   const getTabData = () => {
@@ -103,11 +105,48 @@ const AdminPage: React.FC = () => {
   };
 
   const handleSave = () => {
+    // Validate required fields based on the active tab
+    if (activeTab === 'stores') {
+      if (!formValues.name?.trim()) {
+        alert('Le nom du magasin est requis');
+        return;
+      }
+      if (!formValues.location?.trim()) {
+        alert('L\'emplacement du magasin est requis');
+        return;
+      }
+    } else if (activeTab === 'varieties') {
+      if (!formValues.name?.trim()) {
+        alert('Le nom de la variété est requis');
+        return;
+      }
+      if (!formValues.formId?.trim()) {
+        alert('La forme du doughnut est requise');
+        return;
+      }
+    } else if (activeTab === 'forms') {
+      if (!formValues.name?.trim()) {
+        alert('Le nom de la forme est requis');
+        return;
+      }
+    } else if (activeTab === 'boxes') {
+      if (!formValues.name?.trim()) {
+        alert('Le nom de la boîte est requis');
+        return;
+      }
+      if (!formValues.size || formValues.size < 1) {
+        alert('La taille de la boîte doit être supérieure à 0');
+        return;
+      }
+    }
+
     // For new items, use empty string as ID, for existing items keep the original ID
     const updatedValues = { 
       ...formValues, 
       id: formValues.id || '' // Keep existing ID or use empty string for new items
     };
+
+    console.log('Saving with values:', updatedValues); // Debug log
 
     switch (activeTab) {
       case 'varieties':
@@ -144,7 +183,11 @@ const AdminPage: React.FC = () => {
     });
   };
 
-  const calculateBoxCost = (boxVarieties: { varietyId: string; quantity: number }[]) => {
+  const calculateBoxCost = (boxVarieties: { varietyId: string; quantity: number }[] | undefined) => {
+    if (!boxVarieties || !Array.isArray(boxVarieties)) {
+      return 0;
+    }
+    
     return boxVarieties.reduce((total, item) => {
       const variety = varieties.find(v => v.id === item.varietyId);
       if (variety) {
@@ -154,11 +197,38 @@ const AdminPage: React.FC = () => {
     }, 0);
   };
 
+  const handleVarietyToggle = (varietyId: string, checked: boolean) => {
+    const currentVarieties = formValues.availableVarieties || [];
+    const newVarieties = checked
+      ? [...currentVarieties, varietyId]
+      : currentVarieties.filter(id => id !== varietyId);
+    
+    setFormValues({ 
+      ...formValues, 
+      availableVarieties: newVarieties 
+    });
+  };
+
+  const handleBoxToggle = (boxId: string, checked: boolean) => {
+    const currentBoxes = formValues.availableBoxes || [];
+    const newBoxes = checked
+      ? [...currentBoxes, boxId]
+      : currentBoxes.filter(id => id !== boxId);
+    
+    setFormValues({ 
+      ...formValues, 
+      availableBoxes: newBoxes 
+    });
+  };
+
   const renderFormFields = () => {
+    console.log('Rendering form for tab:', activeTab);
+    console.log('Form values:', formValues);
+    
     const commonFields = (
       <>
         <div>
-          <label htmlFor="name\" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="name" className="block text-sm font-medium text-gray-700">
             Nom
           </label>
           <input
@@ -166,7 +236,7 @@ const AdminPage: React.FC = () => {
             id="name"
             value={formValues.name}
             onChange={(e) => setFormValues({ ...formValues, name: e.target.value })}
-            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm"
           />
         </div>
         
@@ -179,7 +249,7 @@ const AdminPage: React.FC = () => {
             id="description"
             value={formValues.description || ''}
             onChange={(e) => setFormValues({ ...formValues, description: e.target.value })}
-            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm"
           />
         </div>
         
@@ -189,7 +259,7 @@ const AdminPage: React.FC = () => {
             type="checkbox"
             checked={formValues.isActive}
             onChange={(e) => setFormValues({ ...formValues, isActive: e.target.checked })}
-            className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
+            className="h-4 w-4 text-krispy-green focus:ring-krispy-green border-gray-300 rounded"
           />
           <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
             Actif
@@ -205,68 +275,84 @@ const AdminPage: React.FC = () => {
             {commonFields}
             <div>
               <label htmlFor="location" className="block text-sm font-medium text-gray-700">
-                Emplacement
+                Emplacement *
               </label>
               <input
                 type="text"
                 id="location"
                 value={formValues.location || ''}
                 onChange={(e) => setFormValues({ ...formValues, location: e.target.value })}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                placeholder="Entrez l'adresse du magasin (ex: Rue du Rhône 123, 1204 Genève)"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm"
+                required
               />
             </div>
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Variétés Disponibles
+                Variétés Disponibles ({varieties?.length || 0} total, {varieties?.filter(v => v.isActive)?.length || 0} actives)
               </label>
-              <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-4">
-                {varieties.filter(v => v.isActive).map(variety => (
-                  <div key={variety.id} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id={`variety-${variety.id}`}
-                      checked={formValues.availableVarieties?.includes(variety.id) || false}
-                      onChange={(e) => {
-                        const newVarieties = e.target.checked
-                          ? [...(formValues.availableVarieties || []), variety.id]
-                          : (formValues.availableVarieties || []).filter(id => id !== variety.id);
-                        setFormValues({ ...formValues, availableVarieties: newVarieties });
-                      }}
-                      className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                    />
-                    <label htmlFor={`variety-${variety.id}`} className="ml-2 block text-sm text-gray-900">
-                      {variety.name}
-                    </label>
-                  </div>
-                ))}
+              <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-4 bg-gray-50">
+                {varieties && varieties.length > 0 ? (
+                  varieties.filter(v => v.isActive).map(variety => {
+                    const isChecked = (formValues.availableVarieties || []).includes(variety.id);
+                    return (
+                      <div key={variety.id} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id={`variety-${variety.id}`}
+                          checked={isChecked}
+                          onChange={(e) => handleVarietyToggle(variety.id, e.target.checked)}
+                          className="h-4 w-4 text-krispy-green focus:ring-krispy-green border-gray-300 rounded"
+                        />
+                        <label htmlFor={`variety-${variety.id}`} className="ml-2 block text-sm text-gray-900 cursor-pointer">
+                          {variety.name}
+                          {variety.description && (
+                            <span className="text-gray-500 ml-1">- {variety.description}</span>
+                          )}
+                        </label>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-gray-500 italic">Chargement des variétés...</p>
+                )}
+                {varieties && varieties.filter(v => v.isActive).length === 0 && varieties.length > 0 && (
+                  <p className="text-sm text-gray-500 italic">Aucune variété active disponible</p>
+                )}
               </div>
             </div>
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Boîtes Disponibles
+                Boîtes Disponibles ({boxes?.length || 0} total, {boxes?.filter(b => b.isActive)?.length || 0} actives)
               </label>
-              <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-4">
-                {boxes.filter(b => b.isActive).map(box => (
-                  <div key={box.id} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id={`box-${box.id}`}
-                      checked={formValues.availableBoxes?.includes(box.id) || false}
-                      onChange={(e) => {
-                        const newBoxes = e.target.checked
-                          ? [...(formValues.availableBoxes || []), box.id]
-                          : (formValues.availableBoxes || []).filter(id => id !== box.id);
-                        setFormValues({ ...formValues, availableBoxes: newBoxes });
-                      }}
-                      className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                    />
-                    <label htmlFor={`box-${box.id}`} className="ml-2 block text-sm text-gray-900">
-                      {box.name}
-                    </label>
-                  </div>
-                ))}
+              <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-4 bg-gray-50">
+                {boxes && boxes.length > 0 ? (
+                  boxes.filter(b => b.isActive).map(box => {
+                    const isChecked = (formValues.availableBoxes || []).includes(box.id);
+                    return (
+                      <div key={box.id} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id={`box-${box.id}`}
+                          checked={isChecked}
+                          onChange={(e) => handleBoxToggle(box.id, e.target.checked)}
+                          className="h-4 w-4 text-krispy-green focus:ring-krispy-green border-gray-300 rounded"
+                        />
+                        <label htmlFor={`box-${box.id}`} className="ml-2 block text-sm text-gray-900 cursor-pointer">
+                          {box.name}
+                          <span className="text-gray-500 ml-1">- {box.size} doughnuts</span>
+                        </label>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-gray-500 italic">Chargement des boîtes...</p>
+                )}
+                {boxes && boxes.filter(b => b.isActive).length === 0 && boxes.length > 0 && (
+                  <p className="text-sm text-gray-500 italic">Aucune boîte active disponible</p>
+                )}
               </div>
             </div>
           </div>
@@ -284,7 +370,7 @@ const AdminPage: React.FC = () => {
                 id="formId"
                 value={formValues.formId || ''}
                 onChange={(e) => setFormValues({ ...formValues, formId: e.target.value })}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm"
               >
                 <option value="">Sélectionnez une forme</option>
                 {forms.filter(form => form.isActive).map(form => (
@@ -305,7 +391,7 @@ const AdminPage: React.FC = () => {
                 min="0"
                 value={formValues.productionCost || 0}
                 onChange={(e) => setFormValues({ ...formValues, productionCost: parseFloat(e.target.value) })}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm"
               />
             </div>
           </div>
@@ -329,7 +415,7 @@ const AdminPage: React.FC = () => {
                 min="1"
                 value={formValues.size || 6}
                 onChange={(e) => setFormValues({ ...formValues, size: parseInt(e.target.value, 10) })}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm"
               />
             </div>
             
@@ -370,7 +456,7 @@ const AdminPage: React.FC = () => {
                             
                             setFormValues({ ...formValues, varieties: newVarieties });
                           }}
-                          className="ml-2 w-16 text-center border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                          className="ml-2 w-16 text-center border-gray-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm"
                         />
                         <span className="ml-4 text-sm text-gray-500">
                           CHF {(variety.productionCost * quantity).toFixed(2)}
@@ -491,7 +577,7 @@ const AdminPage: React.FC = () => {
           break;
           
         case 'boxes':
-          const boxCost = calculateBoxCost(item.varieties);
+          const boxCost = calculateBoxCost(item.varieties || []);
           cols = (
             <>
               <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
@@ -536,6 +622,18 @@ const AdminPage: React.FC = () => {
   
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          Erreur: {error}
+        </div>
+      )}
+      
+      {loading && (
+        <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded">
+          Chargement des données...
+        </div>
+      )}
+      
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Tableau de Bord Administrateur</h1>
         <p className="text-gray-600 mt-1">Gérer les magasins, les variétés, les formes et les boîtes</p>
@@ -547,7 +645,7 @@ const AdminPage: React.FC = () => {
             onClick={() => setActiveTab('stores')}
             className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
               activeTab === 'stores'
-                ? 'border-pink-500 text-pink-600'
+                ? 'border-krispy-green text-krispy-green'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -558,7 +656,7 @@ const AdminPage: React.FC = () => {
             onClick={() => setActiveTab('varieties')}
             className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
               activeTab === 'varieties'
-                ? 'border-pink-500 text-pink-600'
+                ? 'border-krispy-green text-krispy-green'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -569,7 +667,7 @@ const AdminPage: React.FC = () => {
             onClick={() => setActiveTab('forms')}
             className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
               activeTab === 'forms'
-                ? 'border-pink-500 text-pink-600'
+                ? 'border-krispy-green text-krispy-green'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -580,7 +678,7 @@ const AdminPage: React.FC = () => {
             onClick={() => setActiveTab('boxes')}
             className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
               activeTab === 'boxes'
-                ? 'border-pink-500 text-pink-600'
+                ? 'border-krispy-green text-krispy-green'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -605,7 +703,7 @@ const AdminPage: React.FC = () => {
                 resetForm();
                 setIsEditing(true);
               }}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
             >
               <Plus className="h-4 w-4 mr-2" />
               Ajouter
@@ -631,19 +729,19 @@ const AdminPage: React.FC = () => {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="p-6">
+            <div className="p-6 max-h-screen overflow-y-auto">
               {renderFormFields()}
               
-              <div className="mt-6 flex justify-end space-x-3">
+              <div className="mt-6 flex justify-end space-x-3 sticky bottom-0 bg-white pt-4 border-t border-gray-200">
                 <button
                   onClick={() => setIsEditing(false)}
-                  className="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                  className="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
                 >
                   Annuler
                 </button>
                 <button
                   onClick={handleSave}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
                 >
                   <Save className="h-4 w-4 mr-2" />
                   Enregistrer

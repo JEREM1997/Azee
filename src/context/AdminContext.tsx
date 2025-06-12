@@ -59,7 +59,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const handleUpdateStore = async (store: Store) => {
     try {
       setError(null);
-      if (store.id) {
+      if (store.id && store.id.trim() !== '') {
         await updateStore(store);
       } else {
         await createStore(store);
@@ -75,7 +75,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const handleUpdateVariety = async (variety: DonutVariety) => {
     try {
       setError(null);
-      if (variety.id) {
+      if (variety.id && variety.id.trim() !== '') {
         await updateDonutVariety(variety);
       } else {
         await createDonutVariety(variety);
@@ -91,7 +91,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const handleUpdateForm = async (form: DonutForm) => {
     try {
       setError(null);
-      if (form.id) {
+      if (form.id && form.id.trim() !== '') {
         await updateDonutForm(form);
       } else {
         await createDonutForm(form);
@@ -107,7 +107,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const handleUpdateBox = async (box: BoxConfiguration) => {
     try {
       setError(null);
-      if (box.id) {
+      if (box.id && box.id.trim() !== '') {
         await updateBoxConfiguration(box);
       } else {
         await createBoxConfiguration(box);

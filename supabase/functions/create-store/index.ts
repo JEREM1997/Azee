@@ -50,10 +50,15 @@ Deno.serve(async (req) => {
 
     // Récupérer les données du magasin
     const storeData = await req.json()
+    console.log('Received store data:', JSON.stringify(storeData, null, 2))
+    
     const { name, location, is_active, available_varieties, available_boxes } = storeData
 
+    console.log('Extracted fields:', { name, location, is_active, available_varieties, available_boxes })
+
     if (!name || !location) {
-      throw new Error('Name and location are required')
+      console.error('Validation failed:', { name: !!name, location: !!location })
+      throw new Error(`Name and location are required. Received: name="${name}", location="${location}"`)
     }
 
     // Créer le magasin avec le client service role (bypass RLS)
@@ -62,9 +67,7 @@ Deno.serve(async (req) => {
       .insert({
         name,
         location,
-        is_active: is_active !== undefined ? is_active : true,
-        available_varieties: available_varieties || [],
-        available_boxes: available_boxes || []
+        is_active: is_active !== undefined ? is_active : true
       })
       .select()
       .single()
@@ -72,6 +75,40 @@ Deno.serve(async (req) => {
     if (insertError) {
       console.error('Insert error:', insertError)
       throw new Error(`Failed to create store: ${insertError.message}`)
+    }
+
+    // Insert store-variety relationships
+    if (available_varieties && available_varieties.length > 0) {
+      const storeVarieties = available_varieties.map((varietyId: string) => ({
+        store_id: newStore.id,
+        variety_id: varietyId
+      }))
+
+      const { error: varietiesError } = await supabase
+        .from('store_varieties')
+        .insert(storeVarieties)
+
+      if (varietiesError) {
+        console.error('Store varieties insert error:', varietiesError)
+        // Don't throw here, just log the error
+      }
+    }
+
+    // Insert store-box relationships
+    if (available_boxes && available_boxes.length > 0) {
+      const storeBoxes = available_boxes.map((boxId: string) => ({
+        store_id: newStore.id,
+        box_id: boxId
+      }))
+
+      const { error: boxesError } = await supabase
+        .from('store_boxes')
+        .insert(storeBoxes)
+
+      if (boxesError) {
+        console.error('Store boxes insert error:', boxesError)
+        // Don't throw here, just log the error
+      }
     }
 
     return new Response(

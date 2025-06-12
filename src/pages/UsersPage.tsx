@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus, Edit, Trash2, Save, X, Users, Key } from 'lucide-react';
 import { STORES } from '../data/mockData';
 import { createUser, updateUser, deleteUser, getUsers, updateUserPassword, updateUserStores } from '../services/userService';
 import { User } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface UserFormValues {
   id: string;
@@ -14,6 +16,7 @@ interface UserFormValues {
 }
 
 const UsersPage: React.FC = () => {
+  const { isAdmin } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
@@ -109,68 +112,25 @@ const UsersPage: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if (!formValues.fullName.trim()) {
+      setError('Le nom complet est requis');
+      return;
+    }
+
     try {
-      setError(null);
       setSaving(true);
-
-      if (!formValues.username || !formValues.fullName || !formValues.role) {
-        setError('Veuillez remplir tous les champs obligatoires');
-        return;
-      }
-
-      if (!formValues.id && !formValues.password) {
-        setError('Le mot de passe est requis pour un nouvel utilisateur');
-        return;
-      }
-
-      if (formValues.role === 'store' && formValues.storeIds.length === 0) {
-        setError('Veuillez sélectionner au moins un magasin pour un utilisateur de type "store"');
-        return;
-      }
+      setError(null);
 
       if (formValues.id) {
         // Update existing user
-        try {
-          // First update the user's basic information
-          const updateResult = await updateUser(formValues.id, {
-            fullName: formValues.fullName,
-            role: formValues.role
-          });
+        const updatedUser = await updateUser(formValues.id, {
+          fullName: formValues.fullName,
+          role: formValues.role,
+          storeIds: formValues.role === 'store' ? formValues.storeIds : []
+        });
 
-          if (!updateResult) {
-            throw new Error('Failed to update user');
-          }
-
-          // Only update store assignments if the user is a store user
-          if (formValues.role === 'store') {
-            const currentUser = users.find(u => u.id === formValues.id);
-            if (currentUser && JSON.stringify(formValues.storeIds) !== JSON.stringify(currentUser.storeIds)) {
-              await updateUserStores(formValues.id, formValues.storeIds);
-            }
-          } else {
-            // If user is not a store user, clear their store assignments
-            await updateUserStores(formValues.id, []);
-          }
-        } catch (error) {
-          console.error('Error updating user:', error);
-          throw new Error('Failed to update user information');
-        }
-      } else {
-        // Create new user
-        try {
-          const createResult = await createUser(
-            formValues.username,
-            formValues.password!,
-            formValues.fullName,
-            formValues.role,
-            formValues.role === 'store' ? formValues.storeIds : []
-          );
-
-          if (!createResult) {
-            throw new Error('Failed to create user');
-          }
-        } catch (error) {
-          throw new Error('Failed to create new user');
+        if (!updatedUser) {
+          throw new Error('Failed to update user');
         }
       }
 
@@ -197,6 +157,18 @@ const UsersPage: React.FC = () => {
     setError(null);
   };
 
+  // Redirect if not admin
+  if (!isAdmin) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900">Accès Restreint</h1>
+          <p className="text-gray-600 mt-2">Vous n'avez pas les permissions nécessaires pour accéder à cette page.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -209,21 +181,18 @@ const UsersPage: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Gestion des Utilisateurs</h1>
-        <p className="text-gray-600 mt-1">Créer et gérer les accès utilisateurs</p>
+        <p className="text-gray-600 mt-1">Gérer les accès et permissions utilisateurs</p>
       </div>
 
       <div className="mb-6 flex justify-between items-center">
         {!isEditing && (
-          <button
-            onClick={() => {
-              resetForm();
-              setIsEditing(true);
-            }}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
+          <Link
+            to="/users/create"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green transition-colors"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Ajouter un Utilisateur
-          </button>
+            Créer un Nouvel Utilisateur
+          </Link>
         )}
       </div>
 
@@ -288,7 +257,7 @@ const UsersPage: React.FC = () => {
         <div className="bg-white shadow rounded-lg mb-6">
           <div className="p-6 border-b border-gray-200 flex justify-between items-center">
             <h3 className="text-lg font-medium text-gray-900">
-              {formValues.id ? `Modifier ${formValues.fullName}` : 'Ajouter un nouvel utilisateur'}
+              Modifier {formValues.fullName}
             </h3>
             <button
               onClick={() => setIsEditing(false)}
@@ -298,19 +267,6 @@ const UsersPage: React.FC = () => {
             </button>
           </div>
           <div className="p-6 space-y-4">
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-                Nom d'utilisateur
-              </label>
-              <input
-                type="text"
-                id="username"
-                value={formValues.username}
-                onChange={(e) => setFormValues({ ...formValues, username: e.target.value })}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm"
-              />
-            </div>
-
             <div>
               <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">
                 Nom Complet
@@ -374,21 +330,6 @@ const UsersPage: React.FC = () => {
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {!formValues.id && (
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                  Mot de passe
-                </label>
-                <input
-                  type="password"
-                  id="password"
-                  value={formValues.password || ''}
-                  onChange={(e) => setFormValues({ ...formValues, password: e.target.value })}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm"
-                />
               </div>
             )}
 

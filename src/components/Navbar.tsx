@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Menu, X, LogOut, User, Settings, PieChart, FileText, Home, Users, Shield } from 'lucide-react';
+import { Menu, X, LogOut, User, Settings, PieChart, FileText, Home, Users } from 'lucide-react';
 
 const Navbar: React.FC = () => {
   const { currentUser, logout, isAdmin, isProduction } = useAuth();
@@ -52,10 +52,6 @@ const Navbar: React.FC = () => {
                     <Link to="/users" className="text-krispy-green hover:text-krispy-green-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors">
                       <Users className="w-4 h-4 mr-1" />
                       Utilisateurs
-                    </Link>
-                    <Link to="/user-roles" className="text-krispy-green hover:text-krispy-green-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors">
-                      <Shield className="w-4 h-4 mr-1" />
-                      Rôles
                     </Link>
                   </>
                 )}
@@ -143,13 +139,6 @@ const Navbar: React.FC = () => {
                       onClick={() => setIsMenuOpen(false)}
                     >
                       Utilisateurs
-                    </Link>
-                    <Link 
-                      to="/user-roles" 
-                      className="text-krispy-green hover:bg-gray-50 block px-3 py-2 rounded-md text-base font-medium"
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Gestion des Rôles
                     </Link>
                   </>
                 )}

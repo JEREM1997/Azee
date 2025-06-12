@@ -63,8 +63,6 @@ Deno.serve(async (req) => {
         name,
         location,
         is_active: is_active !== undefined ? is_active : true,
-        available_varieties: available_varieties || [],
-        available_boxes: available_boxes || [],
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
@@ -74,6 +72,54 @@ Deno.serve(async (req) => {
     if (updateError) {
       console.error('Update error:', updateError)
       throw new Error(`Failed to update store: ${updateError.message}`)
+    }
+
+    // Update store-variety relationships
+    // First, delete existing relationships
+    await supabase
+      .from('store_varieties')
+      .delete()
+      .eq('store_id', id)
+
+    // Then insert new relationships
+    if (available_varieties && available_varieties.length > 0) {
+      const storeVarieties = available_varieties.map((varietyId: string) => ({
+        store_id: id,
+        variety_id: varietyId
+      }))
+
+      const { error: varietiesError } = await supabase
+        .from('store_varieties')
+        .insert(storeVarieties)
+
+      if (varietiesError) {
+        console.error('Store varieties insert error:', varietiesError)
+        // Don't throw here, just log the error
+      }
+    }
+
+    // Update store-box relationships
+    // First, delete existing relationships
+    await supabase
+      .from('store_boxes')
+      .delete()
+      .eq('store_id', id)
+
+    // Then insert new relationships
+    if (available_boxes && available_boxes.length > 0) {
+      const storeBoxes = available_boxes.map((boxId: string) => ({
+        store_id: id,
+        box_id: boxId
+      }))
+
+      const { error: boxesError } = await supabase
+        .from('store_boxes')
+        .insert(storeBoxes)
+
+      if (boxesError) {
+        console.error('Store boxes insert error:', boxesError)
+        // Don't throw here, just log the error
+      }
     }
 
     return new Response(

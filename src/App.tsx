@@ -11,7 +11,7 @@ import DeliveryPage from './pages/DeliveryPage';
 import StatsPage from './pages/StatsPage';
 import AdminPage from './pages/AdminPage';
 import UsersPage from './pages/UsersPage';
-import UserRoleManagementPage from './pages/UserRoleManagementPage';
+import CreateUserPage from './pages/CreateUserPage';
 
 function App() {
   return (
@@ -76,16 +76,16 @@ function App() {
                 }
               />
               <Route
-                path="/user-roles"
+                path="/users/create"
                 element={
                   <>
                     <Navbar />
-                    <UserRoleManagementPage />
+                    <CreateUserPage />
                   </>
                 }
               />
             </Route>
-            <Route path="*" element={<Navigate to="/login\" replace />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </AdminProvider>
       </AuthProvider>
