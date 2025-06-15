@@ -125,7 +125,13 @@ export const savePlan = async (planData: any) => {
   }
 };
 
-export const updateDeliveryStatus = async (storeProductionId: string, data: { deliveryConfirmed?: boolean; received?: { [key: string]: number }; waste?: { [key: string]: number } }) => {
+export const updateDeliveryStatus = async (storeProductionId: string, data: { 
+  deliveryConfirmed?: boolean; 
+  received?: { [key: string]: number }; 
+  waste?: { [key: string]: number };
+  boxReceived?: { [key: string]: number };
+  boxWaste?: { [key: string]: number };
+}) => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {

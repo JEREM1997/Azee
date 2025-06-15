@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Eye, FileText, AlertTriangle, Clock, CheckCircle, RefreshCw } from 'lucide-react';
+import { Calendar, Eye, FileText, AlertTriangle, Clock, CheckCircle, RefreshCw, Edit } from 'lucide-react';
 import { getProductionPlans } from '../services/productionService';
+import { useAuth } from '../context/AuthContext';
+import { useAdmin } from '../context/AdminContext';
 
 interface ProductionPlan {
   id: string;
@@ -12,6 +14,7 @@ interface ProductionPlan {
     id: string;
     store_id: string;
     store_name: string;
+    deliverydate?: string;
     total_quantity: number;
     production_items: Array<{
       variety_id: string;
@@ -33,6 +36,12 @@ const PlansPage: React.FC = () => {
   const [selectedPlan, setSelectedPlan] = useState<ProductionPlan | null>(null);
   const [showModal, setShowModal] = useState(false);
 
+  const { currentUser } = useAuth();
+  const { varieties, forms, boxes } = useAdmin();
+
+  // Determine permissions
+  const canEdit = currentUser && (currentUser.role === 'admin' || currentUser.role === 'production');
+
   const loadPlans = useCallback(async () => {
     try {
       setLoading(true);
@@ -40,6 +49,17 @@ const PlansPage: React.FC = () => {
       
       const plansData = await getProductionPlans(30);
       console.log('Fetched plans data:', plansData);
+      
+      // Debug delivery dates in fetched plans
+      if (plansData && plansData.length > 0) {
+        plansData.forEach((plan: ProductionPlan) => {
+          console.log(`Plan ${plan.id} (${plan.date}):`);
+          plan.stores?.forEach((store: any) => {
+            console.log(`  Store ${store.store_name}: deliverydate = ${store.deliverydate || 'NOT SET'}`);
+          });
+        });
+      }
+      
       setPlans(plansData || []);
     } catch (err) {
       console.error('Error loading plans:', err);
@@ -53,6 +73,7 @@ const PlansPage: React.FC = () => {
     loadPlans();
 
     const handlePlanUpdate = () => {
+      console.log('Plan update event received, refreshing plans...');
       loadPlans();
     };
 
@@ -112,8 +133,26 @@ const PlansPage: React.FC = () => {
   };
 
   const handleViewPlan = (plan: ProductionPlan) => {
+    console.log('Viewing plan with stores:', plan.stores); // Debug log
+    console.log('Plan date:', plan.date);
+    console.log('Plan ID:', plan.id);
+    
+    plan.stores?.forEach(store => {
+      console.log(`Store ${store.store_name}:`);
+      console.log(`  - Store ID: ${store.store_id}`);
+      console.log(`  - Delivery date: ${store.deliverydate || 'NOT SET'}`);
+      console.log(`  - Total quantity: ${store.total_quantity}`);
+      console.log(`  - Production items count: ${store.production_items?.length || 0}`);
+      console.log(`  - Box productions count: ${store.box_productions?.length || 0}`);
+    });
+    
     setSelectedPlan(plan);
     setShowModal(true);
+  };
+
+  const handleEditPlan = (plan: ProductionPlan) => {
+    // Navigate to production page with the plan's date
+    window.location.href = `/production?date=${plan.date}`;
   };
 
   const closeModal = () => {
@@ -122,7 +161,80 @@ const PlansPage: React.FC = () => {
   };
 
   const refreshPlans = async () => {
+    console.log('Manual refresh triggered');
     await loadPlans();
+  };
+
+  // Add effect to refresh when page becomes visible (user returns from editing)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('Page became visible, refreshing plans...');
+        loadPlans();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [loadPlans]);
+
+  // Calculate production summary for a plan
+  const calculatePlanSummary = (plan: ProductionPlan) => {
+    const varietyTotals: { [varietyId: string]: number } = {};
+    const formTotals: { [formId: string]: number } = {};
+    const boxTotals: { [boxId: string]: number } = {};
+    let totalIndividualDoughnuts = 0;
+    let totalBoxDoughnuts = 0;
+
+    plan.stores?.forEach(store => {
+      // Calculate individual variety totals
+      store.production_items?.forEach(item => {
+        varietyTotals[item.variety_id] = (varietyTotals[item.variety_id] || 0) + item.quantity;
+        totalIndividualDoughnuts += item.quantity;
+
+        // Add to form totals
+        const variety = varieties.find(v => v.id === item.variety_id);
+        if (variety && variety.formId) {
+          formTotals[variety.formId] = (formTotals[variety.formId] || 0) + item.quantity;
+        }
+      });
+
+      // Calculate box totals and add box varieties to variety and form totals
+      store.box_productions?.forEach(boxProd => {
+        const box = boxes.find(b => b.name === boxProd.box_name);
+        if (box) {
+          boxTotals[box.id] = (boxTotals[box.id] || 0) + boxProd.quantity;
+          totalBoxDoughnuts += box.size * boxProd.quantity;
+
+          // Add varieties from boxes to variety and form totals
+          if (box.varieties && box.varieties.length > 0) {
+            box.varieties.forEach(boxVariety => {
+              const variety = varieties.find(v => v.id === boxVariety.varietyId);
+              if (variety) {
+                const varietyQuantityFromBoxes = boxVariety.quantity * boxProd.quantity;
+                varietyTotals[variety.id] = (varietyTotals[variety.id] || 0) + varietyQuantityFromBoxes;
+
+                if (variety.formId) {
+                  formTotals[variety.formId] = (formTotals[variety.formId] || 0) + varietyQuantityFromBoxes;
+                }
+              }
+            });
+          }
+        }
+      });
+    });
+
+    return {
+      varietyTotals,
+      formTotals,
+      boxTotals,
+      totalDoughnuts: totalIndividualDoughnuts + totalBoxDoughnuts,
+      totalIndividualDoughnuts,
+      totalBoxDoughnuts
+    };
   };
 
   if (loading) {
@@ -209,13 +321,24 @@ const PlansPage: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex items-center">
-                      <button
-                        onClick={() => handleViewPlan(plan)}
-                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
-                      >
-                        <Eye className="h-4 w-4 mr-2" />
-                        Voir détails
-                      </button>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleViewPlan(plan)}
+                          className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          Voir détails
+                        </button>
+                        {canEdit && (
+                          <button
+                            onClick={() => handleEditPlan(plan)}
+                            className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Modifier
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -228,7 +351,7 @@ const PlansPage: React.FC = () => {
       {/* Plan Details Modal */}
       {showModal && selectedPlan && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-6xl shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
@@ -244,6 +367,116 @@ const PlansPage: React.FC = () => {
                   </svg>
                 </button>
               </div>
+
+              {/* Production Summary Section */}
+              {(() => {
+                const summary = calculatePlanSummary(selectedPlan);
+                return (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-gray-800 mb-4">Résumé de la Production</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* Total Doughnuts Card */}
+                      <div className="bg-krispy-green bg-opacity-10 rounded-lg p-4">
+                        <h5 className="text-sm font-medium text-krispy-green mb-2">Total Doughnuts</h5>
+                        <p className="text-2xl font-bold text-krispy-green">{summary.totalDoughnuts}</p>
+                        <div className="mt-2 text-xs text-gray-600">
+                          <p>Individuels: {summary.totalIndividualDoughnuts}</p>
+                          <div className="mt-1">
+                            <p className="font-medium">En Boîtes: {summary.totalBoxDoughnuts}</p>
+                            <div className="ml-2 space-y-1 max-h-16 overflow-y-auto">
+                              {boxes
+                                .filter(b => b.isActive)
+                                .map(box => {
+                                  const boxCount = summary.boxTotals[box.id] || 0;
+                                  if (boxCount === 0) return null;
+                                  const totalDoughnuts = boxCount * box.size;
+                                  return (
+                                    <div key={box.id} className="text-xs text-gray-500">
+                                      {box.name}: {boxCount} boîtes ({totalDoughnuts} doughnuts)
+                                    </div>
+                                  );
+                                })
+                                .filter(Boolean)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Main Varieties Card */}
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <h5 className="text-sm font-medium text-gray-800 mb-2">Variétés Principales</h5>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {varieties
+                            .filter(v => v.isActive)
+                            .map(variety => {
+                              const total = summary.varietyTotals[variety.id] || 0;
+                              if (total === 0) return null;
+                              const dozens = Math.floor(total / 12);
+                              const units = total % 12;
+                              return (
+                                <div key={variety.id} className="space-y-1">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-xs text-gray-600">{variety.name}</span>
+                                    <span className="text-xs font-medium text-gray-900">{total}</span>
+                                  </div>
+                                  <div className="text-xs text-gray-500 pl-2">
+                                    {dozens > 0 && `${dozens} douzaine${dozens > 1 ? 's' : ''}`}
+                                    {dozens > 0 && units > 0 && ' + '}
+                                    {units > 0 && `${units} unité${units > 1 ? 's' : ''}`}
+                                    {dozens === 0 && units === 0 && '0 unité'}
+                                  </div>
+                                </div>
+                              );
+                            })
+                            .filter(Boolean)}
+                        </div>
+                      </div>
+
+                      {/* Store Summary Card */}
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <h5 className="text-sm font-medium text-gray-800 mb-2">Par Magasin</h5>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {selectedPlan.stores?.map(store => {
+                            if (store.total_quantity === 0) return null;
+                            return (
+                              <div key={store.id} className="flex justify-between items-center">
+                                <span className="text-xs text-gray-600">{store.store_name}</span>
+                                <span className="text-xs font-medium text-gray-900">{store.total_quantity}</span>
+                              </div>
+                            );
+                          }).filter(Boolean)}
+                        </div>
+                      </div>
+
+                      {/* Forms with Reserve Card */}
+                      <div className="bg-blue-50 rounded-lg p-4">
+                        <h5 className="text-sm font-medium text-blue-800 mb-2">Par Forme (avec 5% de réserve)</h5>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {forms
+                            .filter(f => f.isActive)
+                            .map(form => {
+                              const baseTotal = summary.formTotals[form.id] || 0;
+                              if (baseTotal === 0) return null;
+                              const totalWithReserve = Math.ceil(baseTotal * 1.05);
+                              return (
+                                <div key={form.id} className="space-y-1">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-xs text-gray-600">{form.name}</span>
+                                    <span className="text-xs font-medium text-blue-900">{totalWithReserve}</span>
+                                  </div>
+                                  <div className="text-xs text-gray-500 pl-2">
+                                    Base: {baseTotal} + Réserve: {totalWithReserve - baseTotal}
+                                  </div>
+                                </div>
+                              );
+                            })
+                            .filter(Boolean)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -268,37 +501,149 @@ const PlansPage: React.FC = () => {
               <div className="space-y-6">
                 {selectedPlan.stores?.map((store) => (
                   <div key={store.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-center mb-4">
-                      <h4 className="text-lg font-medium text-gray-900">{store.store_name}</h4>
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h4 className="text-lg font-medium text-gray-900">{store.store_name}</h4>
+                        {/* Show delivery date only if manually set */}
+                        <div className="mt-1 text-sm text-gray-600">
+                          <span className="font-medium">Date de Livraison:</span> {
+                            store.deliverydate ? 
+                            new Date(store.deliverydate).toLocaleDateString('fr-FR', {
+                              weekday: 'long',
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            }) : 'Non définie'
+                          }
+                        </div>
+                      </div>
                       <span className="text-sm px-3 py-1 rounded-full bg-krispy-green bg-opacity-10 text-krispy-green">
                         {store.total_quantity} doughnuts
                       </span>
                     </div>
 
+                    {/* Varieties Section - Enhanced with Forms */}
                     {store.production_items && store.production_items.length > 0 && (
-                      <div className="mb-4">
-                        <h5 className="text-sm font-medium text-gray-700 mb-2">Variétés</h5>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {store.production_items.map((item, index) => (
-                            <div key={index} className="flex justify-between items-center py-1">
-                              <span className="text-sm text-gray-600">{item.variety_name}</span>
-                              <span className="text-sm font-medium text-gray-900">{item.quantity}</span>
-                            </div>
-                          ))}
+                      <div className="mb-6">
+                        <h5 className="text-lg font-medium text-gray-700 mb-3">Variétés</h5>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead>
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variété</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Forme</th>
+                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Quantité</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {store.production_items.map((item, index) => {
+                                const variety = varieties.find(v => v.id === item.variety_id);
+                                const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
+                                return (
+                                  <tr key={index}>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                      {item.variety_name}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                      {form ? form.name : 'Non définie'}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                                      {item.quantity}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
                       </div>
                     )}
 
+                    {/* Boxes Section - Enhanced with Full Details */}
                     {store.box_productions && store.box_productions.length > 0 && (
                       <div>
-                        <h5 className="text-sm font-medium text-gray-700 mb-2">Boîtes</h5>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {store.box_productions.map((box, index) => (
-                            <div key={index} className="flex justify-between items-center py-1">
-                              <span className="text-sm text-gray-600">{box.box_name}</span>
-                              <span className="text-sm font-medium text-gray-900">{box.quantity} boîtes</span>
-                            </div>
-                          ))}
+                        <h5 className="text-lg font-medium text-gray-700 mb-3">Boîtes Disponibles</h5>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead>
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîte</th>
+                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Taille</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variétés Configurées</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Formes de Doughnuts</th>
+                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Quantité de Boîtes</th>
+                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Quantité Totale</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {store.box_productions.map((boxProd, index) => {
+                                const box = boxes.find(b => b.name === boxProd.box_name);
+                                const totalDoughnuts = box ? box.size * boxProd.quantity : 0;
+                                
+                                // Get unique forms from the varieties in this box
+                                const boxForms = box?.varieties && box.varieties.length > 0 ? 
+                                  [...new Set(box.varieties
+                                    .map(boxVariety => {
+                                      const variety = varieties.find(v => v.id === boxVariety.varietyId);
+                                      if (variety && variety.formId) {
+                                        return variety.formId;
+                                      }
+                                      return null;
+                                    })
+                                    .filter(formId => formId !== null)
+                                  )] : [];
+                                
+                                return (
+                                  <tr key={index}>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                      {boxProd.box_name}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                                      {box ? `${box.size} doughnuts` : 'N/A'}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-500">
+                                      {box?.varieties && box.varieties.length > 0 ? (
+                                        <div className="space-y-1">
+                                          {box.varieties.map((boxVariety, vIndex) => {
+                                            const variety = varieties.find(v => v.id === boxVariety.varietyId);
+                                            return variety ? (
+                                              <div key={vIndex} className="text-xs">
+                                                {variety.name}: {boxVariety.quantity}
+                                              </div>
+                                            ) : null;
+                                          })}
+                                        </div>
+                                      ) : (
+                                        <span className="text-xs text-gray-400 italic">Aucune variété configurée</span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-500">
+                                      {boxForms.length > 0 ? (
+                                        <div className="space-y-1">
+                                          {boxForms.map((formId, fIndex) => {
+                                            const form = forms.find(f => f.id === formId);
+                                            return form ? (
+                                              <div key={fIndex} className="text-xs">
+                                                {form.name}
+                                              </div>
+                                            ) : null;
+                                          })}
+                                        </div>
+                                      ) : (
+                                        <span className="text-xs text-gray-400 italic">Aucune forme définie</span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                                      {boxProd.quantity}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                                      {totalDoughnuts} doughnuts
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
                       </div>
                     )}

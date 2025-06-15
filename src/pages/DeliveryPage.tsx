@@ -1,44 +1,147 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Save, X, Coffee, ShoppingBag, Check, Printer, FileText, TruckIcon, AlertTriangle, Truck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { getCurrentDayPlan, updateDeliveryStatus } from '../services/productionService';
-import { ProductionPlan } from '../types';
+import { useAdmin } from '../context/AdminContext';
+import { getCurrentDayPlan, updateDeliveryStatus, getProductionPlans } from '../services/productionService';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
+// Delivery-specific types
+interface DeliveryProductionItem {
+  id: string;
+  variety_id: string;
+  variety_name: string;
+  form_id: string;
+  form_name: string;
+  quantity: number;
+  received?: number;
+  waste?: number;
+}
+
+interface DeliveryBoxProduction {
+  id: string;
+  box_id: string;
+  box_name: string;
+  quantity: number;
+  received?: number;
+  waste?: number;
+}
+
+interface DeliveryStoreProduction {
+  id: string;
+  store_id: string;
+  store_name: string;
+  deliverydate?: string;
+  total_quantity: number;
+  delivery_confirmed: boolean;
+  waste_reported: boolean;
+  production_items?: DeliveryProductionItem[];
+  box_productions?: DeliveryBoxProduction[];
+}
+
+interface DeliveryProductionPlan {
+  id: string;
+  date: string;
+  total_production: number;
+  status: string;
+  store_productions?: DeliveryStoreProduction[];
+}
+
 const DeliveryPage: React.FC = () => {
   const { currentUser, isAdmin, isProduction } = useAuth();
+  const { forms } = useAdmin();
   const [selectedStore, setSelectedStore] = useState<string | null>(null);
-  const [currentPlan, setCurrentPlan] = useState<ProductionPlan | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<DeliveryProductionPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deliveryDate, setDeliveryDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
   const [receivedQuantities, setReceivedQuantities] = useState<{ [key: string]: number }>({});
   const [wasteQuantities, setWasteQuantities] = useState<{ [key: string]: number }>({});
+  const [boxReceivedQuantities, setBoxReceivedQuantities] = useState<{ [key: string]: number }>({});
+  const [boxWasteQuantities, setBoxWasteQuantities] = useState<{ [key: string]: number }>({});
   
   const loadCurrentPlan = async () => {
     try {
       setLoading(true);
       setError(null);
-      const today = new Date().toISOString().split('T')[0];
-      const plan = await getCurrentDayPlan(today);
-      setCurrentPlan(plan);
+      
+      // Load all recent production plans (last 7 days) to find stores with deliveries for the selected date
+      const plans = await getProductionPlans(7);
+      
+      if (!plans || plans.length === 0) {
+        setCurrentPlan(null);
+        return;
+      }
+      
+      // Find all stores that have deliveries scheduled for the selected delivery date
+      const storesForDeliveryDate: DeliveryStoreProduction[] = [];
+      
+      plans.forEach((plan: any) => {
+        if (plan.stores && Array.isArray(plan.stores)) {
+          plan.stores.forEach((store: any) => {
+            // Check if this store has a delivery date matching our selected date
+            // If no delivery date is set, assume delivery is same day as production
+            const storeDeliveryDate = store.deliverydate || plan.date;
+            
+            if (storeDeliveryDate === deliveryDate) {
+              // Map the store data to match our interface
+              const mappedStore: DeliveryStoreProduction = {
+                id: store.id,
+                store_id: store.store_id,
+                store_name: store.store_name,
+                deliverydate: store.deliverydate,
+                total_quantity: store.total_quantity,
+                delivery_confirmed: store.delivery_confirmed || false,
+                waste_reported: store.waste_reported || false,
+                production_items: store.production_items || [],
+                box_productions: store.box_productions || []
+              };
+              storesForDeliveryDate.push(mappedStore);
+            }
+          });
+        }
+      });
+      
+      // Create a virtual plan for the delivery date with all matching stores
+      if (storesForDeliveryDate.length > 0) {
+        const totalProduction = storesForDeliveryDate.reduce((sum, store) => sum + store.total_quantity, 0);
+        
+        setCurrentPlan({
+          id: `delivery-${deliveryDate}`,
+          date: deliveryDate,
+          total_production: totalProduction,
+          status: 'delivery',
+          store_productions: storesForDeliveryDate
+        });
+      } else {
+        setCurrentPlan(null);
+      }
       
       // Initialize received quantities from plan data
-      if (plan?.store_productions) {
+      if (storesForDeliveryDate.length > 0) {
         const quantities: { [key: string]: number } = {};
         const waste: { [key: string]: number } = {};
+        const boxQuantities: { [key: string]: number } = {};
+        const boxWaste: { [key: string]: number } = {};
         
-        plan.store_productions.forEach(store => {
-          store.production_items?.forEach(item => {
-            if (item.received !== null) quantities[item.id] = item.received;
-            if (item.waste !== null) waste[item.id] = item.waste;
+        storesForDeliveryDate.forEach((store: DeliveryStoreProduction) => {
+          store.production_items?.forEach((item: DeliveryProductionItem) => {
+            if (item.received !== null && item.received !== undefined) quantities[item.id] = item.received;
+            if (item.waste !== null && item.waste !== undefined) waste[item.id] = item.waste;
+          });
+          
+          store.box_productions?.forEach((box: DeliveryBoxProduction) => {
+            if (box.received !== null && box.received !== undefined) boxQuantities[box.id] = box.received;
+            if (box.waste !== null && box.waste !== undefined) boxWaste[box.id] = box.waste;
           });
         });
         
         setReceivedQuantities(quantities);
         setWasteQuantities(waste);
+        setBoxReceivedQuantities(boxQuantities);
+        setBoxWasteQuantities(boxWaste);
       }
     } catch (err) {
       console.error('Error loading current production plan:', err);
@@ -50,7 +153,7 @@ const DeliveryPage: React.FC = () => {
 
   useEffect(() => {
     loadCurrentPlan();
-  }, []);
+  }, [deliveryDate]);
 
   // Filter stores based on user role and store IDs
   const userStores = currentPlan?.store_productions?.filter(store => {
@@ -67,14 +170,18 @@ const DeliveryPage: React.FC = () => {
 
     const doc = new jsPDF();
     
-    const today = new Date();
-    const productionDate = today.toLocaleDateString('fr-FR');
+    // Use the actual production plan date instead of current date
+    const productionDate = currentPlan?.date ? new Date(currentPlan.date).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR');
+    
+    // Use the store's delivery date if available, otherwise fall back to production date
+    const deliveryDate = storeDetails.deliverydate ? new Date(storeDetails.deliverydate).toLocaleDateString('fr-FR') : productionDate;
     
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
     
     const headers = [
       ['Date de la production', productionDate],
+      ['Date de livraison', deliveryDate],
       ['Magasin', storeDetails.store_name]
     ];
 
@@ -91,12 +198,12 @@ const DeliveryPage: React.FC = () => {
     const itemsTableData = storeDetails.production_items?.map(item => [
       item.variety_name,
       item.quantity.toString(),
-      receivedQuantities[item.id]?.toString() || '',
-      wasteQuantities[item.id]?.toString() || ''
+      receivedQuantities[item.id]?.toString() || item.received?.toString() || '',
+      wasteQuantities[item.id]?.toString() || item.waste?.toString() || ''
     ]) || [];
 
     (doc as any).autoTable({
-      startY: 50,
+      startY: 60, // Adjusted to account for the extra header row
       head: itemsTableHeaders,
       body: itemsTableData,
       theme: 'grid',
@@ -109,12 +216,14 @@ const DeliveryPage: React.FC = () => {
     // Add boxes table if there are any boxes
     if (storeDetails.box_productions && storeDetails.box_productions.length > 0) {
       const boxesTableHeaders = [
-        ['Boîte', 'Quantité']
+        ['Boîte', 'Quantité Prévue', 'Quantité Reçue', 'Déchets']
       ];
 
       const boxesTableData = storeDetails.box_productions.map(box => [
         box.box_name,
-        box.quantity.toString()
+        box.quantity.toString(),
+        boxReceivedQuantities[box.id]?.toString() || box.received?.toString() || '',
+        boxWasteQuantities[box.id]?.toString() || box.waste?.toString() || ''
       ]);
 
       (doc as any).autoTable({
@@ -133,7 +242,9 @@ const DeliveryPage: React.FC = () => {
     doc.line(20, finalY + 30, 190, finalY + 30);
     doc.text('Signature:', 20, finalY + 40);
 
-    doc.save(`bulletin-livraison-${storeDetails.store_name}-${productionDate}.pdf`);
+    // Update filename to include delivery date
+    const fileDate = storeDetails.deliverydate ? new Date(storeDetails.deliverydate).toLocaleDateString('fr-FR') : productionDate;
+    doc.save(`bulletin-livraison-${storeDetails.store_name}-${fileDate}.pdf`);
   };
 
   const handleConfirmDelivery = async () => {
@@ -145,7 +256,8 @@ const DeliveryPage: React.FC = () => {
 
       await updateDeliveryStatus(storeDetails.id, {
         deliveryConfirmed: true,
-        received: receivedQuantities
+        received: receivedQuantities,
+        boxReceived: boxReceivedQuantities
       });
 
       await loadCurrentPlan();
@@ -164,9 +276,19 @@ const DeliveryPage: React.FC = () => {
       setSaving(true);
       setError(null);
 
-      await updateDeliveryStatus(storeDetails.id, {
-        waste: wasteQuantities
-      });
+      // If delivery is not confirmed yet, save both received quantities and waste
+      const updateData: any = {
+        waste: wasteQuantities,
+        boxWaste: boxWasteQuantities
+      };
+
+      // If delivery is not confirmed, also save received quantities
+      if (!storeDetails.delivery_confirmed) {
+        updateData.received = receivedQuantities;
+        updateData.boxReceived = boxReceivedQuantities;
+      }
+
+      await updateDeliveryStatus(storeDetails.id, updateData);
 
       await loadCurrentPlan();
     } catch (err) {
@@ -187,9 +309,27 @@ const DeliveryPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
+      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
+        <div>
         <h1 className="text-3xl font-bold text-gray-900">Gestion des Livraisons</h1>
         <p className="text-gray-600 mt-1">Gérer les livraisons et suivre les déchets</p>
+        </div>
+        
+        <div className="mt-4 md:mt-0">
+          <div className="w-full md:w-auto">
+            <label htmlFor="delivery-date" className="block text-sm font-medium text-gray-700 mb-1">
+              Date de Livraison
+            </label>
+            <input
+              type="date"
+              id="delivery-date"
+              name="delivery-date"
+              value={deliveryDate}
+              onChange={(e) => setDeliveryDate(e.target.value)}
+              className="shadow-sm focus:ring-krispy-green focus:border-krispy-green block w-full sm:text-sm border-gray-300 rounded-md"
+            />
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -231,7 +371,7 @@ const DeliveryPage: React.FC = () => {
                     <span className={`text-sm inline-flex items-center px-2.5 py-0.5 rounded-full font-medium ${
                       store.delivery_confirmed
                         ? 'bg-krispy-green bg-opacity-10 text-krispy-green'
-                        : 'bg-krispy-red bg-opacity-10 text-krispy-red'
+                        : 'bg-red-100 text-red-800'
                     }`}>
                       {store.delivery_confirmed ? (
                         <>
@@ -248,13 +388,28 @@ const DeliveryPage: React.FC = () => {
                   </div>
                   <div className="mt-1 text-sm text-gray-500">
                     {store.total_quantity} doughnuts prévus
+                    {store.deliverydate && (
+                      <div className="text-xs text-gray-400 mt-1">
+                        Livraison: {new Date(store.deliverydate).toLocaleDateString('fr-FR')}
+                      </div>
+                    )}
                   </div>
                 </button>
               ))}
               
               {userStores.length === 0 && (
                 <div className="text-center py-8 text-gray-500">
-                  Aucune livraison prévue pour aujourd'hui
+                  <div className="text-sm">
+                    Aucune livraison prévue pour le {new Date(deliveryDate).toLocaleDateString('fr-FR', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    Sélectionnez une autre date pour voir les livraisons
+                  </div>
                 </div>
               )}
             </div>
@@ -275,7 +430,21 @@ const DeliveryPage: React.FC = () => {
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h3 className="text-lg font-medium text-gray-900">{storeDetails.store_name}</h3>
+                  <div className="mt-1 space-y-1">
                   <p className="text-gray-500">Total : {storeDetails.total_quantity} doughnuts</p>
+                    {storeDetails.deliverydate && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Date de livraison:</span> {
+                          new Date(storeDetails.deliverydate).toLocaleDateString('fr-FR', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })
+                        }
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <div className="space-x-2">
                   {(isAdmin || isProduction) && (
@@ -291,14 +460,30 @@ const DeliveryPage: React.FC = () => {
               </div>
               
               <div className="overflow-x-auto">
+                {(!storeDetails.delivery_confirmed || !storeDetails.waste_reported) && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) && (
+                  <div className="mb-4 bg-blue-50 border-l-4 border-blue-400 p-4">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <Edit className="h-5 w-5 text-blue-400" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-blue-700">
+                          <span className="font-medium">Quantités ajustables:</span> 
+                          {!storeDetails.delivery_confirmed && " Vous pouvez modifier les quantités reçues si elles diffèrent des quantités prévues."}
+                          {!storeDetails.waste_reported && " Vous pouvez également signaler les déchets pour chaque variété."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead>
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variété</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Forme</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Prévu</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Reçu</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Déchets</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Prévu (unité)</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Reçu (unité)</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Déchets (unité)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -308,7 +493,7 @@ const DeliveryPage: React.FC = () => {
                           {item.variety_name}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                          {item.form_name}
+                          {forms.find(form => form.id === item.form_id)?.name || item.form_name}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                           {item.quantity}
@@ -318,32 +503,36 @@ const DeliveryPage: React.FC = () => {
                             <input
                               type="number"
                               min="0"
-                              value={receivedQuantities[item.id] || item.quantity}
+                              placeholder={item.quantity.toString()}
+                              value={receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : ''}
                               onChange={(e) => setReceivedQuantities({
                                 ...receivedQuantities,
                                 [item.id]: parseInt(e.target.value) || 0
                               })}
-                              className="w-20 text-center border-gray-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm"
+                              className="w-20 text-center border-2 border-blue-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-blue-50 hover:bg-white transition-colors"
+                              title={`Quantité prévue: ${item.quantity}. Ajustez si nécessaire.`}
                             />
                           ) : (
-                            item.received || '-'
+                            receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : (item.received || '-')
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                          {storeDetails.delivery_confirmed && !storeDetails.waste_reported && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) ? (
+                          {!storeDetails.waste_reported && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) ? (
                             <input
                               type="number"
                               min="0"
-                              max={item.received || item.quantity}
-                              value={wasteQuantities[item.id] || 0}
+                              max={receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity}
+                              placeholder="0"
+                              value={wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : ''}
                               onChange={(e) => setWasteQuantities({
                                 ...wasteQuantities,
                                 [item.id]: parseInt(e.target.value) || 0
                               })}
-                              className="w-20 text-center border-gray-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm"
+                              className="w-20 text-center border-2 border-orange-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-orange-50 hover:bg-white transition-colors"
+                              title={`Maximum: ${receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity} doughnuts`}
                             />
                           ) : (
-                            item.waste || '-'
+                            wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : (item.waste || '-')
                           )}
                         </td>
                       </tr>
@@ -361,7 +550,9 @@ const DeliveryPage: React.FC = () => {
                       <thead>
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîte</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Quantité</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Prévu (unité)</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Reçu (unité)</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Déchets (unité)</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -372,6 +563,43 @@ const DeliveryPage: React.FC = () => {
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                               {box.quantity}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                              {!storeDetails.delivery_confirmed && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  placeholder={box.quantity.toString()}
+                                  value={boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : ''}
+                                  onChange={(e) => setBoxReceivedQuantities({
+                                    ...boxReceivedQuantities,
+                                    [box.id]: parseInt(e.target.value) || 0
+                                  })}
+                                  className="w-20 text-center border-2 border-blue-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-blue-50 hover:bg-white transition-colors"
+                                  title={`Quantité prévue: ${box.quantity}. Ajustez si nécessaire.`}
+                                />
+                              ) : (
+                                boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : (box.received || '-')
+                              )}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                              {!storeDetails.waste_reported && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity}
+                                  placeholder="0"
+                                  value={boxWasteQuantities[box.id] !== undefined ? boxWasteQuantities[box.id] : ''}
+                                  onChange={(e) => setBoxWasteQuantities({
+                                    ...boxWasteQuantities,
+                                    [box.id]: parseInt(e.target.value) || 0
+                                  })}
+                                  className="w-20 text-center border-2 border-orange-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-orange-50 hover:bg-white transition-colors"
+                                  title={`Maximum: ${boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity} boîtes`}
+                                />
+                              ) : (
+                                boxWasteQuantities[box.id] !== undefined ? boxWasteQuantities[box.id] : (box.waste || '-')
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -397,7 +625,7 @@ const DeliveryPage: React.FC = () => {
               )}
               
               {!storeDetails.delivery_confirmed && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) && (
-                <div className="mt-6 flex justify-end">
+                <div className="mt-6 flex justify-end space-x-3">
                   <button
                     onClick={handleConfirmDelivery}
                     disabled={saving}
@@ -415,6 +643,25 @@ const DeliveryPage: React.FC = () => {
                       </>
                     )}
                   </button>
+                  {(Object.keys(wasteQuantities).length > 0 || Object.keys(boxWasteQuantities).length > 0) && (
+                    <button
+                      onClick={handleReportWaste}
+                      disabled={saving}
+                      className="inline-flex items-center px-4 py-2 border border-orange-300 text-sm font-medium rounded-md shadow-sm text-orange-700 bg-orange-50 hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50"
+                    >
+                      {saving ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-700 mr-2"></div>
+                          Enregistrement...
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="h-4 w-4 mr-2" />
+                          Signaler les Déchets
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               )}
               
@@ -423,7 +670,7 @@ const DeliveryPage: React.FC = () => {
                   <button
                     onClick={handleReportWaste}
                     disabled={saving}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50"
                   >
                     {saving ? (
                       <>
@@ -432,7 +679,7 @@ const DeliveryPage: React.FC = () => {
                       </>
                     ) : (
                       <>
-                        <FileText className="h-4 w-4 mr-2" />
+                        <AlertTriangle className="h-4 w-4 mr-2" />
                         Signaler les Déchets
                       </>
                     )}

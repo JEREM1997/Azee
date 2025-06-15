@@ -9,6 +9,7 @@ interface ProductionPlanRequest {
   stores: Array<{
     storeId: string;
     storeName: string;
+    deliveryDate: string;
     totalQuantity: number;
     items?: Array<{
       varietyId: string;
@@ -199,7 +200,8 @@ Deno.serve(async (req) => {
           plan_id: plan.id,
           store_id: store.storeId,
           store_name: store.storeName,
-          total_quantity: store.totalQuantity
+          total_quantity: store.totalQuantity,
+          deliveryDate: store.deliveryDate
         })
         .select()
         .single();

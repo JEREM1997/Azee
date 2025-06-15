@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Save, AlertTriangle } from 'lucide-react';
+import { Plus, Minus, Save, AlertTriangle, Edit } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
 import { savePlan, getCurrentDayPlan } from '../services/productionService';
 import { useAuth } from '../context/AuthContext';
 
 const ProductionPage: React.FC = () => {
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  // Get date from URL params or use today's date
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlDate = urlParams.get('date');
+  const [date, setDate] = useState<string>(urlDate || new Date().toISOString().split('T')[0]);
   const [storeProductions, setStoreProductions] = useState<{
     [storeId: string]: {
       [varietyId: string]: number;
@@ -15,6 +18,9 @@ const ProductionPage: React.FC = () => {
     [storeId: string]: {
       [boxId: string]: number;
     };
+  }>({});
+  const [storeDeliveryDates, setStoreDeliveryDates] = useState<{
+    [storeId: string]: string;
   }>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -48,6 +54,7 @@ const ProductionPage: React.FC = () => {
           // Convert plan data to storeProductions format
           const newStoreProductions: typeof storeProductions = {};
           const newStoreBoxes: typeof storeBoxes = {};
+          const newStoreDeliveryDates: typeof storeDeliveryDates = {};
           
           // Add null check and ensure stores is an array before iterating
           if (plan.stores && Array.isArray(plan.stores)) {
@@ -68,16 +75,24 @@ const ProductionPage: React.FC = () => {
                     [box.box_id]: box.quantity
                   }), {});
                 }
+
+                // Handle delivery dates - only use manually set dates
+                if (store.deliverydate) {
+                  console.log(`Loading delivery date for store ${store.store_id}:`, store.deliverydate);
+                  newStoreDeliveryDates[store.store_id] = store.deliverydate;
+                }
               }
             });
           }
 
           setStoreProductions(newStoreProductions);
           setStoreBoxes(newStoreBoxes);
+          setStoreDeliveryDates(newStoreDeliveryDates);
         } else {
           // Initialize empty store productions and boxes if no plan exists
           initializeStoreProductions();
           initializeStoreBoxes();
+          // No delivery date initialization - must be set manually
         }
       } catch (err) {
         console.error('Error loading plan:', err);
@@ -163,6 +178,7 @@ const ProductionPage: React.FC = () => {
   const calculateSummary = () => {
     const varietyTotals: { [varietyId: string]: number } = {};
     const formTotals: { [formId: string]: number } = {};
+    const boxTotals: { [boxId: string]: number } = {};
     let totalDoughnuts = 0;
     let totalBoxDoughnuts = 0;
     let totalIndividualDoughnuts = 0;
@@ -181,12 +197,30 @@ const ProductionPage: React.FC = () => {
       });
     });
 
-    // Calculate box totals
+    // Calculate box totals and add box varieties to variety and form totals
     Object.values(storeBoxes).forEach((storeBoxData) => {
-      Object.entries(storeBoxData).forEach(([boxId, quantity]) => {
+      Object.entries(storeBoxData).forEach(([boxId, boxQuantity]) => {
         const box = boxes.find(b => b.id === boxId);
-        if (box) {
-          totalBoxDoughnuts += box.size * quantity;
+        if (box && boxQuantity > 0) {
+          boxTotals[boxId] = (boxTotals[boxId] || 0) + boxQuantity;
+          totalBoxDoughnuts += box.size * boxQuantity;
+
+          // Add varieties from boxes to variety and form totals
+          if (box.varieties && box.varieties.length > 0) {
+            box.varieties.forEach(boxVariety => {
+              const variety = varieties.find(v => v.id === boxVariety.varietyId);
+              if (variety) {
+                // Calculate total quantity of this variety from all boxes
+                const varietyQuantityFromBoxes = boxVariety.quantity * boxQuantity;
+                varietyTotals[variety.id] = (varietyTotals[variety.id] || 0) + varietyQuantityFromBoxes;
+
+                // Add to form totals
+                if (variety.formId) {
+                  formTotals[variety.formId] = (formTotals[variety.formId] || 0) + varietyQuantityFromBoxes;
+                }
+              }
+            });
+          }
         }
       });
     });
@@ -196,6 +230,7 @@ const ProductionPage: React.FC = () => {
     return {
       varietyTotals,
       formTotals,
+      boxTotals,
       totalDoughnuts,
       totalBoxDoughnuts,
       totalIndividualDoughnuts
@@ -204,7 +239,33 @@ const ProductionPage: React.FC = () => {
 
   const totals = calculateTotals();
   const summary = calculateSummary();
+  
+  // Check if all stores have delivery dates set
+  const areAllDeliveryDatesSet = () => {
+    const activeStores = stores.filter((store: any) => store.isActive);
+    return activeStores.every((store: any) => {
+      const storeTotal = totals.storeTotals[store.id] || 0;
+      // Only require delivery date if store has production
+      if (storeTotal > 0) {
+        return storeDeliveryDates[store.id] && storeDeliveryDates[store.id].trim() !== '';
+      }
+      return true; // No production = no delivery date required
+    });
+  };
+
+  // Get stores that need delivery dates
+  const getStoresNeedingDeliveryDates = () => {
+    return stores.filter((store: any) => {
+      if (!store.isActive) return false;
+      const storeTotal = totals.storeTotals[store.id] || 0;
+      if (storeTotal === 0) return false; // No production = no delivery date needed
+      return !storeDeliveryDates[store.id] || storeDeliveryDates[store.id].trim() === '';
+    });
+  };
+  
   const isPlanValid = totals.grandTotal > 0;
+  const allDeliveryDatesSet = areAllDeliveryDatesSet();
+  const storesNeedingDates = getStoresNeedingDeliveryDates();
 
   const handleSavePlan = async () => {
     try {
@@ -213,6 +274,12 @@ const ProductionPage: React.FC = () => {
 
       if (!currentUser) {
         throw new Error('User not authenticated');
+      }
+
+      // Validate that all stores with production have delivery dates
+      if (!allDeliveryDatesSet) {
+        const storeNames = storesNeedingDates.map(store => store.name).join(', ');
+        throw new Error(`Veuillez définir les dates de livraison pour: ${storeNames}`);
       }
 
       const planData = {
@@ -232,7 +299,7 @@ const ProductionPage: React.FC = () => {
             if (quantity > 0) {
               const variety = varieties.find(v => v.id === varietyId);
               if (variety) {
-                const form = variety.formId ? varieties.find(v => v.id === variety.formId) : null;
+                const form = variety.formId ? forms.find(f => f.id === variety.formId) : null;
                 items.push({
                   varietyId,
                   varietyName: variety.name,
@@ -261,6 +328,7 @@ const ProductionPage: React.FC = () => {
           return {
             storeId: store.id,
             storeName: store.name,
+            deliveryDate: storeDeliveryDates[store.id], // No fallback - must be explicitly set
             totalQuantity: totals.storeTotals[store.id] || 0,
             items,
             boxes: boxItems
@@ -269,6 +337,7 @@ const ProductionPage: React.FC = () => {
       };
 
       console.log('Saving plan data:', planData); // Debug log
+      console.log('Store delivery dates being saved:', storeDeliveryDates); // Debug delivery dates
       const savedPlanId = await savePlan(planData);
       if (savedPlanId) {
         setExistingPlanId(savedPlanId);
@@ -277,7 +346,11 @@ const ProductionPage: React.FC = () => {
         window.dispatchEvent(new CustomEvent('planSaved'));
         
         // Show success message with link to Plans page
-        if (window.confirm('Plan de production enregistré avec succès !\n\nVoulez-vous voir tous les plans sauvegardés ?')) {
+        const message = existingPlanId 
+          ? 'Plan de production mis à jour avec succès !\n\nVoulez-vous voir tous les plans sauvegardés ?'
+          : 'Plan de production enregistré avec succès !\n\nVoulez-vous voir tous les plans sauvegardés ?';
+        
+        if (window.confirm(message)) {
           window.location.href = '/plans';
         }
       } else {
@@ -304,7 +377,15 @@ const ProductionPage: React.FC = () => {
       <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Plan de Production</h1>
-          <p className="text-gray-600 mt-1">Créer et gérer le plan de production</p>
+          <p className="text-gray-600 mt-1">
+            {existingPlanId ? 'Modifier le plan de production existant' : 'Créer et gérer le plan de production'}
+          </p>
+          {existingPlanId && (
+            <div className="mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+              <Edit className="h-3 w-3 mr-1" />
+              Plan existant en cours de modification
+            </div>
+          )}
         </div>
         
         <div className="mt-4 md:mt-0 flex items-center space-x-4">
@@ -326,8 +407,9 @@ const ProductionPage: React.FC = () => {
           <div className="flex space-x-4 items-end">
             <button
               onClick={handleSavePlan}
-              disabled={!isPlanValid || saving}
+              disabled={!isPlanValid || !allDeliveryDatesSet || saving}
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
+              title={!allDeliveryDatesSet ? `Dates de livraison manquantes pour: ${storesNeedingDates.map(s => s.name).join(', ')}` : ''}
             >
               {saving ? (
                 <>
@@ -346,91 +428,21 @@ const ProductionPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Production Summary Section */}
-      <div className="mb-8 bg-white rounded-lg shadow">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800">Résumé de la Production</h2>
-        </div>
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Total Doughnuts Card */}
-            <div className="bg-krispy-green bg-opacity-10 rounded-lg p-4">
-              <h3 className="text-lg font-medium text-krispy-green mb-2">Total Doughnuts</h3>
-              <p className="text-3xl font-bold text-krispy-green">{summary.totalDoughnuts}</p>
-              <div className="mt-2 text-sm text-gray-600">
-                <p>Individuels: {summary.totalIndividualDoughnuts}</p>
-                <p>En Boîtes: {summary.totalBoxDoughnuts}</p>
-              </div>
+      {/* Validation Messages */}
+      {!allDeliveryDatesSet && totals.grandTotal > 0 && (
+        <div className="mb-8 bg-yellow-50 border-l-4 border-yellow-400 p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <AlertTriangle className="h-5 w-5 text-yellow-400" />
             </div>
-
-            {/* Main Varieties Card */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="text-lg font-medium text-gray-800 mb-2">Variétés Principales</h3>
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {varieties
-                  .filter(v => v.isActive)
-                  .map(variety => {
-                    const total = summary.varietyTotals[variety.id] || 0;
-                    if (total === 0) return null;
-                    return (
-                      <div key={variety.id} className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">{variety.name}</span>
-                        <span className="text-sm font-medium text-gray-900">{total}</span>
-                      </div>
-                    );
-                  })
-                  .filter(Boolean)}
-              </div>
-            </div>
-
-            {/* Store Summary Card */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="text-lg font-medium text-gray-800 mb-2">Par Magasin</h3>
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {stores
-                  .filter(store => store.isActive)
-                  .map(store => {
-                    const storeTotal = totals.storeTotals[store.id] || 0;
-                    if (storeTotal === 0) return null;
-                    return (
-                      <div key={store.id} className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">{store.name}</span>
-                        <span className="text-sm font-medium text-gray-900">{storeTotal}</span>
-                      </div>
-                    );
-                  })
-                  .filter(Boolean)}
-              </div>
-            </div>
-
-            {/* Forms with Reserve Card */}
-            <div className="bg-blue-50 rounded-lg p-4">
-              <h3 className="text-lg font-medium text-blue-800 mb-2">Par Forme (avec 5% de réserve)</h3>
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {forms
-                  .filter(f => f.isActive)
-                  .map(form => {
-                    const baseTotal = summary.formTotals[form.id] || 0;
-                    if (baseTotal === 0) return null;
-                    const totalWithReserve = Math.ceil(baseTotal * 1.05);
-                    return (
-                      <div key={form.id} className="space-y-1">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">{form.name}</span>
-                          <span className="text-sm font-medium text-blue-900">{totalWithReserve}</span>
-                        </div>
-                        <div className="text-xs text-gray-500 pl-2">
-                          Base: {baseTotal} + Réserve: {totalWithReserve - baseTotal}
-                        </div>
-                      </div>
-                    );
-                  })
-                  .filter(Boolean)}
-              </div>
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                <span className="font-medium">Dates de livraison manquantes:</span> Veuillez définir les dates de livraison pour {storesNeedingDates.map(store => store.name).join(', ')} avant d'enregistrer le plan.
+              </p>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {error && (
         <div className="mb-8 bg-red-50 border-l-4 border-red-400 p-4">
@@ -446,13 +458,61 @@ const ProductionPage: React.FC = () => {
       )}
 
       <div className="space-y-8">
-        {visibleStores.map(store => (
+        {visibleStores.map(store => {
+          const storeTotal = totals.storeTotals[store.id] || 0;
+          const needsDeliveryDate = storeTotal > 0 && (!storeDeliveryDates[store.id] || storeDeliveryDates[store.id].trim() === '');
+          
+          return (
           <div key={store.id} className="bg-white rounded-lg shadow">
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-gray-800">{store.name}</h2>
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                <div className="flex-1">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-2">{store.name}</h2>
+                  {canEdit && (
+                    <div className="flex items-center space-x-4">
+                      <div>
+                        <label htmlFor={`delivery-date-${store.id}`} className={`block text-sm font-medium mb-1 ${needsDeliveryDate ? 'text-red-700' : 'text-gray-700'}`}>
+                          Date de Livraison {needsDeliveryDate && <span className="text-red-500">*</span>}
+                        </label>
+                        <input
+                          type="date"
+                          id={`delivery-date-${store.id}`}
+                          value={storeDeliveryDates[store.id] || ''}
+                          onChange={(e) => {
+                            setStoreDeliveryDates(prev => ({
+                              ...prev,
+                              [store.id]: e.target.value
+                            }));
+                          }}
+                          className={`shadow-sm focus:ring-krispy-green focus:border-krispy-green block w-full sm:text-sm border-gray-300 rounded-md ${needsDeliveryDate ? 'border-red-300 bg-red-50' : ''}`}
+                          required={storeTotal > 0}
+                        />
+                        {needsDeliveryDate && (
+                          <p className="mt-1 text-xs text-red-600">Date de livraison requise pour ce magasin</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {!canEdit && (
+                    <div className="text-sm text-gray-600">
+                      <span className="font-medium">Date de Livraison:</span> {
+                        storeDeliveryDates[store.id] ? 
+                        new Date(storeDeliveryDates[store.id]).toLocaleDateString('fr-FR', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        }) : 'Non définie'
+                      }
+                    </div>
+                  )}
+                </div>
+                <div className="mt-4 md:mt-0">
               <span className="text-sm px-3 py-1 rounded-full bg-krispy-green bg-opacity-10 text-krispy-green">
                 Total : {totals.storeTotals[store.id] || 0} doughnuts
               </span>
+                </div>
+              </div>
             </div>
             <div className="p-6">
               {/* Varieties Section */}
@@ -482,7 +542,7 @@ const ProductionPage: React.FC = () => {
                           </td>
                               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                                 {form ? form.name : 'Non définie'}
-                              </td>
+                          </td>
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                             <div className="flex items-center justify-center">
                                   {canEdit ? (
@@ -494,7 +554,7 @@ const ProductionPage: React.FC = () => {
                                     ...prev,
                                     [store.id]: {
                                       ...prev[store.id],
-                                      [variety.id]: Math.max(0, currentQuantity - 12)
+                                      [variety.id]: Math.max(0, currentQuantity - 1)
                                     }
                                   }));
                                 }}
@@ -525,7 +585,7 @@ const ProductionPage: React.FC = () => {
                                     ...prev,
                                     [store.id]: {
                                       ...prev[store.id],
-                                      [variety.id]: currentQuantity + 12
+                                      [variety.id]: currentQuantity + 1
                                     }
                                   }));
                                 }}
@@ -569,6 +629,7 @@ const ProductionPage: React.FC = () => {
                         .map(box => {
                           const boxCount = storeBoxes[store.id]?.[box.id] || 0;
                           const totalDoughnuts = boxCount * box.size;
+                          
                           return (
                             <tr key={box.id}>
                               <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -645,29 +706,9 @@ const ProductionPage: React.FC = () => {
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
-      {canEdit && (
-        <div className="mt-8 flex space-x-4 justify-end">
-          <button
-            onClick={handleSavePlan}
-            disabled={!isPlanValid || saving}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
-          >
-            {saving ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Enregistrement...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                {existingPlanId ? 'Mettre à jour' : 'Enregistrer'}
-              </>
-            )}
-          </button>
-        </div>
-      )}
     </div>
   );
 };

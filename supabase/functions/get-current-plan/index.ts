@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
           store_id,
           store_name,
           total_quantity,
+          deliveryDate,
           confirmed,
           delivery_confirmed,
           waste_reported,

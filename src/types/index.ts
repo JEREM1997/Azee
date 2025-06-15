@@ -46,6 +46,10 @@ export interface BoxConfiguration {
   name: string;
   size: number; // Number of donuts in the box
   isActive: boolean;
+  varieties?: Array<{
+    varietyId: string;
+    quantity: number;
+  }>;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -57,6 +61,7 @@ export interface ProductionPlanData {
     storeId: string;
     storeName: string;
     totalQuantity: number;
+    deliveryDate?: string;
     items: {
       varietyId: string;
       varietyName: string;
@@ -86,6 +91,7 @@ export interface StoreProductionPlan {
   storeName: string;
   items: ProductionItem[];
   totalQuantity: number;
+  deliveryDate?: string;
   confirmed: boolean;
   deliveryConfirmed?: boolean;
   wasteReported?: boolean;
