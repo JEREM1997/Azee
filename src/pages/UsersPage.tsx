@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Edit, Trash2, Save, X, Users, Key } from 'lucide-react';
-import { STORES } from '../data/mockData';
 import { createUser, updateUser, deleteUser, getUsers, updateUserPassword, updateUserStores } from '../services/userService';
-import { User } from '../types';
+import { getAllStoreData } from '../services/storeManagementService';
+import { User, Store } from '../types';
 import { useAuth } from '../context/AuthContext';
 
 interface UserFormValues {
@@ -25,6 +25,9 @@ const UsersPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
+  const [stores, setStores] = useState<Store[]>([]);
+  const [storesLoading, setStoresLoading] = useState(true);
+  const [storesError, setStoresError] = useState<string | null>(null);
   
   const [formValues, setFormValues] = useState<UserFormValues>({
     id: '',
@@ -37,6 +40,7 @@ const UsersPage: React.FC = () => {
 
   useEffect(() => {
     loadUsers();
+    loadStores();
   }, []);
 
   const loadUsers = async () => {
@@ -54,6 +58,19 @@ const UsersPage: React.FC = () => {
       console.error('Erreur:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadStores = async () => {
+    try {
+      setStoresLoading(true);
+      setStoresError(null);
+      const data = await getAllStoreData();
+      setStores(Array.isArray(data.stores) ? data.stores.filter(s => s.isActive) : []);
+    } catch (err) {
+      setStoresError('Erreur lors du chargement des magasins');
+    } finally {
+      setStoresLoading(false);
     }
   };
 
@@ -124,13 +141,13 @@ const UsersPage: React.FC = () => {
       if (formValues.id) {
         // Update existing user
         const updatedUser = await updateUser(formValues.id, {
-          fullName: formValues.fullName,
+            fullName: formValues.fullName,
           role: formValues.role,
           storeIds: formValues.role === 'store' ? formValues.storeIds : []
-        });
+          });
 
         if (!updatedUser) {
-          throw new Error('Failed to update user');
+            throw new Error('Failed to update user');
         }
       }
 
@@ -304,13 +321,21 @@ const UsersPage: React.FC = () => {
               </select>
             </div>
 
+            {/* Magasins Assignés for store role */}
             {formValues.role === 'store' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Magasins Assignés
                 </label>
+                {storesLoading ? (
+                  <div className="text-gray-500 text-sm">Chargement des magasins...</div>
+                ) : storesError ? (
+                  <div className="text-red-500 text-sm">{storesError}</div>
+                ) : stores.length === 0 ? (
+                  <div className="text-gray-500 text-sm">Aucun magasin actif disponible</div>
+                ) : (
                 <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-4">
-                  {STORES.filter(s => s.isActive).map(store => (
+                    {stores.map(store => (
                     <div key={store.id} className="flex items-center">
                       <input
                         type="checkbox"
@@ -329,7 +354,8 @@ const UsersPage: React.FC = () => {
                       </label>
                     </div>
                   ))}
-                </div>
+              </div>
+            )}
               </div>
             )}
 
@@ -376,7 +402,7 @@ const UsersPage: React.FC = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {users.map(user => {
-                const userStores = STORES.filter(s => user.storeIds?.includes(s.id));
+                const userStores = stores.filter(s => user.storeIds?.includes(s.id));
                 return (
                   <tr key={user.id}>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">

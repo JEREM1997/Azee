@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Menu, X, LogOut, User, Settings, PieChart, FileText, Home, Users } from 'lucide-react';
+import { Menu, X, LogOut, User, Settings, PieChart, FileText, Home, Users, Calendar } from 'lucide-react';
 
 const Navbar: React.FC = () => {
   const { currentUser, logout, isAdmin, isProduction } = useAuth();
@@ -25,15 +25,21 @@ const Navbar: React.FC = () => {
           <div className="hidden md:flex items-center space-x-4">
             {currentUser && (
               <>
-                <Link to="/\" className="text-krispy-green hover:text-krispy-green-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors">
+                <Link to="/" className="text-krispy-green hover:text-krispy-green-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors">
                   <Home className="w-4 h-4 mr-1" />
                   Tableau de bord
                 </Link>
                 {(isAdmin || isProduction) && (
-                  <Link to="/production" className="text-krispy-green hover:text-krispy-green-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors">
-                    <FileText className="w-4 h-4 mr-1" />
-                    Production
-                  </Link>
+                  <>
+                    <Link to="/production" className="text-krispy-green hover:text-krispy-green-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors">
+                      <FileText className="w-4 h-4 mr-1" />
+                      Production
+                    </Link>
+                    <Link to="/plans" className="text-krispy-green hover:text-krispy-green-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors">
+                      <Calendar className="w-4 h-4 mr-1" />
+                      Plans
+                    </Link>
+                  </>
                 )}
                 <Link to="/livraisons" className="text-krispy-green hover:text-krispy-green-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors">
                   <FileText className="w-4 h-4 mr-1" />
@@ -102,13 +108,22 @@ const Navbar: React.FC = () => {
                   Tableau de bord
                 </Link>
                 {(isAdmin || isProduction) && (
-                  <Link 
-                    to="/production" 
-                    className="text-krispy-green hover:bg-gray-50 block px-3 py-2 rounded-md text-base font-medium"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    Production
-                  </Link>
+                  <>
+                    <Link 
+                      to="/production" 
+                      className="text-krispy-green hover:bg-gray-50 block px-3 py-2 rounded-md text-base font-medium"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Production
+                    </Link>
+                    <Link 
+                      to="/plans" 
+                      className="text-krispy-green hover:bg-gray-50 block px-3 py-2 rounded-md text-base font-medium"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Plans
+                    </Link>
+                  </>
                 )}
                 <Link 
                   to="/livraisons" 

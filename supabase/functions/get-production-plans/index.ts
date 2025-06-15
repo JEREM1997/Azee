@@ -107,6 +107,9 @@ Deno.serve(async (req) => {
       throw new Error(`Database error: ${dbError.message}`);
     }
 
+    console.log(`Found ${plans?.length || 0} plans for user role: ${role}`);
+    console.log('Plans data:', JSON.stringify(plans, null, 2));
+
     // For store users, filter to only show their stores
     if (plans && role === 'store') {
       plans.forEach(plan => {

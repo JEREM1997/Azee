@@ -146,8 +146,6 @@ const AdminPage: React.FC = () => {
       id: formValues.id || '' // Keep existing ID or use empty string for new items
     };
 
-    console.log('Saving with values:', updatedValues); // Debug log
-
     switch (activeTab) {
       case 'varieties':
         updateVariety(updatedValues as DonutVariety);
@@ -222,9 +220,6 @@ const AdminPage: React.FC = () => {
   };
 
   const renderFormFields = () => {
-    console.log('Rendering form for tab:', activeTab);
-    console.log('Form values:', formValues);
-    
     const commonFields = (
       <>
         <div>
@@ -297,21 +292,21 @@ const AdminPage: React.FC = () => {
                   varieties.filter(v => v.isActive).map(variety => {
                     const isChecked = (formValues.availableVarieties || []).includes(variety.id);
                     return (
-                      <div key={variety.id} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          id={`variety-${variety.id}`}
+                  <div key={variety.id} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id={`variety-${variety.id}`}
                           checked={isChecked}
                           onChange={(e) => handleVarietyToggle(variety.id, e.target.checked)}
                           className="h-4 w-4 text-krispy-green focus:ring-krispy-green border-gray-300 rounded"
-                        />
+                    />
                         <label htmlFor={`variety-${variety.id}`} className="ml-2 block text-sm text-gray-900 cursor-pointer">
-                          {variety.name}
+                      {variety.name}
                           {variety.description && (
                             <span className="text-gray-500 ml-1">- {variety.description}</span>
                           )}
-                        </label>
-                      </div>
+                    </label>
+                  </div>
                     );
                   })
                 ) : (
@@ -332,19 +327,19 @@ const AdminPage: React.FC = () => {
                   boxes.filter(b => b.isActive).map(box => {
                     const isChecked = (formValues.availableBoxes || []).includes(box.id);
                     return (
-                      <div key={box.id} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          id={`box-${box.id}`}
+                  <div key={box.id} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id={`box-${box.id}`}
                           checked={isChecked}
                           onChange={(e) => handleBoxToggle(box.id, e.target.checked)}
                           className="h-4 w-4 text-krispy-green focus:ring-krispy-green border-gray-300 rounded"
-                        />
+                    />
                         <label htmlFor={`box-${box.id}`} className="ml-2 block text-sm text-gray-900 cursor-pointer">
-                          {box.name}
+                      {box.name}
                           <span className="text-gray-500 ml-1">- {box.size} doughnuts</span>
-                        </label>
-                      </div>
+                    </label>
+                  </div>
                     );
                   })
                 ) : (
@@ -402,6 +397,7 @@ const AdminPage: React.FC = () => {
         
       case 'boxes':
         const totalCost = calculateBoxCost(formValues.varieties || []);
+        
         return (
           <div className="space-y-4">
             {commonFields}
@@ -522,6 +518,7 @@ const AdminPage: React.FC = () => {
           <tr>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Taille</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variétés Configurées</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Coût Total</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
             <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -578,10 +575,22 @@ const AdminPage: React.FC = () => {
           
         case 'boxes':
           const boxCost = calculateBoxCost(item.varieties || []);
+          const varietiesDisplay = (item.varieties || []).length > 0 
+            ? (item.varieties || []).map((v: any) => {
+                const variety = varieties.find(variety => variety.id === v.varietyId);
+                return variety ? `${variety.name} (${v.quantity})` : `Variété inconnue (${v.quantity})`;
+              }).join(', ')
+            : 'Aucune variété configurée';
+          
           cols = (
             <>
               <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.size} doughnuts</td>
+              <td className="px-4 py-3 text-sm text-gray-500 max-w-xs">
+                <div className="truncate" title={varietiesDisplay}>
+                  {varietiesDisplay}
+                </div>
+              </td>
               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">CHF {boxCost.toFixed(2)}</td>
             </>
           );

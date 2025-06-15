@@ -7,6 +7,7 @@ import Navbar from './components/Navbar';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import ProductionPage from './pages/ProductionPage';
+import PlansPage from './pages/PlansPage';
 import DeliveryPage from './pages/DeliveryPage';
 import StatsPage from './pages/StatsPage';
 import AdminPage from './pages/AdminPage';
@@ -36,6 +37,15 @@ function App() {
                   <>
                     <Navbar />
                     <ProductionPage />
+                  </>
+                }
+              />
+              <Route
+                path="/plans"
+                element={
+                  <>
+                    <Navbar />
+                    <PlansPage />
                   </>
                 }
               />

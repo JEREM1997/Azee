@@ -34,13 +34,16 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       setLoading(true);
       setError(null);
+      
       const data = await getAllStoreData();
+      
       setStores(data.stores || []);
       setVarieties(data.varieties || []);
       setForms(data.forms || []);
       setBoxes(data.boxes || []);
+      
     } catch (err) {
-      console.error('Error loading data:', err);
+      console.error('AdminContext: Error loading data:', err);
       setError(err instanceof Error ? err.message : 'An error occurred while loading data');
       // Initialize empty arrays to prevent undefined errors
       setStores([]);
@@ -107,14 +110,16 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const handleUpdateBox = async (box: BoxConfiguration) => {
     try {
       setError(null);
+      
       if (box.id && box.id.trim() !== '') {
         await updateBoxConfiguration(box);
       } else {
         await createBoxConfiguration(box);
       }
+      
       await loadData();
     } catch (err) {
-      console.error('Error updating box:', err);
+      console.error('AdminContext: Error updating box:', err);
       setError(err instanceof Error ? err.message : 'An error occurred while updating box');
       throw err;
     }

@@ -52,14 +52,16 @@ Deno.serve(async (req) => {
       { data: forms, error: formsError },
       { data: boxes, error: boxesError },
       { data: storeVarieties, error: storeVarietiesError },
-      { data: storeBoxes, error: storeBoxesError }
+      { data: storeBoxes, error: storeBoxesError },
+      { data: boxVarieties, error: boxVarietiesError }
     ] = await Promise.all([
       supabase.from('stores').select('*').order('name'),
       supabase.from('donut_varieties').select('*').order('name'),
       supabase.from('donut_forms').select('*').order('name'),
       supabase.from('box_configurations').select('*').order('name'),
       supabase.from('store_varieties').select('store_id, variety_id'),
-      supabase.from('store_boxes').select('store_id, box_id')
+      supabase.from('store_boxes').select('store_id, box_id'),
+      supabase.from('box_varieties').select('box_id, variety_id, quantity')
     ])
 
     if (storesError) throw storesError
@@ -68,6 +70,7 @@ Deno.serve(async (req) => {
     if (boxesError) throw boxesError
     if (storeVarietiesError) throw storeVarietiesError
     if (storeBoxesError) throw storeBoxesError
+    if (boxVarietiesError) throw boxVarietiesError
 
     // Transform stores to include availableVarieties and availableBoxes arrays
     const stores = (storesData || []).map(store => {
@@ -113,22 +116,32 @@ Deno.serve(async (req) => {
       updatedAt: form.updated_at
     }))
 
-    // Transform boxes to camelCase
-    const transformedBoxes = (boxes || []).map(box => ({
-      id: box.id,
-      name: box.name,
-      size: box.size,
-      isActive: box.is_active,
-      createdAt: box.created_at,
-      updatedAt: box.updated_at
-    }))
+    // Transform boxes to camelCase and include varieties
+    const transformedBoxes = (boxes || []).map(box => {
+      const boxVarietiesForBox = (boxVarieties || [])
+        .filter(bv => bv.box_id === box.id)
+        .map(bv => ({
+          varietyId: bv.variety_id,
+          quantity: bv.quantity
+        }))
+
+      return {
+        id: box.id,
+        name: box.name,
+        size: box.size,
+        isActive: box.is_active,
+        varieties: boxVarietiesForBox,
+        createdAt: box.created_at,
+        updatedAt: box.updated_at
+      }
+    })
 
     return new Response(
       JSON.stringify({
         stores: stores || [],
         varieties: transformedVarieties || [],
         forms: transformedForms || [],
-        boxes: transformedBoxes || []
+        boxes: transformedBoxes || [],
       }),
       {
         headers: {

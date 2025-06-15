@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     // Create Supabase client with service role key to bypass RLS
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', // Use service role key instead of anon key
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       {
         auth: {
           autoRefreshToken: false,
@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (existingPlanError) {
-      throw existingPlanError;
+      throw new Error(`Error checking existing plan: ${existingPlanError.message}`);
     }
 
     const planId = planData.existingPlanId || existingPlan?.id;
@@ -149,13 +149,15 @@ Deno.serve(async (req) => {
         .update({
           total_production: planData.totalProduction,
           status: planData.status,
+          updated_at: new Date().toISOString(),
+          updated_by: user.id
         })
         .eq('id', planId)
         .select()
         .single();
 
       if (updateError) {
-        throw updateError;
+        throw new Error(`Error updating plan: ${updateError.message}`);
       }
 
       plan = updatedPlan;
@@ -167,7 +169,7 @@ Deno.serve(async (req) => {
         .eq('plan_id', planId);
 
       if (deleteError) {
-        throw deleteError;
+        throw new Error(`Error deleting existing store productions: ${deleteError.message}`);
       }
     } else {
       // Create new plan
@@ -183,7 +185,7 @@ Deno.serve(async (req) => {
         .single();
 
       if (planError) {
-        throw planError;
+        throw new Error(`Error creating new plan: ${planError.message}`);
       }
 
       plan = newPlan;
@@ -203,7 +205,7 @@ Deno.serve(async (req) => {
         .single();
 
       if (storeError) {
-        throw storeError;
+        throw new Error(`Error creating store production for store ${store.storeName}: ${storeError.message}`);
       }
 
       if (store.items && store.items.length > 0) {
@@ -221,7 +223,7 @@ Deno.serve(async (req) => {
           );
 
         if (itemsError) {
-          throw itemsError;
+          throw new Error(`Error creating production items for store ${store.storeName}: ${itemsError.message}`);
         }
       }
 
@@ -238,13 +240,13 @@ Deno.serve(async (req) => {
           );
 
         if (boxesError) {
-          throw boxesError;
+          throw new Error(`Error creating box productions for store ${store.storeName}: ${boxesError.message}`);
         }
       }
     }
 
     return new Response(
-      JSON.stringify(plan),
+      JSON.stringify({ id: plan.id }),
       { 
         headers: {
           'Content-Type': 'application/json',
@@ -256,7 +258,10 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Error in save-production-plan function:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error instanceof Error ? error.message : 'An unknown error occurred',
+        details: error instanceof Error ? error.stack : undefined
+      }),
       { 
         status: 500,
         headers: {
