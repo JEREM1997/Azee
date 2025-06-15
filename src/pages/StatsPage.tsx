@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart2, PieChart, TrendingUp, DollarSign, Calendar, Store } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
 import { getProductionPlans } from '../services/productionService';
 
@@ -209,7 +208,7 @@ const StatsPage: React.FC = () => {
     // For now, use the filtered data and distribute proportionally
     const activeStores = stores.filter(store => store.isActive);
     if (activeStores.length > 0 && totalProduction > 0) {
-      activeStores.forEach((store, index) => {
+      activeStores.forEach((store) => {
         // Distribute production somewhat realistically (not purely random)
         const basePercentage = 1 / activeStores.length;
         const variation = (Math.random() - 0.5) * 0.3; // ±15% variation
