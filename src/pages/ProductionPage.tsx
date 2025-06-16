@@ -457,6 +457,106 @@ const ProductionPage: React.FC = () => {
         </div>
       )}
 
+      {/* Production Summary Section */}
+      {summary.totalDoughnuts > 0 && (
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Résumé de la Production</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Total Doughnuts Card */}
+            <div className="bg-krispy-green bg-opacity-10 rounded-lg p-6">
+              <h3 className="text-sm font-medium text-krispy-green mb-2">Total Doughnuts</h3>
+              <p className="text-3xl font-bold text-krispy-green">{summary.totalDoughnuts}</p>
+              <div className="mt-3 text-sm text-gray-600">
+                <p>Individuels: {summary.totalIndividualDoughnuts}</p>
+                <p className="font-medium">En Boîtes: {summary.totalBoxDoughnuts}</p>
+                {Object.entries(summary.boxTotals).length > 0 && (
+                  <div className="mt-2 space-y-1 max-h-20 overflow-y-auto">
+                    {boxes
+                      .filter(b => b.isActive && (summary.boxTotals[b.id] || 0) > 0)
+                      .map(box => {
+                        const boxCount = summary.boxTotals[box.id] || 0;
+                        const totalDoughnuts = boxCount * box.size;
+                        return (
+                          <div key={box.id} className="text-xs text-gray-500">
+                            {box.name}: {boxCount} boîtes ({totalDoughnuts} doughnuts)
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Main Varieties Card */}
+            <div className="bg-gray-50 rounded-lg p-6">
+              <h3 className="text-sm font-medium text-gray-800 mb-2">Variétés Principales</h3>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {varieties
+                  .filter(v => v.isActive && (summary.varietyTotals[v.id] || 0) > 0)
+                  .map(variety => {
+                    const total = summary.varietyTotals[variety.id] || 0;
+                    const dozens = Math.floor(total / 12);
+                    const units = total % 12;
+                    return (
+                      <div key={variety.id} className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">{variety.name}</span>
+                          <span className="text-sm font-medium text-gray-900">{total}</span>
+                        </div>
+                        <div className="text-xs text-gray-500 pl-2">
+                          {dozens > 0 && `${dozens} douzaine${dozens > 1 ? 's' : ''}`}
+                          {dozens > 0 && units > 0 && ' + '}
+                          {units > 0 && `${units} unité${units > 1 ? 's' : ''}`}
+                          {dozens === 0 && units === 0 && '0 unité'}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* Store Summary Card */}
+            <div className="bg-gray-50 rounded-lg p-6">
+              <h3 className="text-sm font-medium text-gray-800 mb-2">Par Magasin</h3>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {visibleStores
+                  .filter(store => (totals.storeTotals[store.id] || 0) > 0)
+                  .map(store => (
+                    <div key={store.id} className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">{store.name}</span>
+                      <span className="text-sm font-medium text-gray-900">{totals.storeTotals[store.id] || 0}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* Forms with Reserve Card */}
+            <div className="bg-blue-50 rounded-lg p-6">
+              <h3 className="text-sm font-medium text-blue-800 mb-2">Par Forme (avec 5% de réserve)</h3>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {forms
+                  .filter(f => f.isActive && (summary.formTotals[f.id] || 0) > 0)
+                  .map(form => {
+                    const baseTotal = summary.formTotals[form.id] || 0;
+                    const totalWithReserve = Math.ceil(baseTotal * 1.05);
+                    return (
+                      <div key={form.id} className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">{form.name}</span>
+                          <span className="text-sm font-medium text-blue-900">{totalWithReserve}</span>
+                        </div>
+                        <div className="text-xs text-gray-500 pl-2">
+                          Base: {baseTotal} + Réserve: {totalWithReserve - baseTotal}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-8">
         {visibleStores.map(store => {
           const storeTotal = totals.storeTotals[store.id] || 0;

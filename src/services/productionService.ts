@@ -164,3 +164,69 @@ export const updateDeliveryStatus = async (storeProductionId: string, data: {
     throw error;
   }
 };
+
+export const deletePlan = async (planId: string) => {
+  try {
+    console.log('deletePlan: Starting deletion for plan ID:', planId);
+    
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('No active session');
+    }
+    
+    console.log('deletePlan: Session found, access token available');
+    
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-production-plan`;
+    console.log('deletePlan: Making request to URL:', url);
+    
+    const requestBody = JSON.stringify({ planId });
+    console.log('deletePlan: Request body:', requestBody);
+
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: requestBody,
+    });
+
+    console.log('deletePlan: Response status:', response.status);
+    console.log('deletePlan: Response ok:', response.ok);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.log('deletePlan: Error response:', errorData);
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log('deletePlan: Success response:', data);
+    return data;
+  } catch (err) {
+    console.error('deletePlan: Error occurred:', err);
+    
+    // If it's a network/CORS error, provide a helpful message
+    if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
+      throw new Error('Impossible de se connecter au serveur. Veuillez vérifier votre connexion internet et réessayer.');
+    }
+    
+    // If it's a permission error, provide a clear message
+    if (err instanceof Error) {
+      if (err.message.includes('Insufficient permissions')) {
+        throw new Error('Vous n\'avez pas les permissions nécessaires pour supprimer ce plan de production.');
+      }
+      if (err.message.includes('Cannot delete completed')) {
+        throw new Error('Les plans de production terminés ne peuvent pas être supprimés.');
+      }
+      if (err.message.includes('not found')) {
+        throw new Error('Plan de production introuvable.');
+      }
+      if (err.message.includes('User role not found')) {
+        throw new Error('Rôle utilisateur non défini. Veuillez contacter votre administrateur.');
+      }
+    }
+    
+    throw err;
+  }
+};

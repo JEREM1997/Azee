@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Save, X, Coffee, ShoppingBag } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, Coffee, ShoppingBag, Store as StoreIcon, Donut, Box } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
-import { Store, DonutVariety, DonutForm, BoxConfiguration } from '../types';
+import { Store as StoreType, DonutVariety, DonutForm, BoxConfiguration } from '../types';
 
 type AdminTab = 'stores' | 'varieties' | 'forms' | 'boxes';
 
@@ -154,7 +154,7 @@ const AdminPage: React.FC = () => {
         updateForm(updatedValues as DonutForm);
         break;
       case 'stores':
-        updateStore(updatedValues as Store);
+        updateStore(updatedValues as StoreType);
         break;
       case 'boxes':
         updateBox(updatedValues as BoxConfiguration);
@@ -658,7 +658,7 @@ const AdminPage: React.FC = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            <ShoppingBag className="h-4 w-4 mr-2" />
+            <StoreIcon className="h-4 w-4 mr-2" />
             Magasins
           </button>
           <button
@@ -669,7 +669,7 @@ const AdminPage: React.FC = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            <Coffee className="h-4 w-4 mr-2" />
+            <Donut className="h-4 w-4 mr-2" />
             Variétés de Doughnuts
           </button>
           <button
@@ -691,7 +691,7 @@ const AdminPage: React.FC = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            <ShoppingBag className="h-4 w-4 mr-2" />
+            <Box className="h-4 w-4 mr-2" />
             Configurations des Boîtes
           </button>
         </nav>

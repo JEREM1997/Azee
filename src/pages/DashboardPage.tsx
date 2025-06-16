@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { getCurrentDayPlan, getProductionPlans } from '../services/productionService';
 import { ProductionPlan } from '../types';
-import { Calendar, Check, AlertTriangle, TrendingUp, FileText, Truck, X } from 'lucide-react';
+import { Calendar, Check, AlertTriangle, TrendingUp, FileText, Truck, X, Store } from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
   const { currentUser, isAdmin, isProduction } = useAuth();
@@ -305,7 +305,7 @@ const DashboardPage: React.FC = () => {
                   </p>
                 </div>
                 <div className="bg-krispy-green bg-opacity-10 p-3 rounded-lg">
-                  <TrendingUp className="h-6 w-6 text-krispy-green" />
+                  <Store className="h-6 w-6 text-krispy-green" />
                 </div>
               </div>
             </div>

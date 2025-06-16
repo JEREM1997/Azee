@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Store, DonutVariety, DonutForm, BoxConfiguration } from '../types';
 import { getAllStoreData, createStore, updateStore, deleteStore, createDonutForm, updateDonutForm, deleteDonutForm, createDonutVariety, updateDonutVariety, deleteDonutVariety, createBoxConfiguration, updateBoxConfiguration, deleteBoxConfiguration } from '../services/storeManagementService';
+import { useAuth } from './AuthContext';
 
 interface AdminContextType {
   stores: Store[];
@@ -30,7 +31,19 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+
   const loadData = async () => {
+    // Don't try to load data if not authenticated
+    if (!isAuthenticated) {
+      setStores([]);
+      setVarieties([]);
+      setForms([]);
+      setBoxes([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -56,8 +69,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    // Only load data when auth is not loading and user is authenticated
+    if (!authLoading) {
+      loadData();
+    }
+  }, [isAuthenticated, authLoading]);
 
   const handleUpdateStore = async (store: Store) => {
     try {

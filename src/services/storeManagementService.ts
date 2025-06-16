@@ -4,9 +4,15 @@ import { Store, DonutVariety, DonutForm, BoxConfiguration } from '../types';
 export const getAllStoreData = async () => {
   try {
     // Get the current session to include the auth token
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.error('Session error:', sessionError);
+      throw new Error(`Authentication error: ${sessionError.message}`);
+    }
     
     if (!session) {
+      console.warn('No authenticated session found - user may need to log in');
       throw new Error('No authenticated session found');
     }
 
@@ -23,6 +29,7 @@ export const getAllStoreData = async () => {
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('API response error:', response.status, errorText);
       throw new Error(`Failed to fetch admin data: ${response.status} ${errorText}`);
     }
 

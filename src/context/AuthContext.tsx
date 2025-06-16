@@ -39,7 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: session.user.email || '',
           fullName: session.user.user_metadata?.full_name || session.user.email || '',
           role: role,
-          storeId: session.user.user_metadata?.store_id
+          storeIds: session.user.user_metadata?.store_ids || (session.user.user_metadata?.store_id ? [session.user.user_metadata.store_id] : [])
         });
       } catch (error) {
         console.error('Error checking user:', error);
@@ -66,7 +66,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: session.user.email || '',
           fullName: session.user.user_metadata?.full_name || session.user.email || '',
           role: role,
-          storeId: session.user.user_metadata?.store_id
+          storeIds: session.user.user_metadata?.store_ids || (session.user.user_metadata?.store_id ? [session.user.user_metadata.store_id] : [])
         });
       }
     });

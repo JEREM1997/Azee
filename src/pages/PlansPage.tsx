@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Eye, FileText, AlertTriangle, Clock, CheckCircle, RefreshCw, Edit } from 'lucide-react';
-import { getProductionPlans } from '../services/productionService';
+import { Calendar, Eye, FileText, AlertTriangle, RefreshCw, Edit, Trash2 } from 'lucide-react';
+import { getProductionPlans, deletePlan } from '../services/productionService';
 import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
 
@@ -8,7 +8,7 @@ interface ProductionPlan {
   id: string;
   date: string;
   total_production: number;
-  status: 'draft' | 'validated' | 'completed';
+  status?: 'draft' | 'validated' | 'completed';
   created_at: string;
   stores: Array<{
     id: string;
@@ -35,6 +35,7 @@ const PlansPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<ProductionPlan | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const { currentUser } = useAuth();
   const { varieties, forms, boxes } = useAdmin();
@@ -84,45 +85,6 @@ const PlansPage: React.FC = () => {
     };
   }, [loadPlans]);
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'draft':
-        return <Clock className="h-4 w-4 text-yellow-500" />;
-      case 'validated':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case 'completed':
-        return <CheckCircle className="h-4 w-4 text-blue-500" />;
-      default:
-        return <FileText className="h-4 w-4 text-gray-500" />;
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'draft':
-        return 'Brouillon';
-      case 'validated':
-        return 'Validé';
-      case 'completed':
-        return 'Terminé';
-      default:
-        return 'Inconnu';
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'draft':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'validated':
-        return 'bg-green-100 text-green-800';
-      case 'completed':
-        return 'bg-blue-100 text-blue-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('fr-FR', {
       weekday: 'long',
@@ -153,6 +115,40 @@ const PlansPage: React.FC = () => {
   const handleEditPlan = (plan: ProductionPlan) => {
     // Navigate to production page with the plan's date
     window.location.href = `/production?date=${plan.date}`;
+  };
+
+  const handleDeletePlan = async (plan: ProductionPlan) => {
+    const confirmMessage = `Êtes-vous sûr de vouloir supprimer le plan de production du ${formatDate(plan.date)} ?\n\nCette action est irréversible et supprimera :\n- Le plan de production\n- Toutes les productions par magasin\n- Tous les articles de production\n- Toutes les productions de boîtes\n\nTapez "SUPPRIMER" pour confirmer :`;
+    
+    const userInput = prompt(confirmMessage);
+    
+    if (userInput !== 'SUPPRIMER') {
+      return;
+    }
+
+    try {
+      setDeleting(plan.id);
+      setError(null);
+      
+      console.log('Attempting to delete plan:', plan.id);
+      
+      const result = await deletePlan(plan.id);
+      console.log('Delete result:', result);
+      
+      // Refresh the plans list
+      await loadPlans();
+      
+      // Show success message
+      alert('Plan de production supprimé avec succès.');
+    } catch (err) {
+      console.error('Error deleting plan:', err);
+      
+      // The error messages are now already in French from the service
+      const errorMessage = err instanceof Error ? err.message : 'Erreur lors de la suppression du plan';
+      setError(errorMessage);
+    } finally {
+      setDeleting(null);
+    }
   };
 
   const closeModal = () => {
@@ -301,12 +297,6 @@ const PlansPage: React.FC = () => {
                           <p className="text-sm font-medium text-krispy-green truncate">
                             {formatDate(plan.date)}
                           </p>
-                          <div className="ml-2 flex-shrink-0 flex">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(plan.status)}`}>
-                              {getStatusIcon(plan.status)}
-                              <span className="ml-1">{getStatusText(plan.status)}</span>
-                            </span>
-                          </div>
                         </div>
                         <div className="mt-2 flex items-center text-sm text-gray-500">
                           <p>
@@ -330,13 +320,33 @@ const PlansPage: React.FC = () => {
                           Voir détails
                         </button>
                         {canEdit && (
-                          <button
-                            onClick={() => handleEditPlan(plan)}
-                            className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
-                          >
-                            <Edit className="h-4 w-4 mr-2" />
-                            Modifier
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleEditPlan(plan)}
+                              className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
+                            >
+                              <Edit className="h-4 w-4 mr-2" />
+                              Modifier
+                            </button>
+                            <button
+                              onClick={() => handleDeletePlan(plan)}
+                              disabled={deleting === plan.id}
+                              className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Supprimer ce plan de production"
+                            >
+                              {deleting === plan.id ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                  Suppression...
+                                </>
+                              ) : (
+                                <>
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Supprimer
+                                </>
+                              )}
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -479,17 +489,10 @@ const PlansPage: React.FC = () => {
               })()}
 
               <div className="mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-krispy-green bg-opacity-10 rounded-lg p-4">
                     <h4 className="text-sm font-medium text-krispy-green">Total Production</h4>
                     <p className="text-2xl font-bold text-krispy-green">{selectedPlan.total_production}</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-gray-800">Statut</h4>
-                    <div className="flex items-center mt-1">
-                      {getStatusIcon(selectedPlan.status)}
-                      <span className="ml-2 text-sm font-medium">{getStatusText(selectedPlan.status)}</span>
-                    </div>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-4">
                     <h4 className="text-sm font-medium text-gray-800">Magasins</h4>

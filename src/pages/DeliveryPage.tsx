@@ -192,7 +192,7 @@ const DeliveryPage: React.FC = () => {
 
     // Add individual items table
     const itemsTableHeaders = [
-      ['Variété', 'Quantité Prévue', 'Quantité Reçue', 'Déchets']
+      ['Variété', 'Quantité Prévue (unité)', 'Quantité Reçue (unité)', 'Déchets (unité)']
     ];
 
     const itemsTableData = storeDetails.production_items?.map(item => [
@@ -216,7 +216,7 @@ const DeliveryPage: React.FC = () => {
     // Add boxes table if there are any boxes
     if (storeDetails.box_productions && storeDetails.box_productions.length > 0) {
       const boxesTableHeaders = [
-        ['Boîte', 'Quantité Prévue', 'Quantité Reçue', 'Déchets']
+        ['Boîte', 'Quantité Prévue (unité)', 'Quantité Reçue (unité)', 'Déchets (unité)']
       ];
 
       const boxesTableData = storeDetails.box_productions.map(box => [
@@ -254,11 +254,33 @@ const DeliveryPage: React.FC = () => {
       setSaving(true);
       setError(null);
 
+      // Prepare received quantities - use entered values or default to planned quantities
+      const finalReceivedQuantities: { [key: string]: number } = {};
+      const finalBoxReceivedQuantities: { [key: string]: number } = {};
+
+      // For production items
+      storeDetails.production_items?.forEach((item) => {
+        finalReceivedQuantities[item.id] = receivedQuantities[item.id] !== undefined 
+          ? receivedQuantities[item.id] 
+          : item.quantity; // Default to planned quantity
+      });
+
+      // For box productions
+      storeDetails.box_productions?.forEach((box) => {
+        finalBoxReceivedQuantities[box.id] = boxReceivedQuantities[box.id] !== undefined 
+          ? boxReceivedQuantities[box.id] 
+          : box.quantity; // Default to planned quantity
+      });
+
       await updateDeliveryStatus(storeDetails.id, {
         deliveryConfirmed: true,
-        received: receivedQuantities,
-        boxReceived: boxReceivedQuantities
+        received: finalReceivedQuantities,
+        boxReceived: finalBoxReceivedQuantities
       });
+
+      // Update local state with the final quantities
+      setReceivedQuantities(finalReceivedQuantities);
+      setBoxReceivedQuantities(finalBoxReceivedQuantities);
 
       await loadCurrentPlan();
     } catch (err) {
@@ -276,17 +298,11 @@ const DeliveryPage: React.FC = () => {
       setSaving(true);
       setError(null);
 
-      // If delivery is not confirmed yet, save both received quantities and waste
+      // Only save waste quantities since delivery must be confirmed first
       const updateData: any = {
         waste: wasteQuantities,
         boxWaste: boxWasteQuantities
       };
-
-      // If delivery is not confirmed, also save received quantities
-      if (!storeDetails.delivery_confirmed) {
-        updateData.received = receivedQuantities;
-        updateData.boxReceived = boxReceivedQuantities;
-      }
 
       await updateDeliveryStatus(storeDetails.id, updateData);
 
@@ -369,14 +385,21 @@ const DeliveryPage: React.FC = () => {
                   <div className="flex justify-between items-center">
                     <span className="font-medium text-gray-900">{store.store_name}</span>
                     <span className={`text-sm inline-flex items-center px-2.5 py-0.5 rounded-full font-medium ${
-                      store.delivery_confirmed
+                      store.delivery_confirmed && store.waste_reported
                         ? 'bg-krispy-green bg-opacity-10 text-krispy-green'
-                        : 'bg-red-100 text-red-800'
+                        : store.delivery_confirmed && !store.waste_reported
+                        ? 'bg-orange-100 text-orange-800'
+                        : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {store.delivery_confirmed ? (
+                      {store.delivery_confirmed && store.waste_reported ? (
                         <>
                           <Check className="h-3 w-3 mr-1" />
                           Confirmé
+                        </>
+                      ) : store.delivery_confirmed && !store.waste_reported ? (
+                        <>
+                          <AlertTriangle className="h-3 w-3 mr-1" />
+                          Déchets en attente
                         </>
                       ) : (
                         <>
@@ -468,9 +491,9 @@ const DeliveryPage: React.FC = () => {
                       </div>
                       <div className="ml-3">
                         <p className="text-sm text-blue-700">
-                          <span className="font-medium">Quantités ajustables:</span> 
-                          {!storeDetails.delivery_confirmed && " Vous pouvez modifier les quantités reçues si elles diffèrent des quantités prévues."}
-                          {!storeDetails.waste_reported && " Vous pouvez également signaler les déchets pour chaque variété."}
+                          <span className="font-medium">Processus de livraison:</span> 
+                          {!storeDetails.delivery_confirmed && " 1. Confirmez d'abord la réception en ajustant les quantités reçues si nécessaire."}
+                          {storeDetails.delivery_confirmed && !storeDetails.waste_reported && " 2. Vous pouvez maintenant signaler les déchets pour chaque variété."}
                         </p>
                       </div>
                     </div>
@@ -513,15 +536,22 @@ const DeliveryPage: React.FC = () => {
                               title={`Quantité prévue: ${item.quantity}. Ajustez si nécessaire.`}
                             />
                           ) : (
-                            receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : (item.received || '-')
+                            // Show received quantity: prioritize database value, then local state, then dash
+                            item.received !== null && item.received !== undefined 
+                              ? item.received 
+                              : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : '-')
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                          {!storeDetails.waste_reported && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) ? (
+                          {!storeDetails.waste_reported && storeDetails.delivery_confirmed && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) ? (
                             <input
                               type="number"
                               min="0"
-                              max={receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity}
+                              max={
+                                item.received !== null && item.received !== undefined 
+                                  ? item.received 
+                                  : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity)
+                              }
                               placeholder="0"
                               value={wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : ''}
                               onChange={(e) => setWasteQuantities({
@@ -529,10 +559,16 @@ const DeliveryPage: React.FC = () => {
                                 [item.id]: parseInt(e.target.value) || 0
                               })}
                               className="w-20 text-center border-2 border-orange-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-orange-50 hover:bg-white transition-colors"
-                              title={`Maximum: ${receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity} doughnuts`}
+                              title={`Maximum: ${
+                                item.received !== null && item.received !== undefined 
+                                  ? item.received 
+                                  : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity)
+                              } doughnuts`}
                             />
+                          ) : !storeDetails.delivery_confirmed ? (
+                            <span className="text-gray-400 text-sm">Confirmez d'abord la réception</span>
                           ) : (
-                            wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : (item.waste || '-')
+                            wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : (item.waste !== null && item.waste !== undefined ? item.waste : 0)
                           )}
                         </td>
                       </tr>
@@ -579,15 +615,22 @@ const DeliveryPage: React.FC = () => {
                                   title={`Quantité prévue: ${box.quantity}. Ajustez si nécessaire.`}
                                 />
                               ) : (
-                                boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : (box.received || '-')
+                                // Show received quantity: prioritize database value, then local state, then dash
+                                box.received !== null && box.received !== undefined 
+                                  ? box.received 
+                                  : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : '-')
                               )}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                              {!storeDetails.waste_reported && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) ? (
+                              {!storeDetails.waste_reported && storeDetails.delivery_confirmed && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) ? (
                                 <input
                                   type="number"
                                   min="0"
-                                  max={boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity}
+                                  max={
+                                    box.received !== null && box.received !== undefined 
+                                      ? box.received 
+                                      : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity)
+                                  }
                                   placeholder="0"
                                   value={boxWasteQuantities[box.id] !== undefined ? boxWasteQuantities[box.id] : ''}
                                   onChange={(e) => setBoxWasteQuantities({
@@ -595,10 +638,16 @@ const DeliveryPage: React.FC = () => {
                                     [box.id]: parseInt(e.target.value) || 0
                                   })}
                                   className="w-20 text-center border-2 border-orange-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-orange-50 hover:bg-white transition-colors"
-                                  title={`Maximum: ${boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity} boîtes`}
+                                  title={`Maximum: ${
+                                    box.received !== null && box.received !== undefined 
+                                      ? box.received 
+                                      : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity)
+                                  } boîtes`}
                                 />
+                              ) : !storeDetails.delivery_confirmed ? (
+                                <span className="text-gray-400 text-sm">Confirmez d'abord la réception</span>
                               ) : (
-                                boxWasteQuantities[box.id] !== undefined ? boxWasteQuantities[box.id] : (box.waste || '-')
+                                boxWasteQuantities[box.id] !== undefined ? boxWasteQuantities[box.id] : (box.waste !== null && box.waste !== undefined ? box.waste : 0)
                               )}
                             </td>
                           </tr>
@@ -625,7 +674,7 @@ const DeliveryPage: React.FC = () => {
               )}
               
               {!storeDetails.delivery_confirmed && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) && (
-                <div className="mt-6 flex justify-end space-x-3">
+                <div className="mt-6 flex justify-end">
                   <button
                     onClick={handleConfirmDelivery}
                     disabled={saving}
@@ -643,25 +692,6 @@ const DeliveryPage: React.FC = () => {
                       </>
                     )}
                   </button>
-                  {(Object.keys(wasteQuantities).length > 0 || Object.keys(boxWasteQuantities).length > 0) && (
-                    <button
-                      onClick={handleReportWaste}
-                      disabled={saving}
-                      className="inline-flex items-center px-4 py-2 border border-orange-300 text-sm font-medium rounded-md shadow-sm text-orange-700 bg-orange-50 hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50"
-                    >
-                      {saving ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-700 mr-2"></div>
-                          Enregistrement...
-                        </>
-                      ) : (
-                        <>
-                          <AlertTriangle className="h-4 w-4 mr-2" />
-                          Signaler les Déchets
-                        </>
-                      )}
-                    </button>
-                  )}
                 </div>
               )}
               

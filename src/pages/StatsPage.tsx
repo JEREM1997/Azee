@@ -220,8 +220,8 @@ const StatsPage: React.FC = () => {
         const storeWastePercent = storeReceived > 0 ? (storeWaste / storeReceived) * 100 : 0;
         
         storeStats[store.id] = {
-          id: store.id,
-          name: store.name,
+    id: store.id,
+    name: store.name,
           production: storeProduction,
           received: storeReceived,
           waste: storeWaste,
@@ -244,14 +244,14 @@ const StatsPage: React.FC = () => {
       // Simulate realistic distribution
       varietyStats[variety.id] = Math.floor(Math.random() * (totalProduction * 0.3)) + (totalProduction * 0.05);
     });
-    
+  
     const totalVarietyProduction = Object.values(varietyStats).reduce((sum, qty) => sum + qty, 0);
     
     return varieties
       .filter(v => v.isActive)
       .map(variety => ({
-        id: variety.id,
-        name: variety.name,
+    id: variety.id,
+    name: variety.name,
         quantity: varietyStats[variety.id] || 0,
         percentage: totalVarietyProduction > 0 ? 
           Math.round((varietyStats[variety.id] / totalVarietyProduction) * 100) : 0
@@ -510,7 +510,7 @@ const StatsPage: React.FC = () => {
                     <span className="text-sm text-gray-600">{variety.name}</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-sm text-gray-800 font-medium">{variety.percentage}%</span>
+                  <span className="text-sm text-gray-800 font-medium">{variety.percentage}%</span>
                     <div className="text-xs text-gray-500">{variety.quantity} unités</div>
                   </div>
                 </div>
