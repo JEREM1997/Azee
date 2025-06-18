@@ -1,7 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import kripyKremeLogo from '../assets/digital_72_png-KK_logo_Red_Green_FNL.png';
+import krispyKremeOpsLogo from '../assets/krispy-kreme-ops-logo.png';
+import doughnutsBackground from '../assets/doughnuts-background.jpg.jpg';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -102,90 +103,101 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <div className="flex justify-center">
-            <img 
-              src={kripyKremeLogo}
-              alt="Krispy Kreme"
-              className="h-24 w-auto"
-            />
-          </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">Krispy Kreme OPS</h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Production - Livraison - Rapport
-          </p>
-        </div>
-        
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="username" className="sr-only">Nom d'utilisateur</label>
-              <input
-                id="username"
-                name="username"
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-krispy-green focus:border-krispy-green focus:z-10 sm:text-sm"
-                placeholder="Nom d'utilisateur"
-                autoComplete="username"
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">Mot de passe</label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-krispy-green focus:border-krispy-green focus:z-10 sm:text-sm"
-                placeholder="Mot de passe"
-                autoComplete="current-password"
+    <div 
+      className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative"
+      style={{
+        backgroundImage: `url(${doughnutsBackground})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      }}
+    >
+      {/* Background overlay for better readability */}
+      <div className="absolute inset-0 bg-black bg-opacity-40"></div>
+      
+      {/* Content container */}
+      <div className="max-w-md w-full space-y-8 relative z-10">
+        {/* White card background for the form */}
+        <div className="bg-white rounded-xl shadow-2xl p-8 backdrop-blur-sm">
+          <div className="-mt-20">
+            <div className="flex justify-center">
+              <img 
+                src={krispyKremeOpsLogo}
+                alt="Krispy Kreme OPS"
+                className="h-72 w-auto"
               />
             </div>
           </div>
-
-          {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-red-700">{error}</p>
-                </div>
+          
+          <form className="-mt-6 space-y-6" onSubmit={handleLogin}>
+            <div className="rounded-md shadow-sm -space-y-px">
+              <div>
+                <label htmlFor="username" className="sr-only">Nom d'utilisateur</label>
+                <input
+                  id="username"
+                  name="username"
+                  type="text"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-krispy-green focus:border-krispy-green focus:z-10 sm:text-sm"
+                  placeholder="Nom d'utilisateur"
+                  autoComplete="username"
+                />
+              </div>
+              <div>
+                <label htmlFor="password" className="sr-only">Mot de passe</label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-krispy-green focus:border-krispy-green focus:z-10 sm:text-sm"
+                  placeholder="Mot de passe"
+                  autoComplete="current-password"
+                />
               </div>
             </div>
-          )}
 
-          {retryCount > 0 && (
-            <div className="text-sm text-gray-600 text-center">
-              Tentative de reconnexion ({retryCount}/{maxRetries})...
+            {error && (
+              <div className="rounded-md bg-red-50 p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {retryCount > 0 && (
+              <div className="text-sm text-gray-600 text-center">
+                Tentative de reconnexion ({retryCount}/{maxRetries})...
+              </div>
+            )}
+
+            <div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
+              >
+                {loading ? (
+                  <span className="absolute left-0 inset-y-0 flex items-center pl-3">
+                    <div className="h-5 w-5 border-t-2 border-b-2 border-white rounded-full animate-spin"></div>
+                  </span>
+                ) : null}
+                Se connecter
+              </button>
             </div>
-          )}
-
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
-            >
-              {loading ? (
-                <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-                  <div className="h-5 w-5 border-t-2 border-b-2 border-white rounded-full animate-spin"></div>
-                </span>
-              ) : null}
-              Se connecter
-            </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );
