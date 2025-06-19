@@ -4,7 +4,7 @@ import { useAdmin } from '../context/AdminContext';
 import { getProductionPlans } from '../services/productionService';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 
 const getWeek = (date: Date) => {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -1320,6 +1320,43 @@ const StatsPage: React.FC = () => {
     doc.save(filename);
   };
 
+  // Format data for variety pie chart
+  const getVarietyChartData = () => {
+    return varietyPopularity.slice(0, 8).map((variety, index) => ({
+      name: variety.name,
+      value: variety.quantity,
+      percentage: variety.percentage,
+      formName: variety.formName
+    }));
+  };
+
+  const varietyChartData = getVarietyChartData();
+  
+  // Colors for variety pie chart
+  const VARIETY_COLORS = [
+    '#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', 
+    '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#6b7280'
+  ];
+
+  // Custom tooltip for variety chart
+  const VarietyTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+          <p className="font-medium text-gray-900">{data.name}</p>
+          {data.formName && (
+            <p className="text-xs text-gray-600">Forme: {data.formName}</p>
+          )}
+          <p className="text-sm text-krispy-green">
+            {data.value.toLocaleString()} unités ({data.percentage}%)
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -1668,9 +1705,38 @@ const StatsPage: React.FC = () => {
             </h2>
           </div>
           <div className="p-6">
-            <div className="flex items-center justify-center h-64">
-              <PieChart className="h-48 w-48 text-krispy-green" />
-            </div>
+            {varietyChartData.length > 0 ? (
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPieChart>
+                    <Pie
+                      data={varietyChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {varietyChartData.map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={VARIETY_COLORS[index % VARIETY_COLORS.length]} 
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<VarietyTooltip />} />
+                  </RechartsPieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center text-gray-500">
+                  <PieChart className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                  <p className="text-sm">Aucune donnée de variétés disponible pour la période sélectionnée</p>
+                </div>
+              </div>
+            )}
             <div className="space-y-2 mt-4">
               {varietyPopularity.slice(0, 5).map((variety, index) => (
                 <div key={variety.id} className="flex items-center justify-between">
