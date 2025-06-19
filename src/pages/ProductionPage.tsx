@@ -60,26 +60,27 @@ const ProductionPage: React.FC = () => {
           if (plan.stores && Array.isArray(plan.stores)) {
             plan.stores.forEach((store: any) => {
               if (store && store.store_id) {
-                // Handle variety productions - fix field mapping
+                // Handle variety productions
                 if (store.production_items && Array.isArray(store.production_items)) {
                   newStoreProductions[store.store_id] = store.production_items.reduce((acc: any, item: any) => ({
-                  ...acc,
-                  [item.variety_id]: item.quantity
-                }), {});
-                }
-                
-                // Handle box productions - fix field mapping
-                if (store.box_productions && Array.isArray(store.box_productions)) {
-                  newStoreBoxes[store.store_id] = store.box_productions.reduce((acc: any, box: any) => ({
                     ...acc,
-                    [box.box_id]: box.quantity
+                    [item.variety_id]: item.quantity
                   }), {});
                 }
+                
+                // Handle box productions
+                if (store.box_productions && Array.isArray(store.box_productions)) {
+                  newStoreBoxes[store.store_id] = store.box_productions.reduce((acc: any, box: any) => ({
+                  ...acc,
+                    [box.box_id]: box.quantity
+                }), {});
+                }
 
-                // Handle delivery dates - only use manually set dates
-                if (store.deliverydate) {
-                  console.log(`Loading delivery date for store ${store.store_id}:`, store.deliverydate);
-                  newStoreDeliveryDates[store.store_id] = store.deliverydate;
+                // Handle delivery dates - check both camelCase and snake_case
+                const deliveryDate = store.deliverydate;
+                if (deliveryDate) {
+                  console.log(`Loading delivery date for store ${store.store_id}:`, deliveryDate);
+                  newStoreDeliveryDates[store.store_id] = deliveryDate;
                 }
               }
             });
@@ -92,13 +93,25 @@ const ProductionPage: React.FC = () => {
           // Initialize empty store productions and boxes if no plan exists
           initializeStoreProductions();
           initializeStoreBoxes();
-          // No delivery date initialization - must be set manually
         }
       } catch (err) {
         console.error('Error loading plan:', err);
-        setError(err instanceof Error ? err.message : 'Error loading plan');
+        const errorMessage = err instanceof Error ? err.message : 'Error loading plan';
+        
+        if (errorMessage.includes('Session expired')) {
+          setError('Votre session a expiré. La page va se recharger dans quelques secondes...');
+          // Reload the page after a short delay to get a fresh session
+          setTimeout(() => window.location.reload(), 3000);
+        } else if (errorMessage.includes('Authentication required')) {
+          setError('Veuillez vous reconnecter pour continuer.');
+          // Redirect to login page
+          window.location.href = '/login';
+        } else {
+          setError(errorMessage);
+          // Initialize empty state on error
         initializeStoreProductions();
-        initializeStoreBoxes();
+          initializeStoreBoxes();
+        }
       } finally {
         setLoading(false);
       }

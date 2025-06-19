@@ -1,3 +1,4 @@
+// @ts-ignore - Deno environment
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
@@ -6,6 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, OPTIONS'
 };
 
+// @ts-ignore - Deno global
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -13,7 +15,9 @@ Deno.serve(async (req) => {
 
   try {
     // Verify environment variables
+    // @ts-ignore - Deno environment
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    // @ts-ignore - Deno environment
     const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!supabaseUrl || !supabaseServiceRoleKey) {
@@ -70,7 +74,7 @@ Deno.serve(async (req) => {
           store_id,
           store_name,
           total_quantity,
-          deliveryDate,
+          deliverydate,
           confirmed,
           delivery_confirmed,
           waste_reported,
@@ -88,7 +92,9 @@ Deno.serve(async (req) => {
             id,
             box_id,
             box_name,
-            quantity
+            quantity,
+            received,
+            waste
           )
         )
       `)

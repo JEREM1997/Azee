@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { getCurrentDayPlan, getProductionPlans } from '../services/productionService';
-import { ProductionPlan } from '../types';
+import { ProductionPlan, StoreProductionPlan } from '../types';
 import { Calendar, Check, AlertTriangle, TrendingUp, FileText, Truck, X, Store } from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
@@ -19,7 +19,38 @@ const DashboardPage: React.FC = () => {
         setError(null);
         
         const plan = await getCurrentDayPlan(selectedDate);
-        setCurrentPlan(plan);
+        
+        // Transform the plan data to match our TypeScript interfaces
+        if (plan) {
+          const transformedPlan: ProductionPlan = {
+            id: plan.id,
+            date: plan.date,
+            createdBy: plan.created_by || '',
+            totalProduction: plan.total_production,
+            status: plan.status,
+            stores: plan.stores?.map((store: any) => ({
+              storeId: store.store_id,
+              storeName: store.store_name,
+              totalQuantity: store.total_quantity,
+              deliveryDate: store.deliverydate,
+              confirmed: store.confirmed || false,
+              deliveryConfirmed: store.delivery_confirmed || false,
+              wasteReported: store.waste_reported || false,
+              items: store.production_items?.map((item: any) => ({
+                varietyId: item.variety_id,
+                varietyName: item.variety_name,
+                formId: item.form_id,
+                formName: item.form_name,
+                quantity: item.quantity,
+                received: item.received,
+                waste: item.waste
+              })) || []
+            })) || []
+          };
+          setCurrentPlan(transformedPlan);
+        } else {
+          setCurrentPlan(null);
+        }
       } catch (err) {
         console.error('Error in loadPlan:', err);
         setError(err instanceof Error ? err.message : 'An unexpected error occurred');
@@ -45,10 +76,10 @@ const DashboardPage: React.FC = () => {
     });
   };
 
-  const getStatusColor = (store: any) => {
-    if (store.delivery_confirmed && store.waste_reported) {
+  const getStatusColor = (store: StoreProductionPlan) => {
+    if (store.deliveryConfirmed && store.wasteReported) {
       return 'bg-green-100 text-green-800'; // Completed
-    } else if (store.delivery_confirmed) {
+    } else if (store.deliveryConfirmed) {
       return 'bg-yellow-100 text-yellow-800'; // Partially completed
     } else if (store.confirmed) {
       return 'bg-blue-100 text-blue-800'; // Confirmed
@@ -57,10 +88,10 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const getStatusText = (store: any) => {
-    if (store.delivery_confirmed && store.waste_reported) {
+  const getStatusText = (store: StoreProductionPlan) => {
+    if (store.deliveryConfirmed && store.wasteReported) {
       return 'Complété';
-    } else if (store.delivery_confirmed) {
+    } else if (store.deliveryConfirmed) {
       return 'Livraison confirmée';
     } else if (store.confirmed) {
       return 'Production confirmée';
@@ -69,10 +100,10 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const getStatusIcon = (store: any) => {
-    if (store.delivery_confirmed && store.waste_reported) {
+  const getStatusIcon = (store: StoreProductionPlan) => {
+    if (store.deliveryConfirmed && store.wasteReported) {
       return <Check className="h-4 w-4 mr-1" />;
-    } else if (store.delivery_confirmed) {
+    } else if (store.deliveryConfirmed) {
       return <Truck className="h-4 w-4 mr-1" />;
     } else if (store.confirmed) {
       return <FileText className="h-4 w-4 mr-1" />;
@@ -139,39 +170,8 @@ const DashboardPage: React.FC = () => {
               <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-lg font-medium text-gray-900">
-                    Production totale: <span className="font-bold">{currentPlan.total_production}</span> doughnuts
+                    Production totale: <span className="font-bold">{currentPlan.totalProduction}</span> doughnuts
                   </p>
-                  <p className="text-sm text-gray-500">
-                    Statut: <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      currentPlan.status === 'completed' ? 'bg-green-100 text-green-800' :
-                      currentPlan.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {currentPlan.status === 'completed' ? 'Terminé' : 
-                       currentPlan.status === 'confirmed' ? 'Confirmé' : 'En cours'}
-                    </span>
-                  </p>
-                </div>
-                
-                <div className="mt-4 sm:mt-0">
-                  <div className="flex items-center space-x-2">
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-green-500 rounded-full mr-1"></div>
-                      <span className="text-xs text-gray-600">Complété</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-yellow-500 rounded-full mr-1"></div>
-                      <span className="text-xs text-gray-600">Livraison confirmée</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-blue-500 rounded-full mr-1"></div>
-                      <span className="text-xs text-gray-600">Production confirmée</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-gray-500 rounded-full mr-1"></div>
-                      <span className="text-xs text-gray-600">En attente</span>
-                    </div>
-                  </div>
                 </div>
               </div>
               
@@ -199,23 +199,23 @@ const DashboardPage: React.FC = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {currentPlan.stores && currentPlan.stores.map((store) => {
                       // Calculate completion metrics
-                      const totalItems = store.production_items?.length || 0;
-                      const receivedItems = store.production_items?.filter(item => item.received !== null).length || 0;
-                      const wasteItems = store.production_items?.filter(item => item.waste !== null).length || 0;
+                      const totalItems = store.items?.length || 0;
+                      const receivedItems = store.items?.filter(item => item.received !== null).length || 0;
+                      const wasteItems = store.items?.filter(item => item.waste !== null).length || 0;
                       
                       const receivedPercentage = totalItems > 0 ? Math.round((receivedItems / totalItems) * 100) : 0;
                       const wastePercentage = totalItems > 0 ? Math.round((wasteItems / totalItems) * 100) : 0;
                       
                       return (
-                        <tr key={store.id}>
+                        <tr key={store.storeId}>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">{store.store_name}</div>
+                            <div className="text-sm font-medium text-gray-900">{store.storeName}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{store.total_quantity} doughnuts</div>
+                            <div className="text-sm text-gray-900">{store.totalQuantity} doughnuts</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {store.delivery_confirmed ? (
+                            {store.deliveryConfirmed ? (
                               <div className="flex items-center">
                                 <Check className="h-5 w-5 text-green-500 mr-1.5" />
                                 <span className="text-sm text-gray-900">Confirmée ({receivedPercentage}%)</span>
@@ -228,7 +228,7 @@ const DashboardPage: React.FC = () => {
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {store.waste_reported ? (
+                            {store.wasteReported ? (
                               <div className="flex items-center">
                                 <Check className="h-5 w-5 text-green-500 mr-1.5" />
                                 <span className="text-sm text-gray-900">Reportés ({wastePercentage}%)</span>
@@ -275,10 +275,7 @@ const DashboardPage: React.FC = () => {
               {currentPlan ? (
                 <>
                   <p className="text-2xl font-bold text-gray-900">
-                    {currentPlan.total_production} doughnuts
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {currentPlan.status === 'confirmed' ? 'Production confirmée' : 'En attente de confirmation'}
+                    {currentPlan.totalProduction} doughnuts
                   </p>
                 </>
               ) : (
@@ -315,10 +312,10 @@ const DashboardPage: React.FC = () => {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Livraisons Confirmées</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {currentPlan.stores?.filter(s => s.delivery_confirmed).length || 0} / {currentPlan.stores?.length || 0}
+                    {currentPlan.stores?.filter(s => s.deliveryConfirmed).length || 0} / {currentPlan.stores?.length || 0}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {Math.round(((currentPlan.stores?.filter(s => s.delivery_confirmed).length || 0) / (currentPlan.stores?.length || 1)) * 100)}% complété
+                    {Math.round(((currentPlan.stores?.filter(s => s.deliveryConfirmed).length || 0) / (currentPlan.stores?.length || 1)) * 100)}% complété
                   </p>
                 </div>
                 <div className="bg-krispy-green bg-opacity-10 p-3 rounded-lg">
@@ -332,10 +329,10 @@ const DashboardPage: React.FC = () => {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Déchets Reportés</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {currentPlan.stores?.filter(s => s.waste_reported).length || 0} / {currentPlan.stores?.length || 0}
+                    {currentPlan.stores?.filter(s => s.wasteReported).length || 0} / {currentPlan.stores?.length || 0}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {Math.round(((currentPlan.stores?.filter(s => s.waste_reported).length || 0) / (currentPlan.stores?.length || 1)) * 100)}% complété
+                    {Math.round(((currentPlan.stores?.filter(s => s.wasteReported).length || 0) / (currentPlan.stores?.length || 1)) * 100)}% complété
                   </p>
                 </div>
                 <div className="bg-krispy-green bg-opacity-10 p-3 rounded-lg">

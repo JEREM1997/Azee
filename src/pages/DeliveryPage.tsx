@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Save, X, Coffee, ShoppingBag, Check, Printer, FileText, TruckIcon, AlertTriangle, Truck } from 'lucide-react';
+import { Edit, Check, Printer, FileText, TruckIcon, AlertTriangle, Truck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
-import { getCurrentDayPlan, updateDeliveryStatus, getProductionPlans } from '../services/productionService';
+import { updateDeliveryStatus, getProductionPlans } from '../services/productionService';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
@@ -535,6 +535,19 @@ const DeliveryPage: React.FC = () => {
                               className="w-20 text-center border-2 border-blue-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-blue-50 hover:bg-white transition-colors"
                               title={`Quantité prévue: ${item.quantity}. Ajustez si nécessaire.`}
                             />
+                          ) : storeDetails.delivery_confirmed && isAdmin ? (
+                            <input
+                              type="number"
+                              min="0"
+                              placeholder={item.quantity.toString()}
+                              value={receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : (item.received !== null && item.received !== undefined ? item.received : '')}
+                              onChange={(e) => setReceivedQuantities({
+                                ...receivedQuantities,
+                                [item.id]: parseInt(e.target.value) || 0
+                              })}
+                              className="w-20 text-center border-2 border-green-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-green-50 hover:bg-white transition-colors"
+                              title={`Admin: Modifier la quantité reçue. Quantité prévue: ${item.quantity}.`}
+                            />
                           ) : (
                             // Show received quantity: prioritize database value, then local state, then dash
                             item.received !== null && item.received !== undefined 
@@ -560,6 +573,28 @@ const DeliveryPage: React.FC = () => {
                               })}
                               className="w-20 text-center border-2 border-orange-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-orange-50 hover:bg-white transition-colors"
                               title={`Maximum: ${
+                                item.received !== null && item.received !== undefined 
+                                  ? item.received 
+                                  : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity)
+                              } doughnuts`}
+                            />
+                          ) : storeDetails.waste_reported && isAdmin ? (
+                            <input
+                              type="number"
+                              min="0"
+                              max={
+                                item.received !== null && item.received !== undefined 
+                                  ? item.received 
+                                  : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity)
+                              }
+                              placeholder="0"
+                              value={wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : (item.waste !== null && item.waste !== undefined ? item.waste : '')}
+                              onChange={(e) => setWasteQuantities({
+                                ...wasteQuantities,
+                                [item.id]: parseInt(e.target.value) || 0
+                              })}
+                              className="w-20 text-center border-2 border-red-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-red-50 hover:bg-white transition-colors"
+                              title={`Admin: Modifier les déchets. Maximum: ${
                                 item.received !== null && item.received !== undefined 
                                   ? item.received 
                                   : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity)
@@ -614,6 +649,19 @@ const DeliveryPage: React.FC = () => {
                                   className="w-20 text-center border-2 border-blue-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-blue-50 hover:bg-white transition-colors"
                                   title={`Quantité prévue: ${box.quantity}. Ajustez si nécessaire.`}
                                 />
+                              ) : storeDetails.delivery_confirmed && isAdmin ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  placeholder={box.quantity.toString()}
+                                  value={boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : (box.received !== null && box.received !== undefined ? box.received : '')}
+                                  onChange={(e) => setBoxReceivedQuantities({
+                                    ...boxReceivedQuantities,
+                                    [box.id]: parseInt(e.target.value) || 0
+                                  })}
+                                  className="w-20 text-center border-2 border-green-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-green-50 hover:bg-white transition-colors"
+                                  title={`Admin: Modifier la quantité reçue. Quantité prévue: ${box.quantity}.`}
+                                />
                               ) : (
                                 // Show received quantity: prioritize database value, then local state, then dash
                                 box.received !== null && box.received !== undefined 
@@ -644,6 +692,28 @@ const DeliveryPage: React.FC = () => {
                                       : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity)
                                   } boîtes`}
                                 />
+                              ) : storeDetails.waste_reported && isAdmin ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={
+                                    box.received !== null && box.received !== undefined 
+                                      ? box.received 
+                                      : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity)
+                                  }
+                                  placeholder="0"
+                                  value={boxWasteQuantities[box.id] !== undefined ? boxWasteQuantities[box.id] : (box.waste !== null && box.waste !== undefined ? box.waste : '')}
+                                  onChange={(e) => setBoxWasteQuantities({
+                                    ...boxWasteQuantities,
+                                    [box.id]: parseInt(e.target.value) || 0
+                                  })}
+                                  className="w-20 text-center border-2 border-red-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-red-50 hover:bg-white transition-colors"
+                                  title={`Admin: Modifier les déchets. Maximum: ${
+                                    box.received !== null && box.received !== undefined 
+                                      ? box.received 
+                                      : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity)
+                                  } boîtes`}
+                                />
                               ) : !storeDetails.delivery_confirmed ? (
                                 <span className="text-gray-400 text-sm">Confirmez d'abord la réception</span>
                               ) : (
@@ -667,6 +737,11 @@ const DeliveryPage: React.FC = () => {
                     <div className="ml-3">
                       <p className="text-sm text-krispy-green">
                         Livraison confirmée et déchets reportés
+                        {isAdmin && (
+                          <span className="block text-xs text-gray-600 mt-1">
+                            En tant qu'administrateur, vous pouvez modifier les quantités ci-dessus si nécessaire.
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -711,6 +786,45 @@ const DeliveryPage: React.FC = () => {
                       <>
                         <AlertTriangle className="h-4 w-4 mr-2" />
                         Signaler les Déchets
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+              
+              {storeDetails.delivery_confirmed && storeDetails.waste_reported && isAdmin && (
+                <div className="mt-6 flex justify-end space-x-3">
+                  <button
+                    onClick={handleConfirmDelivery}
+                    disabled={saving}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                  >
+                    {saving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Mise à jour en cours...
+                      </>
+                    ) : (
+                      <>
+                        <Edit className="h-4 w-4 mr-2" />
+                        Mettre à jour les Quantités Reçues
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleReportWaste}
+                    disabled={saving}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50"
+                  >
+                    {saving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Mise à jour en cours...
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="h-4 w-4 mr-2" />
+                        Mettre à jour les Déchets
                       </>
                     )}
                   </button>
