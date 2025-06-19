@@ -4,6 +4,7 @@ import { useAdmin } from '../context/AdminContext';
 import { getProductionPlans } from '../services/productionService';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
 const getWeek = (date: Date) => {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -781,6 +782,66 @@ const StatsPage: React.FC = () => {
       .sort((a, b) => b.quantity - a.quantity);
   };
   
+  // Format data for production trend chart
+  const getChartData = () => {
+    return data.map(item => {
+      const date = new Date(item.date);
+      let formattedDate = '';
+      
+      switch (selectedPeriod) {
+        case 'day':
+          formattedDate = date.toLocaleDateString('fr-FR', { 
+            day: '2-digit', 
+            month: '2-digit' 
+          });
+          break;
+        case 'week':
+          formattedDate = `S${getWeek(date)}`;
+          break;
+        case 'month':
+          formattedDate = date.toLocaleDateString('fr-FR', { 
+            day: '2-digit', 
+            month: 'short' 
+          });
+          break;
+        case 'year':
+          formattedDate = date.toLocaleDateString('fr-FR', { 
+            month: 'short', 
+            year: '2-digit' 
+          });
+          break;
+      }
+      
+      return {
+        date: formattedDate,
+        fullDate: item.date,
+        production: item.production,
+        received: item.received,
+        waste: item.waste,
+        sales: item.received - item.waste
+      };
+    }).sort((a, b) => new Date(a.fullDate).getTime() - new Date(b.fullDate).getTime());
+  };
+
+  const chartData = getChartData();
+
+  // Custom tooltip for the chart
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+          <p className="font-medium text-gray-900">{`Date: ${label}`}</p>
+          {payload.map((entry: any, index: number) => (
+            <p key={index} style={{ color: entry.color }} className="text-sm">
+              {`${entry.name}: ${entry.value?.toLocaleString()} ${entry.name === 'Ventes' ? 'vendus' : 'doughnuts'}`}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
   const varietyPopularity = getRealVarietyPopularity();
   const boxPopularity = getRealBoxPopularity();
 
@@ -1525,9 +1586,69 @@ const StatsPage: React.FC = () => {
             </h2>
           </div>
           <div className="p-6">
-            <div className="flex items-center justify-center h-64">
-              <BarChart2 className="h-48 w-48 text-krispy-green" />
-            </div>
+            {chartData.length > 0 ? (
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fontSize: 12 }}
+                      stroke="#6b7280"
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 12 }}
+                      stroke="#6b7280"
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                    <Area
+                      type="monotone"
+                      dataKey="production"
+                      name="Production"
+                      stackId="1"
+                      stroke="#22c55e"
+                      fill="#22c55e"
+                      fillOpacity={0.6}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="received"
+                      name="Reçu"
+                      stackId="2"
+                      stroke="#3b82f6"
+                      fill="#3b82f6"
+                      fillOpacity={0.6}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="sales"
+                      name="Ventes"
+                      stackId="3"
+                      stroke="#10b981"
+                      fill="#10b981"
+                      fillOpacity={0.8}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="waste"
+                      name="Déchets"
+                      stackId="4"
+                      stroke="#ef4444"
+                      fill="#ef4444"
+                      fillOpacity={0.6}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center text-gray-500">
+                  <BarChart2 className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                  <p className="text-sm">Aucune donnée disponible pour la période sélectionnée</p>
+                </div>
+              </div>
+            )}
             <div className="text-center text-sm text-gray-600 mt-4">
               Production journalière sur la période sélectionnée
               {data.length > 0 && (
