@@ -1529,14 +1529,6 @@ const StatsPage: React.FC = () => {
               <div className="text-sm text-gray-500 space-y-1">
                 <p>Total: {totalWaste.toLocaleString()} doughnuts</p>
                 <p className="text-red-600 font-medium">Coût: CHF {totalWasteCost.toFixed(2)}</p>
-                <div className="flex items-center text-xs">
-                  {performanceComparison.waste.isIncrease ? (
-                    <span className="text-red-600">â†' {Math.abs(performanceComparison.waste.changePercent).toFixed(1)}%</span>
-                  ) : (
-                    <span className="text-green-600">â†" {Math.abs(performanceComparison.waste.changePercent).toFixed(1)}%</span>
-                  )}
-                  <span className="ml-1">vs période précédente</span>
-                </div>
               </div>
             </div>
             <div className="bg-red-50 p-3 rounded-lg">
@@ -1554,14 +1546,6 @@ const StatsPage: React.FC = () => {
               <div className="text-sm text-gray-500 space-y-1">
                 <p>Par doughnut: CHF {avgCostPerDonut.toFixed(2)}</p>
                 <p>Moyenne/jour: CHF {avgDailyCost.toFixed(2)}</p>
-                <div className="flex items-center text-xs">
-                  {performanceComparison.production.isIncrease ? (
-                    <span className="text-blue-600">â†' {Math.abs(performanceComparison.production.changePercent).toFixed(1)}%</span>
-                  ) : (
-                    <span className="text-green-600">â†" {Math.abs(performanceComparison.production.changePercent).toFixed(1)}%</span>
-                  )}
-                  <span className="ml-1">vs période précédente</span>
-                </div>
               </div>
             </div>
             <div className="bg-blue-50 p-3 rounded-lg">
