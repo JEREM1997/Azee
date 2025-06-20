@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Save, AlertTriangle, Edit } from 'lucide-react';
+import { Plus, Minus, Save, AlertTriangle, Edit, Sparkles, Brain, TrendingUp, Store } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
 import { savePlan, getCurrentDayPlan } from '../services/productionService';
 import { useAuth } from '../context/AuthContext';
+import { aiForecastService, AIForecastResult } from '../services/aiForecastService';
 
 const ProductionPage: React.FC = () => {
   // Get date from URL params or use today's date
@@ -26,6 +27,12 @@ const ProductionPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [existingPlanId, setExistingPlanId] = useState<string | null>(null);
+
+  // AI Forecasting state
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiForecasts, setAiForecasts] = useState<AIForecastResult[]>([]);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const { stores, varieties, boxes, forms } = useAdmin();
   const { currentUser } = useAuth();
@@ -377,6 +384,78 @@ const ProductionPage: React.FC = () => {
     }
   };
 
+  // AI Forecasting Functions
+  const generateAIForecast = async () => {
+    try {
+      setAiLoading(true);
+      setAiError(null);
+      
+      console.log('🤖 Generating AI forecast for date:', date);
+      
+      const forecasts = await aiForecastService.generateForecast(
+        date,
+        stores.filter(s => s.isActive),
+        varieties.filter(v => v.isActive),
+        boxes.filter(b => b.isActive)
+      );
+      
+      setAiForecasts(forecasts);
+      setShowAiModal(true);
+      
+      console.log('✅ AI forecast generated for', forecasts.length, 'stores');
+    } catch (err) {
+      console.error('❌ AI forecast error:', err);
+      setAiError(err instanceof Error ? err.message : 'Erreur lors de la génération des prévisions IA');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const applyAIRecommendations = () => {
+    if (aiForecasts.length === 0) return;
+
+    const newStoreProductions: typeof storeProductions = {};
+    const newStoreBoxes: typeof storeBoxes = {};
+
+    // Apply AI recommendations to production quantities
+    aiForecasts.forEach(forecast => {
+      // Initialize store data if not exists
+      if (!newStoreProductions[forecast.storeId]) {
+        newStoreProductions[forecast.storeId] = {};
+      }
+      if (!newStoreBoxes[forecast.storeId]) {
+        newStoreBoxes[forecast.storeId] = {};
+      }
+
+      // Apply variety predictions
+      forecast.predictions.forEach(prediction => {
+        newStoreProductions[forecast.storeId][prediction.varietyId] = prediction.recommendedProduction;
+      });
+
+      // Apply box predictions
+      forecast.boxPredictions.forEach(boxPrediction => {
+        newStoreBoxes[forecast.storeId][boxPrediction.boxId] = boxPrediction.recommendedProduction;
+      });
+    });
+
+    // Merge with existing data to preserve any manual entries for stores not in AI forecast
+    setStoreProductions(prev => ({ ...prev, ...newStoreProductions }));
+    setStoreBoxes(prev => ({ ...prev, ...newStoreBoxes }));
+
+    setShowAiModal(false);
+
+    // Show success message
+    const totalStores = aiForecasts.length;
+    const totalProduction = aiForecasts.reduce((sum, f) => sum + f.totalRecommendedProduction, 0);
+    const avgWaste = aiForecasts.reduce((sum, f) => sum + f.estimatedWastePercent, 0) / totalStores;
+
+    alert(`🤖 Prévisions IA appliquées avec succès!\n\n` +
+          `✅ ${totalStores} magasin${totalStores > 1 ? 's' : ''} configuré${totalStores > 1 ? 's' : ''}\n` +
+          `📊 Production totale recommandée: ${totalProduction.toLocaleString()} doughnuts\n` +
+          `♻️ Déchets estimés: ${avgWaste.toFixed(1)}% (objectif: <30%)\n\n` +
+          `Les quantités ont été automatiquement remplies. Vous pouvez les ajuster manuellement si nécessaire.`);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -418,6 +497,24 @@ const ProductionPage: React.FC = () => {
           
           {canEdit && (
           <div className="flex space-x-4 items-end">
+            <button
+              onClick={generateAIForecast}
+              disabled={aiLoading || saving}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Générer des prévisions IA basées sur l'historique des ventes"
+            >
+              {aiLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Analyse IA...
+                </>
+              ) : (
+                <>
+                  <Brain className="h-4 w-4 mr-2" />
+                  Prévisions IA
+                </>
+              )}
+            </button>
             <button
               onClick={handleSavePlan}
               disabled={!isPlanValid || !allDeliveryDatesSet || saving}
@@ -465,6 +562,21 @@ const ProductionPage: React.FC = () => {
             </div>
             <div className="ml-3">
               <p className="text-sm text-red-700">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {aiError && (
+        <div className="mb-8 bg-red-50 border-l-4 border-red-400 p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <AlertTriangle className="h-5 w-5 text-red-400" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-red-700">
+                <span className="font-medium">Erreur IA:</span> {aiError}
+              </p>
             </div>
           </div>
         </div>
@@ -813,8 +925,8 @@ const ProductionPage: React.FC = () => {
                             </tr>
                           );
                         })}
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -822,6 +934,217 @@ const ProductionPage: React.FC = () => {
           );
         })}
       </div>
+
+      {/* AI Forecast Modal */}
+      {showAiModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-6xl shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center">
+                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-purple-100">
+                    <Brain className="h-6 w-6 text-purple-600" />
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900">
+                      Prévisions IA de Production
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Recommandations basées sur l'analyse de l'historique des ventes
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowAiModal(false)}
+                  className="bg-gray-200 hover:bg-gray-300 rounded-full p-2"
+                >
+                  <span className="sr-only">Fermer</span>
+                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Summary Cards */}
+              {aiForecasts.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-purple-50 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <Store className="h-5 w-5 text-purple-600 mr-2" />
+                      <h4 className="font-medium text-purple-900">Magasins Analysés</h4>
+                    </div>
+                    <p className="text-2xl font-bold text-purple-600 mt-2">
+                      {aiForecasts.length}
+                    </p>
+                    <p className="text-sm text-purple-700">
+                      magasin{aiForecasts.length > 1 ? 's' : ''} avec des données historiques
+                    </p>
+                  </div>
+
+                  <div className="bg-green-50 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <TrendingUp className="h-5 w-5 text-green-600 mr-2" />
+                      <h4 className="font-medium text-green-900">Production Totale</h4>
+                    </div>
+                    <p className="text-2xl font-bold text-green-600 mt-2">
+                      {aiForecasts.reduce((sum, f) => sum + f.totalRecommendedProduction, 0).toLocaleString()}
+                    </p>
+                    <p className="text-sm text-green-700">doughnuts recommandés</p>
+                  </div>
+
+                  <div className="bg-yellow-50 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <Sparkles className="h-5 w-5 text-yellow-600 mr-2" />
+                      <h4 className="font-medium text-yellow-900">Déchets Estimés</h4>
+                    </div>
+                    <p className="text-2xl font-bold text-yellow-600 mt-2">
+                      {(aiForecasts.reduce((sum, f) => sum + f.estimatedWastePercent, 0) / aiForecasts.length).toFixed(1)}%
+                    </p>
+                    <p className="text-sm text-yellow-700">moyenne (objectif: &lt;30%)</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Detailed Predictions */}
+              <div className="max-h-96 overflow-y-auto">
+                {aiForecasts.map((forecast) => (
+                  <div key={forecast.storeId} className="mb-6 border border-gray-200 rounded-lg p-4">
+                    {/* Store Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-semibold text-gray-900 text-lg">{forecast.storeName}</h4>
+                      <div className="flex space-x-4 text-sm">
+                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                          Ventes prédites: {forecast.totalPredictedSales}
+                        </span>
+                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded">
+                          Production recommandée: {forecast.totalRecommendedProduction}
+                        </span>
+                        <span className={`px-2 py-1 rounded ${
+                          forecast.estimatedWastePercent <= 30 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          Déchets: {forecast.estimatedWastePercent.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Varieties Predictions */}
+                    {forecast.predictions.length > 0 && (
+                      <div className="mb-4">
+                        <h5 className="font-medium text-gray-800 mb-2">Variétés Individuelles</h5>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Variété</th>
+                                <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Ventes Prédites</th>
+                                <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Recommandation</th>
+                                <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Sécurité</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Raisonnement</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {forecast.predictions.map((prediction) => (
+                                <tr key={prediction.varietyId}>
+                                  <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    {prediction.varietyName}
+                                  </td>
+                                  <td className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">
+                                    {prediction.predictedSales}
+                                  </td>
+                                  <td className="px-3 py-2 whitespace-nowrap text-sm text-center font-medium text-green-600">
+                                    {prediction.recommendedProduction}
+                                  </td>
+                                  <td className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">
+                                    {(prediction.confidence * 100).toFixed(0)}%
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-gray-600 max-w-xs">
+                                    {prediction.reasoning}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Box Predictions */}
+                    {forecast.boxPredictions.length > 0 && (
+                      <div>
+                        <h5 className="font-medium text-gray-800 mb-2">Boîtes</h5>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Boîte</th>
+                                <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Ventes Prédites</th>
+                                <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Recommandation</th>
+                                <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Sécurité</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Raisonnement</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {forecast.boxPredictions.map((boxPrediction) => (
+                                <tr key={boxPrediction.boxId}>
+                                  <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    {boxPrediction.boxName}
+                                  </td>
+                                  <td className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">
+                                    {boxPrediction.predictedSales}
+                                  </td>
+                                  <td className="px-3 py-2 whitespace-nowrap text-sm text-center font-medium text-green-600">
+                                    {boxPrediction.recommendedProduction}
+                                  </td>
+                                  <td className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">
+                                    {(boxPrediction.confidence * 100).toFixed(0)}%
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-gray-600 max-w-xs">
+                                    {boxPrediction.reasoning}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Modal Actions */}
+              <div className="mt-6 flex items-center justify-between">
+                <div className="text-sm text-gray-600">
+                  <p className="font-medium">🎯 Objectifs de l'IA:</p>
+                  <ul className="list-disc list-inside mt-1 space-y-1">
+                    <li>Éviter les ruptures de stock en fin de journée</li>
+                    <li>Maintenir les déchets sous 30% par magasin</li>
+                    <li>Optimiser la production basée sur l'historique réel</li>
+                  </ul>
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setShowAiModal(false)}
+                    className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={applyAIRecommendations}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                  >
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Appliquer les Recommandations
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1702,7 +1702,7 @@ const StatsPage: React.FC = () => {
                       paddingAngle={2}
                       dataKey="value"
                     >
-                      {varietyChartData.map((entry, index) => (
+                      {varietyChartData.map((_, index) => (
                         <Cell 
                           key={`cell-${index}`} 
                           fill={VARIETY_COLORS[index % VARIETY_COLORS.length]} 
