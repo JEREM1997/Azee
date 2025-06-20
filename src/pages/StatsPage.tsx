@@ -1322,7 +1322,7 @@ const StatsPage: React.FC = () => {
 
   // Format data for variety pie chart
   const getVarietyChartData = () => {
-    return varietyPopularity.slice(0, 8).map((variety, index) => ({
+    return varietyPopularity.slice(0, 8).map((variety, _) => ({
       name: variety.name,
       value: variety.quantity,
       percentage: variety.percentage,
