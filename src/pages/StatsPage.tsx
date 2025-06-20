@@ -1096,7 +1096,7 @@ const StatsPage: React.FC = () => {
     });
     
     // Add summary section
-    const finalY = (doc as any).lastAutoTable.finalY + 20;
+    const finalY = Math.max((doc as any).lastAutoTable?.finalY + 20, 120); // Ensure minimum Y position
     
     // Calculate totals
     const totals = detailedSalesData.reduce((acc, row) => ({
@@ -1112,14 +1112,7 @@ const StatsPage: React.FC = () => {
     // Calculate overall waste percentage for PDF summary
     const overallWastePercent = totals.received > 0 ? (totals.waste / totals.received) * 100 : 0;
     
-    // Summary box
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Résumé Global', 20, finalY);
-    
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    
+    // Prepare summary data
     const summaryData = [
       ['Total Reçu:', totals.received.toLocaleString() + ' doughnuts'],
       ['Total Ventes:', totals.sales.toLocaleString() + ' doughnuts'],
@@ -1128,10 +1121,38 @@ const StatsPage: React.FC = () => {
       ['Coût des Déchets:', 'CHF ' + totalWasteCost.toFixed(2)]
     ];
     
-    summaryData.forEach((row, index) => {
-      doc.text(row[0], 20, finalY + 15 + (index * 8));
-      doc.text(row[1], 80, finalY + 15 + (index * 8));
-    });
+    // Check if we need a new page for the summary
+    const summaryHeight = 60; // Approximate height needed for summary
+    if (finalY + summaryHeight > 280) { // Page height limit
+      doc.addPage();
+      const newPageY = 30;
+      
+      // Summary box on new page
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Résumé Global', 20, newPageY);
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      
+      summaryData.forEach((row, index) => {
+        doc.text(row[0], 20, newPageY + 15 + (index * 8));
+        doc.text(row[1], 80, newPageY + 15 + (index * 8));
+      });
+    } else {
+      // Summary box on same page
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Résumé Global', 20, finalY);
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      
+      summaryData.forEach((row, index) => {
+        doc.text(row[0], 20, finalY + 15 + (index * 8));
+        doc.text(row[1], 80, finalY + 15 + (index * 8));
+      });
+    }
     
     // Save the PDF
     const storeFilter = selectedStores.length > 0 ? `-${selectedStores.length}magasins` : '-tous-magasins';
