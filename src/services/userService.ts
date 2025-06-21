@@ -64,9 +64,10 @@ export const createUser = async (
 export const updateUser = async (userId: string, updates: {
   fullName?: string;
   role?: 'admin' | 'production' | 'store';
-  storeIds?: string[];
 }) => {
   try {
+    console.log('updateUser called with:', { userId, updates });
+    
     const { data: session } = await supabase.auth.getSession();
     if (!session?.session?.access_token) {
       throw new Error('No authentication token found');
@@ -87,7 +88,12 @@ export const updateUser = async (userId: string, updates: {
       requestBody.role = updates.role;
     }
     
-    console.log('Sending request to Edge Function:', requestBody);
+    console.log('Sending request to Edge Function URL:', functionUrl);
+    console.log('Request body:', requestBody);
+    console.log('Request headers:', {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.session.access_token.substring(0, 20)}...`,
+    });
     
     const response = await fetch(functionUrl, {
       method: 'POST',
@@ -98,18 +104,51 @@ export const updateUser = async (userId: string, updates: {
       body: JSON.stringify(requestBody)
     });
 
+    console.log('Response status:', response.status);
+    console.log('Response ok:', response.ok);
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('Edge Function error response:', errorData);
-      throw new Error(errorData.error || 'Error updating user');
+      const errorText = await response.text();
+      console.error('Edge Function error response text:', errorText);
+      
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: errorText || `HTTP ${response.status}` };
+      }
+      
+      console.error('Edge Function error data:', errorData);
+      throw new Error(errorData.error || `HTTP ${response.status}: ${errorText}`);
     }
 
-    const data = await response.json();
-    console.log('Edge Function success response:', data);
+    const responseText = await response.text();
+    console.log('Edge Function success response text:', responseText);
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Error parsing response JSON:', parseError);
+      throw new Error('Invalid JSON response from server');
+    }
+    
+    console.log('Edge Function success response data:', data);
+    
+    if (!data || !data.user) {
+      console.error('Missing user in response data:', data);
+      throw new Error('Invalid response format - missing user data');
+    }
+    
     return data.user;
   } catch (err: unknown) {
     const error = err instanceof Error ? err : new Error('Unknown error occurred');
-    console.error('Error updating user:', error);
+    console.error('Error updating user - full details:', {
+      error: error.message,
+      stack: error.stack,
+      userId,
+      updates
+    });
     throw error;
   }
 };

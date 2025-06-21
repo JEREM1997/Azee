@@ -156,62 +156,104 @@ const UsersPage: React.FC = () => {
       if (formValues.id) {
         console.log('Updating existing user...');
         
-        // Update existing user - first update basic info
+        // Step 1: Update basic user info (fullName and role)
+        console.log('Step 1: Updating user basic info...');
         const updatedUser = await updateUser(formValues.id, {
-            fullName: formValues.fullName,
-            role: formValues.role
-          });
+          fullName: formValues.fullName,
+          role: formValues.role
+        });
 
-        console.log('User updated successfully:', updatedUser);
+        console.log('User basic info updated successfully:', updatedUser);
 
         if (!updatedUser) {
-            throw new Error('Failed to update user');
-          }
-
-        // Then update store assignments if the role is 'store'
-        console.log('Updating store assignments...');
-          if (formValues.role === 'store') {
-              await updateUserStores(formValues.id, formValues.storeIds);
-          console.log('Store assignments updated for store role');
-          } else {
-          // Clear store assignments for non-store roles
-            await updateUserStores(formValues.id, []);
-          console.log('Store assignments cleared for non-store role');
+          throw new Error('Failed to update user - no user returned from server');
         }
 
-        // Optimistically update the local state immediately
-        console.log('Updating local state...');
-        setUsers(prevUsers => {
-          const updatedUsers = prevUsers.map(user => 
-            user.id === formValues.id 
-              ? { 
-                  ...user, 
-                  fullName: formValues.fullName, 
-                  role: formValues.role,
-                  storeIds: formValues.role === 'store' ? formValues.storeIds : []
-                }
-              : user
-          );
-          console.log('Local state updated:', updatedUsers.find(u => u.id === formValues.id));
-          return updatedUsers;
-        });
-      }
+        // Verify the fullName was actually updated
+        if (updatedUser.user_metadata?.full_name !== formValues.fullName) {
+          console.warn('Full name verification failed:', {
+            expected: formValues.fullName,
+            actual: updatedUser.user_metadata?.full_name
+          });
+          throw new Error(`Update failed: name not saved correctly. Expected "${formValues.fullName}" but got "${updatedUser.user_metadata?.full_name}"`);
+        }
 
-      // Don't reload immediately - the optimistic update is correct
-      // Only reload on component mount or if there's an error
-      console.log('Update completed successfully - using optimistic update');
+        // Step 2: Update store assignments
+        console.log('Step 2: Updating store assignments...');
+        try {
+          if (formValues.role === 'store') {
+            await updateUserStores(formValues.id, formValues.storeIds);
+            console.log('Store assignments updated successfully for store role');
+          } else {
+            // Clear store assignments for non-store roles
+            await updateUserStores(formValues.id, []);
+            console.log('Store assignments cleared successfully for non-store role');
+          }
+        } catch (storeError) {
+          console.error('Error updating store assignments:', storeError);
+          // If store update fails, we should still show success for the user info update
+          // but inform the user about the store assignment issue
+          setError(`Utilisateur mis à jour, mais erreur lors de la mise à jour des magasins: ${storeError instanceof Error ? storeError.message : 'Erreur inconnue'}`);
+        }
+
+        // Step 3: Wait a moment for database consistency, then verify by reloading
+        console.log('Step 3: Waiting for database consistency...');
+        console.log('Expected fullName after update:', formValues.fullName);
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds for metadata propagation
+        
+        console.log('Step 4: Verifying update by reloading users...');
+        const reloadedUsers = await getUsers(); // Get fresh data directly
+        
+        // Step 5: Verify the user was actually updated correctly
+        const verifiedUser = reloadedUsers.find((u: User) => u.id === formValues.id);
+        if (verifiedUser) {
+          console.log('Verification user found:', verifiedUser);
+          console.log('Comparison: expected =', formValues.fullName, ', actual =', verifiedUser.fullName);
+          if (verifiedUser.fullName !== formValues.fullName) {
+            console.error('Verification failed: name not persisted correctly', {
+              expected: formValues.fullName,
+              actual: verifiedUser.fullName,
+              verifiedUser,
+              timeSinceUpdate: '3 seconds'
+            });
+            
+            // Try one more time with additional delay
+            console.log('Trying verification again after additional delay...');
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 more seconds
+            const reloadedUsersAgain = await getUsers();
+            const verifiedUserAgain = reloadedUsersAgain.find((u: User) => u.id === formValues.id);
+            
+            if (verifiedUserAgain && verifiedUserAgain.fullName === formValues.fullName) {
+              console.log('✅ Verification successful on second attempt after 5 total seconds');
+              setUsers(reloadedUsersAgain);
+            } else {
+              throw new Error(`La modification n'a pas été sauvegardée correctement après 5 secondes d'attente. Nom attendu: "${formValues.fullName}", nom actuel: "${verifiedUserAgain?.fullName}". Ceci peut être un problème de synchronisation des métadonnées Supabase.`);
+            }
+          } else {
+            console.log('✅ Verification successful: user update was persisted correctly');
+            setUsers(reloadedUsers);
+          }
+        } else {
+          console.error('Verification failed: updated user not found in reloaded data');
+          throw new Error('Utilisateur non trouvé après mise à jour. Veuillez actualiser la page.');
+        }
+        
+        console.log('Update completed and verified successfully');
+      }
       
       setIsEditing(false);
       resetForm();
     } catch (error) {
       console.error('Error saving user:', error);
       setError(error instanceof Error ? error.message : 'Erreur lors de l\'enregistrement de l\'utilisateur');
-      // Only reload users in case of error to ensure consistency
+      
+      // Reload users to ensure UI consistency with server state
       console.log('Error occurred, reloading users from server for consistency...');
       try {
         await loadUsers();
       } catch (reloadError) {
         console.error('Error reloading users after save error:', reloadError);
+        setError('Erreur lors de l\'enregistrement et de la synchronisation. Veuillez actualiser la page.');
       }
     } finally {
       setSaving(false);
