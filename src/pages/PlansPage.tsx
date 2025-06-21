@@ -50,10 +50,45 @@ const PlansPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
+      // Check if we're expecting a recently saved plan
+      const expectedPlanInfo = localStorage.getItem('recentlySavedPlan');
+      let expectedPlan = null;
+      if (expectedPlanInfo) {
+        try {
+          expectedPlan = JSON.parse(expectedPlanInfo);
+          console.log('🔍 EXPECTED PLAN - Looking for recently saved plan:', expectedPlan);
+        } catch (e) {
+          console.error('Error parsing expected plan info:', e);
+        }
+      }
+      
       console.log('🔄 Loading plans from server...');
       const plansData = await getProductionPlans(30);
       console.log('✅ Fetched plans data:', plansData);
       console.log('📊 Plans count:', plansData?.length || 0);
+      
+      // Check if expected plan is in the results
+      if (expectedPlan && plansData && Array.isArray(plansData)) {
+        const foundExpectedPlan = plansData.find((plan: ProductionPlan) => plan.id === expectedPlan.id);
+        if (foundExpectedPlan) {
+          console.log('✅ EXPECTED PLAN FOUND - Recently saved plan is present in results');
+          console.log('🔍 EXPECTED PLAN - Expected date:', expectedPlan.date);
+          console.log('🔍 EXPECTED PLAN - Actual date:', foundExpectedPlan.date);
+          console.log('🔍 EXPECTED PLAN - Dates match:', foundExpectedPlan.date === expectedPlan.date);
+          
+          if (foundExpectedPlan.date !== expectedPlan.date) {
+            console.error('❌ DATE MISMATCH - Plan was saved with wrong date!');
+            console.error('❌ DATE MISMATCH - Expected:', expectedPlan.date);
+            console.error('❌ DATE MISMATCH - Got:', foundExpectedPlan.date);
+          }
+        } else {
+          console.error('❌ EXPECTED PLAN MISSING - Recently saved plan not found in results!');
+          console.error('❌ EXPECTED PLAN MISSING - Looking for ID:', expectedPlan.id);
+          console.error('❌ EXPECTED PLAN MISSING - Looking for date:', expectedPlan.date);
+          console.error('❌ EXPECTED PLAN MISSING - Available plan IDs:', plansData.map((p: ProductionPlan) => p.id));
+          console.error('❌ EXPECTED PLAN MISSING - Available plan dates:', plansData.map((p: ProductionPlan) => p.date));
+        }
+      }
       
       // Debug delivery dates in fetched plans
       if (plansData && plansData.length > 0) {
@@ -93,12 +128,13 @@ const PlansPage: React.FC = () => {
   useEffect(() => {
     loadPlans();
 
-    const handlePlanUpdate = (event?: CustomEvent) => {
-      console.log('Plan update event received, refreshing plans...', event?.detail);
+    const handlePlanUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Plan update event received, refreshing plans...', customEvent?.detail);
       
       // Track the recently saved plan for visual feedback
-      if (event?.detail?.planId) {
-        setRecentlySavedPlanId(event.detail.planId);
+      if (customEvent?.detail?.planId) {
+        setRecentlySavedPlanId(customEvent.detail.planId);
         // Clear the highlight after 10 seconds
         setTimeout(() => setRecentlySavedPlanId(null), 10000);
       }
@@ -114,16 +150,25 @@ const PlansPage: React.FC = () => {
           const planInfo = JSON.parse(savedPlanInfo);
           const timeDiff = Date.now() - planInfo.timestamp;
           
+          console.log('🔍 RECENT PLAN DEBUG - Recently saved plan info:', planInfo);
+          console.log('🔍 RECENT PLAN DEBUG - Expected plan ID:', planInfo.id);
+          console.log('🔍 RECENT PLAN DEBUG - Expected plan date:', planInfo.date);
+          console.log('🔍 RECENT PLAN DEBUG - Time since save:', Math.round(timeDiff / 1000), 'seconds');
+          
           // If plan was saved within last 30 seconds, force a refresh
           if (timeDiff < 30000) {
-            console.log('Found recently saved plan, forcing refresh:', planInfo);
+            console.log('🔍 RECENT PLAN DEBUG - Plan is recent, forcing refresh');
             setRecentlySavedPlanId(planInfo.id);
             // Clear the highlight after 10 seconds
             setTimeout(() => setRecentlySavedPlanId(null), 10000);
             loadPlans();
             // Clear the saved plan info after using it
             localStorage.removeItem('recentlySavedPlan');
+          } else {
+            console.log('🔍 RECENT PLAN DEBUG - Plan is too old, skipping refresh');
           }
+        } else {
+          console.log('🔍 RECENT PLAN DEBUG - No recently saved plan found in localStorage');
         }
       } catch (error) {
         console.error('Error checking recently saved plan:', error);
@@ -133,10 +178,10 @@ const PlansPage: React.FC = () => {
     // Check immediately on mount
     checkRecentlySavedPlan();
 
-    window.addEventListener('planSaved', handlePlanUpdate);
+    window.addEventListener('planSaved', handlePlanUpdate as EventListener);
 
     return () => {
-      window.removeEventListener('planSaved', handlePlanUpdate);
+      window.removeEventListener('planSaved', handlePlanUpdate as EventListener);
     };
   }, [loadPlans]);
 
@@ -169,7 +214,13 @@ const PlansPage: React.FC = () => {
 
   const handleEditPlan = (plan: ProductionPlan) => {
     // Navigate to production page with the plan's date
-    window.location.href = `/production?date=${plan.date}`;
+    const editUrl = `/production?date=${plan.date}`;
+    console.log('🔧 EDIT PLAN DEBUG - Editing plan:', plan.id);
+    console.log('🔧 EDIT PLAN DEBUG - Plan date:', plan.date);
+    console.log('🔧 EDIT PLAN DEBUG - Constructed URL:', editUrl);
+    console.log('🔧 EDIT PLAN DEBUG - Full plan object:', plan);
+    
+    window.location.href = editUrl;
   };
 
   const handleDeletePlan = async (plan: ProductionPlan) => {

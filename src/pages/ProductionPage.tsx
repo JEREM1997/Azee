@@ -47,6 +47,13 @@ const ProductionPage: React.FC = () => {
     ? stores.filter(store => store.isActive)
     : stores.filter(store => store.isActive && assignedStoreIds.includes(store.id));
 
+  console.log('🌐 URL DEBUG - Current URL:', window.location.href);
+  console.log('🌐 URL DEBUG - URL search params:', window.location.search);
+  console.log('🌐 URL DEBUG - URL date parameter:', urlDate);
+  console.log('🌐 URL DEBUG - Today\'s date:', new Date().toISOString().split('T')[0]);
+  console.log('🌐 URL DEBUG - Initial date state:', urlDate || new Date().toISOString().split('T')[0]);
+  console.log('🌐 URL DEBUG - Date state after initialization:', date);
+
   useEffect(() => {
     const loadPlan = async () => {
       try {
