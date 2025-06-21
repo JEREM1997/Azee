@@ -62,15 +62,22 @@ export class AIForecastService {
    */
   private getProductionSalesMapping(productionDayOfWeek: number): { salesDay: number; isWeekend: boolean; mappingInfo: string } {
     const salesDay = this.getCorrespondingSalesDay(productionDayOfWeek);
-    const isWeekend = salesDay === 0 || salesDay === 6;
+    
+    // Weekend production covers Friday and Saturday production days
+    // Friday production → Saturday sales (weekend production)
+    // Saturday production → Saturday sales (weekend production)
+    const isWeekend = productionDayOfWeek === 5 || productionDayOfWeek === 6; // Friday or Saturday production
+    
     const productionDayName = this.getDayName(productionDayOfWeek);
     const salesDayName = this.getDayName(salesDay);
     
     let mappingInfo = '';
     if (productionDayOfWeek === 5) { // Friday production
       mappingInfo = `${productionDayName} production → ${salesDayName} sales (weekend production)`;
+    } else if (productionDayOfWeek === 6) { // Saturday production
+      mappingInfo = `${productionDayName} production = ${salesDayName} sales (weekend production)`;
     } else {
-      mappingInfo = `${productionDayName} production = ${salesDayName} sales`;
+      mappingInfo = `${productionDayName} production = ${salesDayName} sales (weekday production)`;
     }
     
     return { salesDay, isWeekend, mappingInfo };
@@ -140,7 +147,7 @@ export class AIForecastService {
         console.log(`⚠️ AI Forecast: No historical data for store ${store.name}, using conservative estimates`);
         
         // Provide conservative estimates even without historical data
-        const conservativeResult = this.generateConservativeEstimate(store, varieties, boxes, salesDayOfWeek, isWeekend);
+        const conservativeResult = this.generateConservativeEstimate(store, varieties, boxes, targetDayOfWeek, salesDayOfWeek);
         if (conservativeResult) {
           results.push(conservativeResult);
         }
@@ -216,6 +223,9 @@ export class AIForecastService {
     productionDayOfWeek: number
   ) {
     const predictions = [];
+    
+    // Weekend production covers Friday and Saturday production days
+    const isWeekendProduction = productionDayOfWeek === 5 || productionDayOfWeek === 6;
 
     for (const varietyId of store.availableVarieties) {
       const variety = varieties.find(v => v.id === varietyId && v.isActive);
@@ -240,7 +250,7 @@ export class AIForecastService {
       let basePrediction = pattern.avgSales;
 
       // Apply day of week factor
-      basePrediction *= this.getDayOfWeekFactor(targetDayOfWeek, pattern);
+      basePrediction *= this.getDayOfWeekFactor(productionDayOfWeek, pattern);
 
       // Apply trend if significant
       if (Math.abs(pattern.trend) > 0.1) {
@@ -253,7 +263,7 @@ export class AIForecastService {
       // Ensure minimum viable quantity
       basePrediction = Math.max(basePrediction, 6); // At least half dozen
 
-      // Calculate safety stock based on volatility and day type
+      // Calculate safety stock based on volatility and production day type
       let safetyStockPercent = this.SAFETY_STOCK_MIN;
       
       // Higher safety stock for volatile products
@@ -261,8 +271,8 @@ export class AIForecastService {
         safetyStockPercent += 0.10;
       }
       
-      // Higher safety stock for weekends (less predictable)
-      if (isWeekend) {
+      // Higher safety stock for weekend production (Friday/Saturday - less predictable)
+      if (isWeekendProduction) {
         safetyStockPercent += 0.05;
       }
 
@@ -282,7 +292,7 @@ export class AIForecastService {
         predictedSales: Math.round(basePrediction),
         recommendedProduction: adjustedProduction,
         confidence: safetyStockPercent,
-        reasoning: this.generateReasoningText(pattern, targetDayOfWeek, safetyStockPercent, isWeekend, productionDayOfWeek)
+        reasoning: this.generateReasoningText(pattern, targetDayOfWeek, safetyStockPercent, isWeekendProduction, productionDayOfWeek)
       });
     }
 
@@ -301,6 +311,9 @@ export class AIForecastService {
     productionDayOfWeek: number
   ) {
     const predictions = [];
+    
+    // Weekend production covers Friday and Saturday production days
+    const isWeekendProduction = productionDayOfWeek === 5 || productionDayOfWeek === 6;
 
     for (const boxId of store.availableBoxes) {
       const box = boxes.find(b => b.id === boxId && b.isActive);
@@ -323,7 +336,7 @@ export class AIForecastService {
 
       // Similar logic to varieties but for boxes
       let basePrediction = pattern.avgSales;
-      basePrediction *= this.getDayOfWeekFactor(targetDayOfWeek, pattern);
+      basePrediction *= this.getDayOfWeekFactor(productionDayOfWeek, pattern);
       
       if (Math.abs(pattern.trend) > 0.1) {
         basePrediction *= (1 + pattern.trend);
@@ -333,7 +346,7 @@ export class AIForecastService {
 
       let safetyStockPercent = this.SAFETY_STOCK_MIN;
       if (pattern.volatility > 0.3) safetyStockPercent += 0.10;
-      if (isWeekend) safetyStockPercent += 0.05;
+      if (isWeekendProduction) safetyStockPercent += 0.05;
       safetyStockPercent = Math.min(safetyStockPercent, this.SAFETY_STOCK_MAX);
 
       const recommendedProduction = Math.ceil(basePrediction * (1 + safetyStockPercent));
@@ -344,7 +357,7 @@ export class AIForecastService {
         predictedSales: Math.round(basePrediction),
         recommendedProduction: recommendedProduction,
         confidence: safetyStockPercent,
-        reasoning: this.generateBoxReasoningText(pattern, targetDayOfWeek, safetyStockPercent, isWeekend, productionDayOfWeek)
+        reasoning: this.generateBoxReasoningText(pattern, targetDayOfWeek, safetyStockPercent, isWeekendProduction, productionDayOfWeek)
       });
     }
 
@@ -564,17 +577,23 @@ export class AIForecastService {
   }
 
   /**
-   * Get day of week adjustment factor
+   * Get day of week adjustment factor based on production day
    */
-  private getDayOfWeekFactor(dayOfWeek: number, pattern: any): number {
-    // Weekend typically has different patterns
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      return 0.8; // 20% lower on weekends typically
+  private getDayOfWeekFactor(productionDayOfWeek: number, pattern: any): number {
+    // Weekend production covers Friday and Saturday production days
+    const isWeekendProduction = productionDayOfWeek === 5 || productionDayOfWeek === 6;
+    
+    if (isWeekendProduction) {
+      if (productionDayOfWeek === 5) { // Friday production for Saturday sales
+        return 1.1; // 10% higher for Saturday sales
+      } else { // Saturday production for Saturday sales
+        return 1.05; // 5% higher for Saturday production
+      }
     }
     
-    // Friday might be higher
-    if (dayOfWeek === 5) {
-      return 1.1;
+    // Sunday production typically lower
+    if (productionDayOfWeek === 0) {
+      return 0.8; // 20% lower on Sunday
     }
     
     return 1.0; // Normal weekday
@@ -583,8 +602,9 @@ export class AIForecastService {
   /**
    * Generate human-readable reasoning for the prediction
    */
-  private generateReasoningText(pattern: any, dayOfWeek: number, safetyStock: number, isWeekend: boolean, productionDayOfWeek: number): string {
+  private generateReasoningText(pattern: any, dayOfWeek: number, safetyStock: number, isWeekendProduction: boolean, productionDayOfWeek: number): string {
     const dayName = this.getDayName(dayOfWeek);
+    const productionDayName = this.getDayName(productionDayOfWeek);
     const reasons = [];
 
     if (pattern.dataPoints >= 10) {
@@ -603,8 +623,8 @@ export class AIForecastService {
       reasons.push(`High variability in sales - increased safety stock`);
     }
 
-    if (isWeekend) {
-      reasons.push(`Weekend sales pattern analyzed`);
+    if (isWeekendProduction) {
+      reasons.push(`Weekend production (${productionDayName}) pattern analyzed`);
     }
 
     reasons.push(`${(safetyStock * 100).toFixed(0)}% safety stock to prevent stockouts`);
@@ -619,8 +639,9 @@ export class AIForecastService {
   /**
    * Generate reasoning text for box predictions
    */
-  private generateBoxReasoningText(pattern: any, dayOfWeek: number, safetyStock: number, isWeekend: boolean, productionDayOfWeek: number): string {
+  private generateBoxReasoningText(pattern: any, dayOfWeek: number, safetyStock: number, isWeekendProduction: boolean, productionDayOfWeek: number): string {
     const dayName = this.getDayName(dayOfWeek);
+    const productionDayName = this.getDayName(productionDayOfWeek);
     const reasons = [];
 
     if (pattern.dataPoints >= 5) {
@@ -633,6 +654,10 @@ export class AIForecastService {
       reasons.push(`${dayName}s show higher box demand`);
     } else if (pattern.seasonalFactor < 0.9) {
       reasons.push(`${dayName}s show lower box demand`);
+    }
+
+    if (isWeekendProduction) {
+      reasons.push(`Weekend production (${productionDayName}) applied`);
     }
 
     reasons.push(`${(safetyStock * 100).toFixed(0)}% safety margin`);
@@ -668,20 +693,30 @@ export class AIForecastService {
     varieties: any[], 
     boxes: any[], 
     targetDayOfWeek: number, 
-    isWeekend: boolean
+    salesDayOfWeek: number
   ): AIForecastResult | null {
     const predictions = [];
     const boxPredictions = [];
+    
+    // Weekend production covers Friday and Saturday production days
+    const isWeekendProduction = targetDayOfWeek === 5 || targetDayOfWeek === 6;
 
     // Conservative variety estimates
     for (const varietyId of store.availableVarieties) {
       const variety = varieties.find(v => v.id === varietyId && v.isActive);
       if (!variety) continue;
 
-      // Base conservative estimate with day-of-week adjustment
+      // Base conservative estimate with weekend production adjustment
       let baseEstimate = 12; // 1 dozen base
-      if (isWeekend) baseEstimate *= 0.8; // 20% less on weekends
-      if (targetDayOfWeek === 6) baseEstimate *= 1.2; // 20% more on Saturdays (weekend production)
+      
+      // Weekend production (Friday/Saturday) typically has different patterns
+      if (isWeekendProduction) {
+        if (targetDayOfWeek === 5) { // Friday production for Saturday sales
+          baseEstimate *= 1.2; // 20% more for Saturday sales
+        } else { // Saturday production for Saturday sales
+          baseEstimate *= 1.1; // 10% more for Saturday production
+        }
+      }
 
       predictions.push({
         varietyId,
@@ -689,7 +724,7 @@ export class AIForecastService {
         predictedSales: Math.round(baseEstimate),
         recommendedProduction: Math.round(baseEstimate * 1.25), // 25% safety stock
         confidence: 0.15, // Low confidence
-        reasoning: `Conservative estimate - no historical data. Base: ${Math.round(baseEstimate)} + 25% safety stock. ${isWeekend ? 'Weekend sales pattern applied. ' : ''}Adjust manually based on local knowledge.`
+        reasoning: `Conservative estimate - no historical data. Base: ${Math.round(baseEstimate)} + 25% safety stock. ${isWeekendProduction ? `Weekend production (${this.getDayName(targetDayOfWeek)}) pattern applied. ` : ''}Adjust manually based on local knowledge.`
       });
     }
 
@@ -699,8 +734,15 @@ export class AIForecastService {
       if (!box) continue;
 
       let baseEstimate = 2; // 2 boxes base
-      if (isWeekend) baseEstimate *= 0.7; // 30% less on weekends
-      if (targetDayOfWeek === 6) baseEstimate *= 1.3; // 30% more on Saturdays (weekend production)
+      
+      // Weekend production adjustments
+      if (isWeekendProduction) {
+        if (targetDayOfWeek === 5) { // Friday production for Saturday sales
+          baseEstimate *= 1.3; // 30% more for Saturday sales
+        } else { // Saturday production for Saturday sales
+          baseEstimate *= 1.1; // 10% more for Saturday production
+        }
+      }
 
       boxPredictions.push({
         boxId,
@@ -708,7 +750,7 @@ export class AIForecastService {
         predictedSales: Math.round(baseEstimate),
         recommendedProduction: Math.round(baseEstimate * 1.3), // 30% safety stock
         confidence: 0.20, // Low confidence
-        reasoning: `Conservative box estimate - no historical data. Base: ${Math.round(baseEstimate)} + 30% safety stock. ${isWeekend ? 'Weekend sales pattern applied. ' : ''}Review and adjust as needed.`
+        reasoning: `Conservative box estimate - no historical data. Base: ${Math.round(baseEstimate)} + 30% safety stock. ${isWeekendProduction ? `Weekend production (${this.getDayName(targetDayOfWeek)}) pattern applied. ` : ''}Review and adjust as needed.`
       });
     }
 
