@@ -63,12 +63,26 @@ const PlansPage: React.FC = () => {
       }
       
       console.log('🔄 Loading plans from server...');
-      const plansData = await getProductionPlans(30);
+      const plansData = await getProductionPlans(90);
       console.log('✅ Fetched plans data:', plansData);
       console.log('📊 Plans count:', plansData?.length || 0);
       
-      // Check if expected plan is in the results
+      // Specific search for the expected plan date
       if (expectedPlan && plansData && Array.isArray(plansData)) {
+        console.log('🔍 SEARCHING FOR EXPECTED DATE - Looking for plans with date:', expectedPlan.date);
+        const plansWithExpectedDate = plansData.filter((plan: ProductionPlan) => plan.date === expectedPlan.date);
+        console.log('🔍 SEARCHING FOR EXPECTED DATE - Found', plansWithExpectedDate.length, 'plans with expected date');
+        
+        if (plansWithExpectedDate.length > 0) {
+          console.log('✅ FOUND PLANS WITH EXPECTED DATE:', plansWithExpectedDate);
+          plansWithExpectedDate.forEach((plan: ProductionPlan) => {
+            console.log(`  - Plan ID: ${plan.id}, Date: ${plan.date}, Total: ${plan.total_production}`);
+          });
+        } else {
+          console.log('❌ NO PLANS FOUND WITH EXPECTED DATE:', expectedPlan.date);
+          console.log('❌ Available dates in response:', plansData.map((p: ProductionPlan) => p.date));
+        }
+        
         const foundExpectedPlan = plansData.find((plan: ProductionPlan) => plan.id === expectedPlan.id);
         if (foundExpectedPlan) {
           console.log('✅ EXPECTED PLAN FOUND - Recently saved plan is present in results');

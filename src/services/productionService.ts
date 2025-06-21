@@ -69,19 +69,48 @@ export const getCurrentDayPlan = async (date: string) => {
 
 export const getProductionPlans = async (days: number = 30) => {
   try {
+    console.log('🔎 GET PLANS DEBUG - Fetching plans for last', days, 'days');
+    
     const headers = await getAuthHeaders();
-    const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/get-production-plans?days=${days}`,
-      { headers }
-    );
+    const url = `${SUPABASE_URL}/functions/v1/get-production-plans?days=${days}`;
+    
+    console.log('🔎 GET PLANS DEBUG - Request URL:', url);
+    
+    const response = await fetch(url, { headers });
+
+    console.log('🔎 GET PLANS DEBUG - Response status:', response.status);
+    console.log('🔎 GET PLANS DEBUG - Response ok:', response.ok);
 
     if (!response.ok) {
-      throw { status: response.status, message: await response.text() };
+      const errorText = await response.text();
+      console.log('🔎 GET PLANS DEBUG - Error response:', errorText);
+      throw { status: response.status, message: errorText };
     }
 
     const data = await response.json();
+    console.log('🔎 GET PLANS DEBUG - All plans received:', data);
+    console.log('🔎 GET PLANS DEBUG - Plans count:', data?.length || 0);
+    
+    if (data && Array.isArray(data) && data.length > 0) {
+      console.log('🔎 GET PLANS DEBUG - All plan dates in response:');
+      data.forEach((plan: any, index: number) => {
+        console.log(`  ${index + 1}. Date: ${plan.date}, ID: ${plan.id}, Total: ${plan.total_production}`);
+      });
+      
+      // Check for recent plans that might be the missing one
+      const today = new Date().toISOString().split('T')[0];
+      const recentPlans = data.filter((plan: any) => plan.date >= today);
+      console.log('🔎 GET PLANS DEBUG - Recent plans (today and future):', recentPlans.length);
+      recentPlans.forEach((plan: any) => {
+        console.log(`  Recent: ${plan.date} (ID: ${plan.id})`);
+      });
+    } else {
+      console.log('🔎 GET PLANS DEBUG - No plans found or empty response');
+    }
+    
     return data;
   } catch (error) {
+    console.error('🔎 GET PLANS DEBUG - Error:', error);
     handleApiError(error, 'Failed to fetch production plans');
   }
 };
@@ -115,17 +144,38 @@ export const savePlan = async (planData: any) => {
     console.log('🔗 API DEBUG - planData.date being sent:', planData.date);
     console.log('🔗 API DEBUG - typeof planData.date:', typeof planData.date);
     
+    // WORKAROUND: Ensure date is exactly as provided
+    const originalDate = planData.date;
+    console.log('🔧 WORKAROUND - Original date:', originalDate);
+    console.log('🔧 WORKAROUND - Date as ISO string:', new Date(originalDate).toISOString());
+    console.log('🔧 WORKAROUND - Date as YYYY-MM-DD:', originalDate);
+    
+    // Create the request payload with explicit date formatting
+    const requestPayload = {
+      ...planData,
+      date: originalDate, // Keep the original YYYY-MM-DD format
+      __originalDate: originalDate, // Backup for debugging
+      __dateDebug: {
+        originalInput: originalDate,
+        asDate: new Date(originalDate),
+        asISOString: new Date(originalDate).toISOString(),
+        asLocalString: new Date(originalDate).toLocaleDateString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      }
+    };
+    
     const headers = await getAuthHeaders();
     
     console.log('🔗 API DEBUG - Headers:', headers);
-    console.log('🔗 API DEBUG - Request body (stringified):', JSON.stringify(planData));
+    console.log('🔗 API DEBUG - Request payload (enhanced):', requestPayload);
+    console.log('🔗 API DEBUG - Request body (stringified):', JSON.stringify(requestPayload));
     
     const response = await fetch(
       `${SUPABASE_URL}/functions/v1/save-production-plan`,
       {
         method: 'POST',
         headers,
-        body: JSON.stringify(planData),
+        body: JSON.stringify(requestPayload),
       }
     );
 
@@ -141,6 +191,19 @@ export const savePlan = async (planData: any) => {
     const data = await response.json();
     console.log('🔗 API DEBUG - Response data:', data);
     console.log('🔗 API DEBUG - Returned plan ID:', data.id);
+    console.log('🔗 API DEBUG - Response plan date:', data.date);
+    console.log('🔗 API DEBUG - Date comparison:', {
+      sent: originalDate,
+      received: data.date,
+      match: data.date === originalDate
+    });
+    
+    if (data.date !== originalDate) {
+      console.error('🚨 BACKEND DATE CONVERSION BUG DETECTED!');
+      console.error('🚨 SENT:', originalDate);
+      console.error('🚨 RECEIVED:', data.date);
+      console.error('🚨 This confirms the issue is in the Edge Function backend!');
+    }
     
     return data.id;
   } catch (error) {
