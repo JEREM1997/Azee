@@ -41,7 +41,7 @@ export class AIForecastService {
   private readonly WASTE_TARGET = 0.25; // Target 25% waste (well below 30% limit)
   private readonly SAFETY_STOCK_MIN = 0.15; // Minimum 15% safety stock
   private readonly SAFETY_STOCK_MAX = 0.35; // Maximum 35% safety stock
-  private readonly MIN_DATA_POINTS = 3; // Minimum historical data points needed
+  private readonly MIN_DATA_POINTS = 1; // Reduced from 3 to 1 to work with current backend issue
 
   /**
    * Map production day to sales day
@@ -89,9 +89,12 @@ export class AIForecastService {
   async generateForecast(targetDate: string, stores: any[], varieties: any[], boxes: any[]): Promise<AIForecastResult[]> {
     console.log('🤖 AI Forecast: Starting prediction analysis for', targetDate);
     
-    // Progressive data loading: try different timeframes if larger ones fail
+    // Enhanced data loading: try much larger timeframes due to backend date conversion issue
     const dataLoadingStrategies = [
-      { days: 30, description: "30 days (optimal)" },
+      { days: 180, description: "180 days (comprehensive - to work around date conversion issue)" },
+      { days: 90, description: "90 days (extended)" },
+      { days: 60, description: "60 days (expanded)" },
+      { days: 30, description: "30 days (standard)" },
       { days: 14, description: "14 days (reduced)" },
       { days: 7, description: "7 days (minimal)" }
     ];
@@ -103,9 +106,33 @@ export class AIForecastService {
       try {
         console.log(`🤖 AI Forecast: Attempting to load ${strategy.days} days of historical data...`);
         historicalPlans = await getProductionPlans(strategy.days);
+        
+        console.log(`🔍 AI DEBUG: Raw plans received:`, historicalPlans?.length || 0);
+        if (historicalPlans && historicalPlans.length > 0) {
+          console.log(`🔍 AI DEBUG: Plan details:`);
+          historicalPlans.forEach((plan: any, index: number) => {
+            console.log(`  ${index + 1}. Date: ${plan.date}, ID: ${plan.id}, Stores: ${plan.stores?.length || 0}, Total: ${plan.total_production}`);
+          });
+          
+          // Check for unique plan IDs vs unique dates
+          const uniqueIds = new Set(historicalPlans.map((p: any) => p.id));
+          const uniqueDates = new Set(historicalPlans.map((p: any) => p.date));
+          console.log(`🔍 AI DEBUG: Unique plan IDs: ${uniqueIds.size}, Unique dates: ${uniqueDates.size}`);
+          
+          if (uniqueIds.size > uniqueDates.size) {
+            console.warn(`⚠️ AI DEBUG: Backend date conversion issue detected! Multiple plans (${uniqueIds.size}) have the same dates (${uniqueDates.size})`);
+          }
+        }
+        
         usedStrategy = strategy;
         console.log(`✅ AI Forecast: Successfully loaded ${historicalPlans?.length || 0} plans using ${strategy.description}`);
-        break;
+        
+        // If we have at least the minimum, break
+        if (historicalPlans && historicalPlans.length >= this.MIN_DATA_POINTS) {
+          break;
+        } else if (historicalPlans && historicalPlans.length > 0) {
+          console.log(`⚠️ AI Forecast: Found ${historicalPlans.length} plans with ${strategy.description}, continuing to try larger timeframes...`);
+        }
       } catch (error) {
         console.warn(`⚠️ AI Forecast: Failed to load ${strategy.days} days of data:`, error instanceof Error ? error.message : String(error));
         if (strategy === dataLoadingStrategies[dataLoadingStrategies.length - 1]) {
@@ -120,10 +147,17 @@ export class AIForecastService {
     }
     
     if (!historicalPlans || historicalPlans.length < this.MIN_DATA_POINTS) {
-      throw new Error(
-        `Insufficient historical data for AI forecasting. Found ${historicalPlans?.length || 0} plans, ` +
-        `need at least ${this.MIN_DATA_POINTS}. Please save more production plans before using AI predictions.`
-      );
+      const availablePlans = historicalPlans?.length || 0;
+      const message = availablePlans === 0 
+        ? "No historical production plans found in the system. Please save at least one production plan before using AI predictions."
+        : `Found only ${availablePlans} plan(s). AI forecasting will work with limited data, but results may be less accurate. Consider saving more production plans for better predictions.`;
+        
+      if (availablePlans === 0) {
+        throw new Error(message);
+      } else {
+        console.warn(`⚠️ AI Forecast: ${message}`);
+        // Continue with limited data
+      }
     }
 
     const targetDayOfWeek = new Date(targetDate).getDay();
