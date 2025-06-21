@@ -57,6 +57,18 @@ const PlansPage: React.FC = () => {
           console.log(`Plan ${plan.id} (${plan.date}):`);
           plan.stores?.forEach((store: any) => {
             console.log(`  Store ${store.store_name}: deliverydate = ${store.deliverydate || 'NOT SET'}`);
+            if (store.deliverydate) {
+              console.log(`    - Raw deliverydate: "${store.deliverydate}"`);
+              console.log(`    - Type: ${typeof store.deliverydate}`);
+              console.log(`    - Length: ${store.deliverydate.length}`);
+              console.log(`    - Parsed as Date: ${new Date(store.deliverydate)}`);
+              console.log(`    - Formatted (fr-FR): ${new Date(store.deliverydate).toLocaleDateString('fr-FR', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              })}`);
+            }
           });
         });
       }

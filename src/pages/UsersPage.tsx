@@ -47,15 +47,20 @@ const UsersPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      console.log('Loading users from server...');
       const loadedUsers = await getUsers();
+      console.log('Loaded users from server:', loadedUsers);
+      
       if (Array.isArray(loadedUsers)) {
         setUsers(loadedUsers);
+        console.log('Users state updated with:', loadedUsers);
       } else {
+        console.error('Invalid response format:', loadedUsers);
         throw new Error('Invalid response format from server');
       }
     } catch (error) {
+      console.error('Error loading users:', error);
       setError('Erreur lors du chargement des utilisateurs');
-      console.error('Erreur:', error);
     } finally {
       setLoading(false);
     }
@@ -75,14 +80,17 @@ const UsersPage: React.FC = () => {
   };
 
   const handleEdit = (user: User) => {
-    setFormValues({
+    console.log('Editing user:', user);
+    const newFormValues = {
       id: user.id,
       username: user.email.split('@')[0],
       fullName: user.fullName,
       role: user.role as 'admin' | 'production' | 'store',
       storeIds: user.storeIds || [],
       password: ''
-    });
+    };
+    console.log('Setting form values:', newFormValues);
+    setFormValues(newFormValues);
     setIsEditing(true);
   };
 
@@ -134,36 +142,77 @@ const UsersPage: React.FC = () => {
       return;
     }
 
+    console.log('Saving user with data:', {
+      id: formValues.id,
+      fullName: formValues.fullName,
+      role: formValues.role,
+      storeIds: formValues.storeIds
+    });
+
     try {
       setSaving(true);
       setError(null);
 
       if (formValues.id) {
+        console.log('Updating existing user...');
+        
         // Update existing user - first update basic info
         const updatedUser = await updateUser(formValues.id, {
-            fullName: formValues.fullName,
-            role: formValues.role
-          });
+          fullName: formValues.fullName,
+          role: formValues.role
+        });
+
+        console.log('User updated successfully:', updatedUser);
 
         if (!updatedUser) {
-            throw new Error('Failed to update user');
-          }
+          throw new Error('Failed to update user');
+        }
 
         // Then update store assignments if the role is 'store'
-          if (formValues.role === 'store') {
-              await updateUserStores(formValues.id, formValues.storeIds);
-          } else {
+        console.log('Updating store assignments...');
+        if (formValues.role === 'store') {
+          await updateUserStores(formValues.id, formValues.storeIds);
+          console.log('Store assignments updated for store role');
+        } else {
           // Clear store assignments for non-store roles
-            await updateUserStores(formValues.id, []);
+          await updateUserStores(formValues.id, []);
+          console.log('Store assignments cleared for non-store role');
         }
+
+        // Optimistically update the local state immediately
+        console.log('Updating local state...');
+        setUsers(prevUsers => {
+          const updatedUsers = prevUsers.map(user => 
+            user.id === formValues.id 
+              ? { 
+                  ...user, 
+                  fullName: formValues.fullName, 
+                  role: formValues.role,
+                  storeIds: formValues.role === 'store' ? formValues.storeIds : []
+                }
+              : user
+          );
+          console.log('Local state updated:', updatedUsers.find(u => u.id === formValues.id));
+          return updatedUsers;
+        });
       }
 
-      await loadUsers();
+      // Don't reload immediately - the optimistic update is correct
+      // Only reload on component mount or if there's an error
+      console.log('Update completed successfully - using optimistic update');
+      
       setIsEditing(false);
       resetForm();
     } catch (error) {
       console.error('Error saving user:', error);
       setError(error instanceof Error ? error.message : 'Erreur lors de l\'enregistrement de l\'utilisateur');
+      // Only reload users in case of error to ensure consistency
+      console.log('Error occurred, reloading users from server for consistency...');
+      try {
+        await loadUsers();
+      } catch (reloadError) {
+        console.error('Error reloading users after save error:', reloadError);
+      }
     } finally {
       setSaving(false);
     }
@@ -299,7 +348,12 @@ const UsersPage: React.FC = () => {
                 type="text"
                 id="fullName"
                 value={formValues.fullName}
-                onChange={(e) => setFormValues({ ...formValues, fullName: e.target.value })}
+                onChange={(e) => {
+                  console.log('Full name input changed:', e.target.value);
+                  const newFormValues = { ...formValues, fullName: e.target.value };
+                  console.log('New form values:', newFormValues);
+                  setFormValues(newFormValues);
+                }}
                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm"
               />
             </div>

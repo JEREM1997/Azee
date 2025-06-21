@@ -67,31 +67,70 @@ const DeliveryPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Load all recent production plans (last 7 days) to find stores with deliveries for the selected date
-      const plans = await getProductionPlans(7);
+      // Load all recent production plans (last 30 days) to find stores with deliveries for the selected date
+      const plans = await getProductionPlans(30);
       
       if (!plans || plans.length === 0) {
         setCurrentPlan(null);
         return;
       }
       
+      // Debug: Show ALL plans loaded
+      console.log(`📦 Total plans loaded: ${plans.length}`);
+      plans.forEach((plan: any, index: number) => {
+        const isJune13 = plan.date === '2025-06-13';
+        console.log(`  Plan ${index + 1}: ID=${plan.id}, Date=${plan.date}, Stores=${plan.stores?.length || 0}${isJune13 ? ' ⭐ JUNE 13 PLAN!' : ''}`);
+        plan.stores?.forEach((store: any, storeIndex: number) => {
+          const isCrissier = store.store_name === 'Crissier';
+          const isJune14Delivery = store.deliverydate === '2025-06-14';
+          console.log(`    Store ${storeIndex + 1}: ${store.store_name}, DeliveryDate=${store.deliverydate || 'NOT SET'}${isCrissier && isJune14Delivery ? ' 🎯 FOUND CRISSIER WITH JUNE 14!' : ''}`);
+        });
+      });
+      
       // Find all stores that have deliveries scheduled for the selected delivery date
       const storesForDeliveryDate: DeliveryStoreProduction[] = [];
       
+      console.log('🔍 Looking for deliveries on date:', deliveryDate); // Debug log
+      
       plans.forEach((plan: any) => {
+        console.log(`📋 Checking plan ${plan.id} (${plan.date}):`, plan);
         if (plan.stores && Array.isArray(plan.stores)) {
           plan.stores.forEach((store: any) => {
             // Check if this store has a delivery date matching our selected date
             // If no delivery date is set, assume delivery is same day as production
             const storeDeliveryDate = store.deliverydate || plan.date;
             
-            if (storeDeliveryDate === deliveryDate) {
+            console.log(`  🏪 Store ${store.store_name}:`);
+            console.log(`    - Raw deliverydate: "${store.deliverydate}"`);
+            console.log(`    - Plan date: "${plan.date}"`);
+            console.log(`    - Computed storeDeliveryDate: "${storeDeliveryDate}"`);
+            console.log(`    - Selected deliveryDate: "${deliveryDate}"`);
+            console.log(`    - Match: ${storeDeliveryDate === deliveryDate}`);
+            
+            // Normalize dates to YYYY-MM-DD format for comparison
+            const normalizeDate = (dateStr: string) => {
+              try {
+                const date = new Date(dateStr);
+                return date.toISOString().split('T')[0];
+              } catch {
+                return dateStr; // Return original if parsing fails
+              }
+            };
+            
+            const normalizedStoreDate = normalizeDate(storeDeliveryDate);
+            const normalizedSelectedDate = normalizeDate(deliveryDate);
+            
+            console.log(`    - Normalized storeDate: "${normalizedStoreDate}"`);
+            console.log(`    - Normalized selectedDate: "${normalizedSelectedDate}"`);
+            console.log(`    - Normalized Match: ${normalizedStoreDate === normalizedSelectedDate}`);
+            
+            if (normalizedStoreDate === normalizedSelectedDate) {
               // Map the store data to match our interface
               const mappedStore: DeliveryStoreProduction = {
                 id: store.id,
                 store_id: store.store_id,
                 store_name: store.store_name,
-                deliverydate: store.deliverydate,
+                deliverydate: storeDeliveryDate,
                 total_quantity: store.total_quantity,
                 delivery_confirmed: store.delivery_confirmed || false,
                 waste_reported: store.waste_reported || false,
@@ -455,18 +494,17 @@ const DeliveryPage: React.FC = () => {
                   <h3 className="text-lg font-medium text-gray-900">{storeDetails.store_name}</h3>
                   <div className="mt-1 space-y-1">
                   <p className="text-gray-500">Total : {storeDetails.total_quantity} doughnuts</p>
-                    {storeDetails.deliverydate && (
-                      <p className="text-sm text-gray-600">
-                        <span className="font-medium">Date de livraison:</span> {
-                          new Date(storeDetails.deliverydate).toLocaleDateString('fr-FR', {
-                            weekday: 'long',
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          })
-                        }
-                      </p>
-                    )}
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Date de livraison:</span> {
+                        storeDetails.deliverydate ? 
+                        new Date(storeDetails.deliverydate).toLocaleDateString('fr-FR', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        }) : 'Non définie'
+                      }
+                    </p>
                   </div>
                 </div>
                 <div className="space-x-2">
