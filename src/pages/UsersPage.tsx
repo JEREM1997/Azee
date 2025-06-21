@@ -38,9 +38,135 @@ const UsersPage: React.FC = () => {
     password: ''
   });
 
+  // Keys for localStorage persistence
+  const OPTIMISTIC_UPDATES_KEY = 'userOptimisticUpdates';
+  
+  // Helper functions for optimistic updates persistence
+  const saveOptimisticUpdate = (userId: string, userData: Partial<User>) => {
+    try {
+      const existing = JSON.parse(localStorage.getItem(OPTIMISTIC_UPDATES_KEY) || '{}');
+      existing[userId] = { ...userData, timestamp: Date.now() };
+      localStorage.setItem(OPTIMISTIC_UPDATES_KEY, JSON.stringify(existing));
+      console.log('💾 Saved optimistic update to localStorage:', userId, userData);
+    } catch (error) {
+      console.error('Error saving optimistic update:', error);
+    }
+  };
+
+  const getOptimisticUpdates = () => {
+    try {
+      const stored = localStorage.getItem(OPTIMISTIC_UPDATES_KEY);
+      if (!stored) return {};
+      
+      const updates = JSON.parse(stored);
+      const now = Date.now();
+      const validUpdates: Record<string, any> = {};
+      
+      // Only keep updates from the last 10 minutes (600000ms)
+      Object.keys(updates).forEach(userId => {
+        if (now - updates[userId].timestamp < 600000) {
+          validUpdates[userId] = updates[userId];
+        }
+      });
+      
+      // Clean up expired updates
+      if (Object.keys(validUpdates).length !== Object.keys(updates).length) {
+        localStorage.setItem(OPTIMISTIC_UPDATES_KEY, JSON.stringify(validUpdates));
+      }
+      
+      return validUpdates;
+    } catch (error) {
+      console.error('Error getting optimistic updates:', error);
+      return {};
+    }
+  };
+
+  const clearOptimisticUpdate = (userId: string) => {
+    try {
+      const existing = JSON.parse(localStorage.getItem(OPTIMISTIC_UPDATES_KEY) || '{}');
+      delete existing[userId];
+      localStorage.setItem(OPTIMISTIC_UPDATES_KEY, JSON.stringify(existing));
+      console.log('🗑️ Cleared optimistic update for user:', userId);
+    } catch (error) {
+      console.error('Error clearing optimistic update:', error);
+    }
+  };
+
+  const applyOptimisticUpdates = (serverUsers: User[]) => {
+    const optimisticUpdates = getOptimisticUpdates();
+    const userIds = Object.keys(optimisticUpdates);
+    
+    if (userIds.length === 0) {
+      console.log('No optimistic updates to apply');
+      return serverUsers;
+    }
+
+    console.log('📋 Applying optimistic updates for users:', userIds);
+    
+    return serverUsers.map(user => {
+      const update = optimisticUpdates[user.id];
+      if (update) {
+        console.log('✨ Applied optimistic update for user:', user.id, update);
+        return { ...user, ...update, timestamp: undefined }; // Remove timestamp from final data
+      }
+      return user;
+    });
+  };
+
   useEffect(() => {
     loadUsers();
     loadStores();
+  }, []);
+
+  // Periodic cleanup of optimistic updates when server catches up
+  useEffect(() => {
+    const checkServerSync = async () => {
+      const optimisticUpdates = getOptimisticUpdates();
+      const userIds = Object.keys(optimisticUpdates);
+      
+      if (userIds.length === 0) return;
+      
+      try {
+        console.log('🔄 Checking if server has synced for optimistic updates:', userIds);
+        const serverUsers = await getUsers();
+        let clearedAny = false;
+        
+        for (const userId of userIds) {
+          const serverUser = serverUsers.find((u: User) => u.id === userId);
+          const optimisticData = optimisticUpdates[userId];
+          
+          if (serverUser && optimisticData) {
+            // Check if server data matches optimistic data
+            const serverMatches = 
+              serverUser.fullName === optimisticData.fullName &&
+              serverUser.role === optimisticData.role;
+            
+            if (serverMatches) {
+              console.log('✅ Server data synced for user:', userId, 'clearing optimistic update');
+              clearOptimisticUpdate(userId);
+              clearedAny = true;
+            }
+          }
+        }
+        
+        // If we cleared any updates, reload users to get fresh data
+        if (clearedAny) {
+          console.log('🔄 Reloading users after clearing synced optimistic updates');
+          const freshUsers = await getUsers();
+          setUsers(applyOptimisticUpdates(freshUsers));
+        }
+      } catch (error) {
+        console.error('Error checking server sync:', error);
+      }
+    };
+    
+    // Check immediately
+    checkServerSync();
+    
+    // Then check every 30 seconds
+    const interval = setInterval(checkServerSync, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const loadUsers = async () => {
@@ -52,7 +178,7 @@ const UsersPage: React.FC = () => {
       console.log('Loaded users from server:', loadedUsers);
       
       if (Array.isArray(loadedUsers)) {
-        setUsers(loadedUsers);
+        setUsers(applyOptimisticUpdates(loadedUsers));
         console.log('Users state updated with:', loadedUsers);
       } else {
         console.error('Invalid response format:', loadedUsers);
@@ -230,20 +356,28 @@ const UsersPage: React.FC = () => {
             if (verifiedUserAgain && verifiedUserAgain.fullName === formValues.fullName) {
               console.log('✅ Verification successful on second attempt after 5 total seconds');
               setUsers(reloadedUsersAgain);
+              // Clear optimistic update since server data is now correct
+              clearOptimisticUpdate(formValues.id);
             } else {
               // TEMPORARY WORKAROUND: Server confirmed update but verification fails due to metadata propagation
               console.warn('⚠️ Verification failed but server confirmed update - using workaround');
               console.log('Server response confirmed fullName:', updatedUser.user_metadata?.full_name);
               console.log('Applying optimistic update based on server confirmation...');
               
+              // Save optimistic update to localStorage for persistence across page navigation
+              const optimisticUserData = {
+                fullName: formValues.fullName,
+                role: formValues.role,
+                storeIds: formValues.role === 'store' ? formValues.storeIds : []
+              };
+              saveOptimisticUpdate(formValues.id, optimisticUserData);
+              
               // Update local state optimistically based on server confirmation
               setUsers(prevUsers => prevUsers.map(user => 
                 user.id === formValues.id 
                   ? { 
                       ...user, 
-                      fullName: formValues.fullName,
-                      role: formValues.role,
-                      storeIds: formValues.role === 'store' ? formValues.storeIds : []
+                      ...optimisticUserData
                     }
                   : user
               ));
@@ -254,19 +388,28 @@ const UsersPage: React.FC = () => {
           } else {
             console.log('✅ Verification successful: user update was persisted correctly');
             setUsers(reloadedUsers);
+            // Clear optimistic update since server data is now correct
+            clearOptimisticUpdate(formValues.id);
           }
         } else {
           console.error('Verification failed: updated user not found in reloaded data');
           
           // TEMPORARY WORKAROUND: Apply optimistic update even if user not found in reload
           console.warn('⚠️ User not found in reload but server confirmed update - using workaround');
+          
+          // Save optimistic update to localStorage for persistence across page navigation
+          const optimisticUserData = {
+            fullName: formValues.fullName,
+            role: formValues.role,
+            storeIds: formValues.role === 'store' ? formValues.storeIds : []
+          };
+          saveOptimisticUpdate(formValues.id, optimisticUserData);
+          
           setUsers(prevUsers => prevUsers.map(user => 
             user.id === formValues.id 
               ? { 
                   ...user, 
-                  fullName: formValues.fullName,
-                  role: formValues.role,
-                  storeIds: formValues.role === 'store' ? formValues.storeIds : []
+                  ...optimisticUserData
                 }
               : user
           ));
