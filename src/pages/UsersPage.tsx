@@ -149,6 +149,8 @@ const UsersPage: React.FC = () => {
       storeIds: formValues.storeIds
     });
 
+    let workaroundApplied = false; // Flag to track if workaround was used
+
     try {
       setSaving(true);
       setError(null);
@@ -247,6 +249,7 @@ const UsersPage: React.FC = () => {
               ));
               
               console.log('✅ Applied workaround - local state updated based on server confirmation');
+              workaroundApplied = true;
             }
           } else {
             console.log('✅ Verification successful: user update was persisted correctly');
@@ -268,6 +271,7 @@ const UsersPage: React.FC = () => {
               : user
           ));
           console.log('✅ Applied workaround - optimistic update despite reload failure');
+          workaroundApplied = true;
         }
         
         console.log('Update completed and verified successfully');
@@ -282,7 +286,11 @@ const UsersPage: React.FC = () => {
       // Reload users to ensure UI consistency with server state
       console.log('Error occurred, reloading users from server for consistency...');
       try {
-        await loadUsers();
+        if (!workaroundApplied) {
+          await loadUsers();
+        } else {
+          console.log('Skipping reload - workaround was applied successfully');
+        }
       } catch (reloadError) {
         console.error('Error reloading users after save error:', reloadError);
         setError('Erreur lors de l\'enregistrement et de la synchronisation. Veuillez actualiser la page.');
