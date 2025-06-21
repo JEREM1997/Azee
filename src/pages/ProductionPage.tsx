@@ -53,9 +53,19 @@ const ProductionPage: React.FC = () => {
         setLoading(true);
         setError(null);
         
+        console.log('🔍 LOAD DEBUG - Loading plan for date:', date);
+        console.log('🔍 LOAD DEBUG - Date type:', typeof date);
+        console.log('🔍 LOAD DEBUG - Date length:', date?.length);
+        
         const plan = await getCurrentDayPlan(date);
         
+        console.log('🔍 LOAD DEBUG - Received plan:', plan);
+        console.log('🔍 LOAD DEBUG - Plan date in response:', plan?.date);
+        console.log('🔍 LOAD DEBUG - Expected date was:', date);
+        console.log('🔍 LOAD DEBUG - Dates match:', plan?.date === date);
+        
         if (plan) {
+          console.log('🔍 LOAD DEBUG - Plan found, setting existing plan ID:', plan.id);
           setExistingPlanId(plan.id);
           
           // Convert plan data to storeProductions format
@@ -97,6 +107,7 @@ const ProductionPage: React.FC = () => {
           setStoreBoxes(newStoreBoxes);
           setStoreDeliveryDates(newStoreDeliveryDates);
         } else {
+          console.log('🔍 LOAD DEBUG - No plan found for date:', date);
           // Initialize empty store productions and boxes if no plan exists
           initializeStoreProductions();
           initializeStoreBoxes();
@@ -302,6 +313,13 @@ const ProductionPage: React.FC = () => {
         throw new Error(`Veuillez définir les dates de livraison pour: ${storeNames}`);
       }
 
+      console.log('🗓️ SAVE DEBUG - Current date state:', date);
+      console.log('🗓️ SAVE DEBUG - Date type:', typeof date);
+      console.log('🗓️ SAVE DEBUG - Date length:', date?.length);
+      console.log('🗓️ SAVE DEBUG - Date parsed as Date object:', new Date(date));
+      console.log('🗓️ SAVE DEBUG - Date ISO string:', new Date(date).toISOString());
+      console.log('🗓️ SAVE DEBUG - Date local string:', new Date(date).toLocaleDateString());
+
       const planData = {
         date,
         totalProduction: totals.grandTotal,
@@ -356,14 +374,36 @@ const ProductionPage: React.FC = () => {
         }).filter(store => store.totalQuantity > 0 || (store.boxes && store.boxes.length > 0))
       };
 
+      console.log('🗓️ SAVE DEBUG - Final planData being sent:', planData);
+      console.log('🗓️ SAVE DEBUG - planData.date:', planData.date);
+      console.log('🗓️ SAVE DEBUG - planData structure:', JSON.stringify(planData, null, 2));
+
       console.log('Saving plan data:', planData); // Debug log
       console.log('Store delivery dates being saved:', storeDeliveryDates); // Debug delivery dates
       const savedPlanId = await savePlan(planData);
+      
+      console.log('🗓️ SAVE DEBUG - Returned plan ID:', savedPlanId);
+      console.log('🗓️ SAVE DEBUG - Expected date after save:', date);
+      
       if (savedPlanId) {
         setExistingPlanId(savedPlanId);
         
+        // Store the saved plan info in localStorage for immediate access by PlansPage
+        const savedPlanInfo = {
+          id: savedPlanId,
+          date: date,
+          timestamp: Date.now()
+        };
+        
+        console.log('🗓️ SAVE DEBUG - Storing in localStorage:', savedPlanInfo);
+        localStorage.setItem('recentlySavedPlan', JSON.stringify(savedPlanInfo));
+        
         // Dispatch event to notify Plans page to refresh
-        window.dispatchEvent(new CustomEvent('planSaved'));
+        window.dispatchEvent(new CustomEvent('planSaved', { 
+          detail: { planId: savedPlanId, date: date }
+        }));
+        
+        console.log('🗓️ SAVE DEBUG - Dispatched planSaved event with date:', date);
         
         // Show success message with link to Plans page
         const message = existingPlanId 
@@ -371,7 +411,10 @@ const ProductionPage: React.FC = () => {
           : 'Plan de production enregistré avec succès !\n\nVoulez-vous voir tous les plans sauvegardés ?';
         
         if (window.confirm(message)) {
-          window.location.href = '/plans';
+          // Add a small delay to ensure event propagates before navigation
+          setTimeout(() => {
+            window.location.href = '/plans';
+          }, 100);
         }
       } else {
         throw new Error('No plan ID returned from save operation');
@@ -490,7 +533,13 @@ const ProductionPage: React.FC = () => {
               id="date"
               name="date"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => {
+                console.log('📅 DATE INPUT DEBUG - Date changed from:', date, 'to:', e.target.value);
+                console.log('📅 DATE INPUT DEBUG - Event target value type:', typeof e.target.value);
+                console.log('📅 DATE INPUT DEBUG - Event target value length:', e.target.value?.length);
+                setDate(e.target.value);
+                console.log('📅 DATE INPUT DEBUG - State should now be:', e.target.value);
+              }}
               className="shadow-sm focus:ring-krispy-green focus:border-krispy-green block w-full sm:text-sm border-gray-300 rounded-md"
             />
           </div>

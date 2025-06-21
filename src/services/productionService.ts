@@ -29,19 +29,40 @@ const handleApiError = (error: any, customMessage: string) => {
 
 export const getCurrentDayPlan = async (date: string) => {
   try {
+    console.log('🔎 GET PLAN DEBUG - Fetching plan for date:', date);
+    console.log('🔎 GET PLAN DEBUG - Date type:', typeof date);
+    console.log('🔎 GET PLAN DEBUG - Date length:', date?.length);
+    
     const headers = await getAuthHeaders();
-    const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/get-current-plan?date=${date}`,
-      { headers }
-    );
+    const url = `${SUPABASE_URL}/functions/v1/get-current-plan?date=${date}`;
+    
+    console.log('🔎 GET PLAN DEBUG - Request URL:', url);
+    console.log('🔎 GET PLAN DEBUG - Headers:', headers);
+    
+    const response = await fetch(url, { headers });
+
+    console.log('🔎 GET PLAN DEBUG - Response status:', response.status);
+    console.log('🔎 GET PLAN DEBUG - Response ok:', response.ok);
 
     if (!response.ok) {
-      throw { status: response.status, message: await response.text() };
+      const errorText = await response.text();
+      console.log('🔎 GET PLAN DEBUG - Error response:', errorText);
+      throw { status: response.status, message: errorText };
     }
 
     const data = await response.json();
+    console.log('🔎 GET PLAN DEBUG - Response data:', data);
+    console.log('🔎 GET PLAN DEBUG - Plan date in response:', data?.date);
+    console.log('🔎 GET PLAN DEBUG - Expected date was:', date);
+    console.log('🔎 GET PLAN DEBUG - Date comparison:', {
+      requested: date,
+      received: data?.date,
+      match: data?.date === date
+    });
+    
     return data;
   } catch (error) {
+    console.error('🔎 GET PLAN DEBUG - Error:', error);
     handleApiError(error, 'Failed to fetch current day plan');
   }
 };
@@ -90,7 +111,15 @@ export const validatePlan = async (planId: string) => {
 
 export const savePlan = async (planData: any) => {
   try {
+    console.log('🔗 API DEBUG - About to save plan with data:', planData);
+    console.log('🔗 API DEBUG - planData.date being sent:', planData.date);
+    console.log('🔗 API DEBUG - typeof planData.date:', typeof planData.date);
+    
     const headers = await getAuthHeaders();
+    
+    console.log('🔗 API DEBUG - Headers:', headers);
+    console.log('🔗 API DEBUG - Request body (stringified):', JSON.stringify(planData));
+    
     const response = await fetch(
       `${SUPABASE_URL}/functions/v1/save-production-plan`,
       {
@@ -100,13 +129,22 @@ export const savePlan = async (planData: any) => {
       }
     );
 
+    console.log('🔗 API DEBUG - Response status:', response.status);
+    console.log('🔗 API DEBUG - Response ok:', response.ok);
+
     if (!response.ok) {
-      throw { status: response.status, message: await response.text() };
+      const errorText = await response.text();
+      console.log('🔗 API DEBUG - Error response text:', errorText);
+      throw { status: response.status, message: errorText };
     }
 
     const data = await response.json();
+    console.log('🔗 API DEBUG - Response data:', data);
+    console.log('🔗 API DEBUG - Returned plan ID:', data.id);
+    
     return data.id;
   } catch (error) {
+    console.error('🔗 API DEBUG - Save plan error:', error);
     handleApiError(error, 'Failed to save production plan');
   }
 };

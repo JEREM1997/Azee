@@ -36,6 +36,8 @@ const PlansPage: React.FC = () => {
   const [selectedPlan, setSelectedPlan] = useState<ProductionPlan | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [recentlySavedPlanId, setRecentlySavedPlanId] = useState<string | null>(null);
 
   const { currentUser } = useAuth();
   const { varieties, forms, boxes } = useAdmin();
@@ -48,15 +50,18 @@ const PlansPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
+      console.log('🔄 Loading plans from server...');
       const plansData = await getProductionPlans(30);
-      console.log('Fetched plans data:', plansData);
+      console.log('✅ Fetched plans data:', plansData);
+      console.log('📊 Plans count:', plansData?.length || 0);
       
       // Debug delivery dates in fetched plans
       if (plansData && plansData.length > 0) {
+        console.log('📅 Plan dates found:');
         plansData.forEach((plan: ProductionPlan) => {
-          console.log(`Plan ${plan.id} (${plan.date}):`);
+          console.log(`  - ${plan.date} (ID: ${plan.id}, Total: ${plan.total_production})`);
           plan.stores?.forEach((store: any) => {
-            console.log(`  Store ${store.store_name}: deliverydate = ${store.deliverydate || 'NOT SET'}`);
+            console.log(`    Store ${store.store_name}: deliverydate = ${store.deliverydate || 'NOT SET'}`);
             if (store.deliverydate) {
               console.log(`    - Raw deliverydate: "${store.deliverydate}"`);
               console.log(`    - Type: ${typeof store.deliverydate}`);
@@ -71,11 +76,14 @@ const PlansPage: React.FC = () => {
             }
           });
         });
+      } else {
+        console.log('⚠️ No plans data received or empty array');
       }
       
       setPlans(plansData || []);
+      console.log('✅ Plans state updated successfully');
     } catch (err) {
-      console.error('Error loading plans:', err);
+      console.error('❌ Error loading plans:', err);
       setError(err instanceof Error ? err.message : 'Error loading plans');
     } finally {
       setLoading(false);
@@ -85,10 +93,45 @@ const PlansPage: React.FC = () => {
   useEffect(() => {
     loadPlans();
 
-    const handlePlanUpdate = () => {
-      console.log('Plan update event received, refreshing plans...');
+    const handlePlanUpdate = (event?: CustomEvent) => {
+      console.log('Plan update event received, refreshing plans...', event?.detail);
+      
+      // Track the recently saved plan for visual feedback
+      if (event?.detail?.planId) {
+        setRecentlySavedPlanId(event.detail.planId);
+        // Clear the highlight after 10 seconds
+        setTimeout(() => setRecentlySavedPlanId(null), 10000);
+      }
+      
       loadPlans();
     };
+
+    // Check for recently saved plan in localStorage
+    const checkRecentlySavedPlan = () => {
+      try {
+        const savedPlanInfo = localStorage.getItem('recentlySavedPlan');
+        if (savedPlanInfo) {
+          const planInfo = JSON.parse(savedPlanInfo);
+          const timeDiff = Date.now() - planInfo.timestamp;
+          
+          // If plan was saved within last 30 seconds, force a refresh
+          if (timeDiff < 30000) {
+            console.log('Found recently saved plan, forcing refresh:', planInfo);
+            setRecentlySavedPlanId(planInfo.id);
+            // Clear the highlight after 10 seconds
+            setTimeout(() => setRecentlySavedPlanId(null), 10000);
+            loadPlans();
+            // Clear the saved plan info after using it
+            localStorage.removeItem('recentlySavedPlan');
+          }
+        }
+      } catch (error) {
+        console.error('Error checking recently saved plan:', error);
+      }
+    };
+
+    // Check immediately on mount
+    checkRecentlySavedPlan();
 
     window.addEventListener('planSaved', handlePlanUpdate);
 
@@ -170,22 +213,57 @@ const PlansPage: React.FC = () => {
 
   const refreshPlans = async () => {
     console.log('Manual refresh triggered');
-    await loadPlans();
+    setRefreshing(true);
+    try {
+      await loadPlans();
+      console.log('✅ Manual refresh completed successfully');
+    } catch (error) {
+      console.error('❌ Manual refresh failed:', error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   // Add effect to refresh when page becomes visible (user returns from editing)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        console.log('Page became visible, refreshing plans...');
-        loadPlans();
+        console.log('👁️ Page became visible, checking for updates...');
+        
+        // Check for recently saved plans first
+        const savedPlanInfo = localStorage.getItem('recentlySavedPlan');
+        if (savedPlanInfo) {
+          console.log('🔍 Found recently saved plan info, refreshing immediately');
+          try {
+            const planInfo = JSON.parse(savedPlanInfo);
+            setRecentlySavedPlanId(planInfo.id);
+            setTimeout(() => setRecentlySavedPlanId(null), 10000);
+            localStorage.removeItem('recentlySavedPlan');
+          } catch (error) {
+            console.error('Error parsing saved plan info:', error);
+          }
+          loadPlans();
+        } else {
+          // Add a small delay to ensure any pending operations complete
+          setTimeout(() => {
+            console.log('🔄 Refreshing plans after visibility change...');
+            loadPlans();
+          }, 500);
+        }
       }
     };
 
+    const handleFocus = () => {
+      console.log('🎯 Window focused, refreshing plans...');
+      loadPlans();
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [loadPlans]);
 
@@ -263,11 +341,11 @@ const PlansPage: React.FC = () => {
           </div>
           <button
             onClick={refreshPlans}
-            disabled={loading}
+            disabled={loading || refreshing}
             className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Actualiser
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading || refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Actualisation...' : 'Actualiser'}
           </button>
         </div>
       </div>
@@ -298,16 +376,29 @@ const PlansPage: React.FC = () => {
           <ul className="divide-y divide-gray-200">
             {plans.map((plan) => (
               <li key={plan.id}>
-                <div className="px-4 py-4 sm:px-6 hover:bg-gray-50">
+                <div className={`px-4 py-4 sm:px-6 hover:bg-gray-50 transition-colors duration-200 ${
+                  recentlySavedPlanId === plan.id 
+                    ? 'bg-green-50 border-l-4 border-green-400 shadow-md' 
+                    : ''
+                }`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
-                        <Calendar className="h-6 w-6 text-krispy-green" />
+                        <Calendar className={`h-6 w-6 ${
+                          recentlySavedPlanId === plan.id ? 'text-green-600' : 'text-krispy-green'
+                        }`} />
                       </div>
                       <div className="ml-4">
                         <div className="flex items-center">
-                          <p className="text-sm font-medium text-krispy-green truncate">
+                          <p className={`text-sm font-medium truncate ${
+                            recentlySavedPlanId === plan.id ? 'text-green-700' : 'text-krispy-green'
+                          }`}>
                             {formatDate(plan.date)}
+                            {recentlySavedPlanId === plan.id && (
+                              <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 animate-pulse">
+                                ✨ Récemment sauvegardé
+                              </span>
+                            )}
                           </p>
                         </div>
                         <div className="mt-2 flex items-center text-sm text-gray-500">
