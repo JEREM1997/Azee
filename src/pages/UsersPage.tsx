@@ -158,24 +158,24 @@ const UsersPage: React.FC = () => {
         
         // Update existing user - first update basic info
         const updatedUser = await updateUser(formValues.id, {
-          fullName: formValues.fullName,
-          role: formValues.role
-        });
+            fullName: formValues.fullName,
+            role: formValues.role
+          });
 
         console.log('User updated successfully:', updatedUser);
 
         if (!updatedUser) {
-          throw new Error('Failed to update user');
-        }
+            throw new Error('Failed to update user');
+          }
 
         // Then update store assignments if the role is 'store'
         console.log('Updating store assignments...');
-        if (formValues.role === 'store') {
-          await updateUserStores(formValues.id, formValues.storeIds);
+          if (formValues.role === 'store') {
+              await updateUserStores(formValues.id, formValues.storeIds);
           console.log('Store assignments updated for store role');
-        } else {
+          } else {
           // Clear store assignments for non-store roles
-          await updateUserStores(formValues.id, []);
+            await updateUserStores(formValues.id, []);
           console.log('Store assignments cleared for non-store role');
         }
 

@@ -925,8 +925,8 @@ const ProductionPage: React.FC = () => {
                             </tr>
                           );
                         })}
-                    </tbody>
-                  </table>
+                  </tbody>
+                </table>
                 </div>
               </div>
             </div>
