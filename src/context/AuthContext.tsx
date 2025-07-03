@@ -1,110 +1,199 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User } from '../types';
-import { supabase } from '../lib/supabase';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { User, AuthState, AppError } from '../types';
+import { AppErrorHandler, ErrorCodes } from '../utils/errorHandling';
 
-interface AuthContextType {
-  currentUser: User | null;
-  isLoading: boolean;
+interface AuthContextType extends AuthState {
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  updateUserRole: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
   isProduction: boolean;
   isStore: boolean;
-  logout: () => Promise<void>;
+  currentUser: User | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const checkUser = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!session) {
-          setCurrentUser(null);
-          setIsLoading(false);
-          return;
-        }
-
-        // Get user role from metadata first
-        const role = session.user.user_metadata?.role || 'store';
-        
-        setCurrentUser({
-          id: session.user.id,
-          email: session.user.email || '',
-          fullName: session.user.user_metadata?.full_name || session.user.email || '',
-          role: role,
-          storeIds: session.user.user_metadata?.store_ids || (session.user.user_metadata?.store_id ? [session.user.user_metadata.store_id] : [])
-        });
-      } catch (error) {
-        console.error('Error checking user:', error);
-        setCurrentUser(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    checkUser();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        setCurrentUser(null);
-        navigate('/login');
-        return;
-      }
-
-      if (session) {
-        const role = session.user.user_metadata?.role || 'store';
-        
-        setCurrentUser({
-          id: session.user.id,
-          email: session.user.email || '',
-          fullName: session.user.user_metadata?.full_name || session.user.email || '',
-          role: role,
-          storeIds: session.user.user_metadata?.store_ids || (session.user.user_metadata?.store_id ? [session.user.user_metadata.store_id] : [])
-        });
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [navigate]);
-
-  const logout = async () => {
-    try {
-      await supabase.auth.signOut();
-      setCurrentUser(null);
-      navigate('/login');
-    } catch (error) {
-      console.error('Error logging out:', error);
-    }
-  };
-
-  return (
-    <AuthContext.Provider value={{
-      currentUser,
-      isLoading,
-      isAuthenticated: !!currentUser,
-      isAdmin: currentUser?.role === 'admin',
-      isProduction: currentUser?.role === 'production',
-      isStore: currentUser?.role === 'store',
-      logout
-    }}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
-
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+};
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [state, setState] = useState<AuthState>({
+    user: null,
+    loading: true,
+    error: null,
+  });
+  const navigate = useNavigate();
+
+  // Initialize auth state
+  useEffect(() => {
+    const initializeAuth = async () => {
+      try {
+        // Check for existing session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+
+        if (session?.user) {
+          const user: User = {
+            id: session.user.id,
+            email: session.user.email!,
+            role: session.user.user_metadata?.role || 'store',
+            storeIds: session.user.user_metadata?.store_ids || [],
+            fullName: session.user.user_metadata?.full_name || session.user.email!,
+          };
+          setState({ user, loading: false, error: null });
+        } else {
+          setState({ user: null, loading: false, error: null });
+        }
+
+        // Listen for auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          async (event, session) => {
+            if (event === 'SIGNED_IN' && session?.user) {
+              const user: User = {
+                id: session.user.id,
+                email: session.user.email!,
+                role: session.user.user_metadata?.role || 'store',
+                storeIds: session.user.user_metadata?.store_ids || [],
+                fullName: session.user.user_metadata?.full_name || session.user.email!,
+              };
+              setState({ user, loading: false, error: null });
+            } else if (event === 'SIGNED_OUT') {
+              setState({ user: null, loading: false, error: null });
+              navigate('/login');
+            } else if (event === 'TOKEN_REFRESHED') {
+              // Handle token refresh
+              console.log('Token refreshed');
+            }
+          }
+        );
+
+        // Cleanup subscription
+        return () => {
+          subscription.unsubscribe();
+        };
+      } catch (error) {
+        setState({
+          user: null,
+          loading: false,
+          error: AppErrorHandler.handleAuthError(error),
+        });
+      }
+    };
+
+    initializeAuth();
+  }, [navigate]);
+
+  const login = async (email: string, password: string) => {
+    try {
+      setState(prev => ({ ...prev, loading: true, error: null }));
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        const user: User = {
+          id: data.user.id,
+          email: data.user.email!,
+          role: data.user.user_metadata?.role || 'store',
+          storeIds: data.user.user_metadata?.store_ids || [],
+          fullName: data.user.user_metadata?.full_name || data.user.email!,
+        };
+        setState({ user, loading: false, error: null });
+        navigate('/');
+      }
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: AppErrorHandler.handleAuthError(error),
+      }));
+      throw error; // Re-throw for UI handling
+    }
+  };
+
+  const logout = async () => {
+    try {
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      setState({ user: null, loading: false, error: null });
+      navigate('/login');
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: AppErrorHandler.handleAuthError(error),
+      }));
+    }
+  };
+
+  const updateUserRole = async () => {
+    try {
+      setState(prev => ({ ...prev, loading: true, error: null }));
+
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session) throw new Error('No active session');
+
+      // Call the auth-role Edge Function
+      const { data, error } = await supabase.functions.invoke('auth-role', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) throw error;
+
+      // Force session refresh to get new role
+      await supabase.auth.refreshSession();
+
+      // Update local state with new role
+      if (state.user) {
+        setState({
+          user: {
+            ...state.user,
+            role: data.role,
+            storeIds: data.store_ids || [],
+          },
+          loading: false,
+          error: null,
+        });
+      }
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: AppErrorHandler.handleAuthError(error),
+      }));
+    }
+  };
+
+  const value: AuthContextType = {
+    ...state,
+    currentUser: state.user,
+    login,
+    logout,
+    updateUserRole,
+    isAuthenticated: !!state.user,
+    isAdmin: state.user?.role === 'admin',
+    isProduction: state.user?.role === 'production',
+    isStore: state.user?.role === 'store',
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

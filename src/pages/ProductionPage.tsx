@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Minus, Save, AlertTriangle, Edit, Sparkles, Brain, TrendingUp, Store } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
-import { savePlan, getCurrentDayPlan } from '../services/productionService';
 import { useAuth } from '../context/AuthContext';
 import { aiForecastService, AIForecastResult } from '../services/aiForecastService';
+import { productionService } from '../services/productionService';
+import { ProductionPlan, Store as StoreType, DonutVariety, BoxConfiguration } from '../types';
 
 const ProductionPage: React.FC = () => {
   // Get date from URL params or use today's date
@@ -35,12 +36,12 @@ const ProductionPage: React.FC = () => {
   const [aiError, setAiError] = useState<string | null>(null);
 
   const { stores, varieties, boxes, forms } = useAdmin();
-  const { currentUser } = useAuth();
+  const { user } = useAuth();
 
   // Determine permissions
-  const canEdit = currentUser && (currentUser.role === 'admin' || currentUser.role === 'production');
-  const isStoreManager = currentUser && currentUser.role === 'store';
-  const assignedStoreIds = isStoreManager ? (currentUser.storeIds || []) : [];
+  const canEdit = user && (user.role === 'admin' || user.role === 'production');
+  const isStoreManager = user && user.role === 'store';
+  const assignedStoreIds = isStoreManager ? (user.storeIds || []) : [];
 
   // Filter stores based on role
   const visibleStores = canEdit
@@ -64,7 +65,7 @@ const ProductionPage: React.FC = () => {
         console.log('🔍 LOAD DEBUG - Date type:', typeof date);
         console.log('🔍 LOAD DEBUG - Date length:', date?.length);
         
-        const plan = await getCurrentDayPlan(date);
+        const plan = await productionService.getProductionPlan(date);
         
         console.log('🔍 LOAD DEBUG - Received plan:', plan);
         console.log('🔍 LOAD DEBUG - Plan date in response:', plan?.date);
@@ -134,7 +135,7 @@ const ProductionPage: React.FC = () => {
         } else {
           setError(errorMessage);
           // Initialize empty state on error
-        initializeStoreProductions();
+          initializeStoreProductions();
           initializeStoreBoxes();
         }
       } finally {
@@ -310,7 +311,7 @@ const ProductionPage: React.FC = () => {
       setError(null);
       setSaving(true);
 
-      if (!currentUser) {
+      if (!user) {
         throw new Error('User not authenticated');
       }
 
@@ -331,7 +332,7 @@ const ProductionPage: React.FC = () => {
         date,
         totalProduction: totals.grandTotal,
         status: 'draft',
-        userId: currentUser.id,
+        userId: user.id,
         existingPlanId,
         stores: stores.filter(store => store.isActive).map(store => {
           const storeData = storeProductions[store.id] || {};
@@ -387,44 +388,88 @@ const ProductionPage: React.FC = () => {
 
       console.log('Saving plan data:', planData); // Debug log
       console.log('Store delivery dates being saved:', storeDeliveryDates); // Debug delivery dates
-      const savedPlanId = await savePlan(planData);
       
-      console.log('🗓️ SAVE DEBUG - Returned plan ID:', savedPlanId);
+      // Transform planData to match ProductionPlan interface
+      const productionPlanData: ProductionPlan = {
+        id: existingPlanId || '',
+        date: planData.date,
+        total_production: planData.totalProduction,
+        status: 'draft',
+        stores: planData.stores.map((store: { 
+          storeId: string;
+          storeName: string;
+          deliveryDate?: string;
+          totalQuantity: number;
+          items: Array<{
+            varietyId: string;
+            varietyName: string;
+            formId: string;
+            formName: string;
+            quantity: number;
+          }>;
+          boxes: Array<{
+            boxId: string;
+            boxName: string;
+            quantity: number;
+          }>;
+        }) => ({
+          store_id: store.storeId,
+          store_name: store.storeName,
+          delivery_date: store.deliveryDate,
+          total_quantity: store.totalQuantity,
+          production_items: store.items.map(item => ({
+            variety_id: item.varietyId,
+            variety_name: item.varietyName,
+            form_id: item.formId,
+            form_name: item.formName,
+            quantity: item.quantity,
+            received: undefined,
+            waste: undefined
+          })),
+          box_productions: store.boxes.map(box => ({
+            box_id: box.boxId,
+            box_name: box.boxName,
+            quantity: box.quantity,
+            received: undefined,
+            waste: undefined
+          })),
+          confirmed: false,
+          delivery_confirmed: false,
+          waste_reported: false
+        }))
+      };
+      
+      await productionService.saveProductionPlan(productionPlanData);
+      
       console.log('🗓️ SAVE DEBUG - Expected date after save:', date);
       
-      if (savedPlanId) {
-        setExistingPlanId(savedPlanId);
-        
-        // Store the saved plan info in localStorage for immediate access by PlansPage
-        const savedPlanInfo = {
-          id: savedPlanId,
-          date: date,
-          timestamp: Date.now()
-        };
-        
-        console.log('🗓️ SAVE DEBUG - Storing in localStorage:', savedPlanInfo);
-        localStorage.setItem('recentlySavedPlan', JSON.stringify(savedPlanInfo));
-        
-        // Dispatch event to notify Plans page to refresh
-        window.dispatchEvent(new CustomEvent('planSaved', { 
-          detail: { planId: savedPlanId, date: date }
-        }));
-        
-        console.log('🗓️ SAVE DEBUG - Dispatched planSaved event with date:', date);
-        
-        // Show success message with link to Plans page
-        const message = existingPlanId 
-          ? 'Plan de production mis à jour avec succès !\n\nVoulez-vous voir tous les plans sauvegardés ?'
-          : 'Plan de production enregistré avec succès !\n\nVoulez-vous voir tous les plans sauvegardés ?';
-        
-        if (window.confirm(message)) {
-          // Add a small delay to ensure event propagates before navigation
-          setTimeout(() => {
-            window.location.href = '/plans';
-          }, 100);
-        }
-      } else {
-        throw new Error('No plan ID returned from save operation');
+      // Store the saved plan info in localStorage for immediate access by PlansPage
+      const savedPlanInfo = {
+        id: existingPlanId,
+        date: date,
+        timestamp: Date.now()
+      };
+      
+      console.log('🗓️ SAVE DEBUG - Storing in localStorage:', savedPlanInfo);
+      localStorage.setItem('recentlySavedPlan', JSON.stringify(savedPlanInfo));
+      
+      // Dispatch event to notify Plans page to refresh
+      window.dispatchEvent(new CustomEvent('planSaved', { 
+        detail: { planId: existingPlanId, date: date }
+      }));
+      
+      console.log('🗓️ SAVE DEBUG - Dispatched planSaved event with date:', date);
+      
+      // Show success message with link to Plans page
+      const successMessage = existingPlanId 
+        ? 'Plan de production mis à jour avec succès !\n\nVoulez-vous voir tous les plans sauvegardés ?'
+        : 'Plan de production enregistré avec succès !\n\nVoulez-vous voir tous les plans sauvegardés ?';
+      
+      if (window.confirm(successMessage)) {
+        // Add a small delay to ensure event propagates before navigation
+        setTimeout(() => {
+          window.location.href = '/plans';
+        }, 100);
       }
     } catch (error) {
       console.error('Error saving production plan:', error);
@@ -442,11 +487,15 @@ const ProductionPage: React.FC = () => {
       
       console.log('🤖 Generating AI forecast for date:', date);
       
+      const activeStores = stores.filter((s: StoreType) => s.isActive);
+      const activeVarieties = varieties.filter((v: DonutVariety) => v.isActive);
+      const activeBoxes = boxes.filter((b: BoxConfiguration) => b.isActive);
+      
       const forecasts = await aiForecastService.generateForecast(
         date,
-        stores.filter(s => s.isActive),
-        varieties.filter(v => v.isActive),
-        boxes.filter(b => b.isActive)
+        activeStores,
+        activeVarieties,
+        activeBoxes
       );
       
       setAiForecasts(forecasts);
@@ -515,7 +564,7 @@ const ProductionPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="container mx-auto px-4 py-8">
       <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Plan de Production</h1>

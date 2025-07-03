@@ -1,18 +1,22 @@
+// @ts-ignore - Deno runtime environment
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS'
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-retry-after',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
 };
 
+// @ts-ignore - Deno global
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // @ts-ignore - Deno env
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    // @ts-ignore - Deno env
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!supabaseUrl || !supabaseServiceKey) {
@@ -30,12 +34,28 @@ Deno.serve(async (req) => {
       }
     );
 
-    // Get the date from query params or use today
-    const url = new URL(req.url);
-    const requestedDate = url.searchParams.get('date') || new Date().toISOString().split('T')[0];
+    console.log(`[get-current-plan] Incoming ${req.method} at`, new Date().toISOString());
+    console.log(`[get-current-plan] Auth header present:`, !!req.headers.get('Authorization'));
+
+    let requestedDate: string | null;
+    if (req.method === 'POST') {
+      const body = await req.json().catch(() => ({}));
+      requestedDate = body?.date || null;
+    } else {
+      const url = new URL(req.url);
+      requestedDate = url.searchParams.get('date');
+    }
 
     if (!requestedDate) {
-      throw new Error('Date parameter is required');
+      // default to today if not provided
+      requestedDate = new Date().toISOString().split('T')[0];
+    }
+
+    console.log(`[get-current-plan] Requested date:`, requestedDate);
+
+    // Validate date format basic YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
+      throw new Error('Invalid date format');
     }
 
     // Get the user's role and store_ids from the JWT
@@ -97,6 +117,9 @@ Deno.serve(async (req) => {
       .limit(1)
       .single();
 
+    console.log(`[get-current-plan] DB query returned plan`, plan ? '✅' : '❌');
+    if (plan) console.log(`[get-current-plan] plan.id=`, plan.id, `stores=`, plan.stores?.length || 0);
+
     if (dbError) {
       // If no rows found, return null
       if (dbError.code === 'PGRST116') {
@@ -110,7 +133,7 @@ Deno.serve(async (req) => {
           }
         );
       }
-      console.error('Database error:', dbError);
+      console.error('[get-current-plan] Database error:', dbError);
       throw new Error(`Database error: ${dbError.message}`);
     }
 
@@ -144,7 +167,7 @@ Deno.serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error('Edge function error:', error);
+    console.error('[get-current-plan] Edge function error:', error);
     return new Response(
       JSON.stringify({ 
         error: error.message,

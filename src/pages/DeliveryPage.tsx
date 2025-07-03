@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Edit, Check, Printer, FileText, TruckIcon, AlertTriangle, Truck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
-import { updateDeliveryStatus, getProductionPlans } from '../services/productionService';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
+import { apiService } from '../services/apiService';
+import { productionService } from '../services/productionService';
 
 // Delivery-specific types
 interface DeliveryProductionItem {
@@ -68,9 +69,16 @@ const DeliveryPage: React.FC = () => {
       setError(null);
       
       // Load all recent production plans (last 30 days) to find stores with deliveries for the selected date
-      const plans = await getProductionPlans(30);
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
       
-      if (!plans || plans.length === 0) {
+      const { data: plans, error } = await apiService.production.getProductionPlans(
+        startDate.toISOString().split('T')[0],
+        endDate.toISOString().split('T')[0]
+      );
+      
+      if (error || !plans || plans.length === 0) {
         setCurrentPlan(null);
         return;
       }
@@ -301,21 +309,23 @@ const DeliveryPage: React.FC = () => {
       storeDetails.production_items?.forEach((item) => {
         finalReceivedQuantities[item.id] = receivedQuantities[item.id] !== undefined 
           ? receivedQuantities[item.id] 
-          : item.quantity; // Default to planned quantity
+          : item.quantity;
       });
 
       // For box productions
       storeDetails.box_productions?.forEach((box) => {
         finalBoxReceivedQuantities[box.id] = boxReceivedQuantities[box.id] !== undefined 
           ? boxReceivedQuantities[box.id] 
-          : box.quantity; // Default to planned quantity
+          : box.quantity;
       });
 
-      await updateDeliveryStatus(storeDetails.id, {
+      const { error } = await apiService.delivery.updateDeliveryStatus(storeDetails.id, {
         deliveryConfirmed: true,
         received: finalReceivedQuantities,
         boxReceived: finalBoxReceivedQuantities
       });
+
+      if (error) throw error;
 
       // Update local state with the final quantities
       setReceivedQuantities(finalReceivedQuantities);
@@ -338,12 +348,14 @@ const DeliveryPage: React.FC = () => {
       setError(null);
 
       // Only save waste quantities since delivery must be confirmed first
-      const updateData: any = {
+      const updateData = {
         waste: wasteQuantities,
         boxWaste: boxWasteQuantities
       };
 
-      await updateDeliveryStatus(storeDetails.id, updateData);
+      const { error } = await apiService.delivery.updateDeliveryStatus(storeDetails.id, updateData);
+      
+      if (error) throw error;
 
       await loadCurrentPlan();
     } catch (err) {

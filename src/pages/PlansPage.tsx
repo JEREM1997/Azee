@@ -1,33 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Calendar, Eye, FileText, AlertTriangle, RefreshCw, Edit, Trash2 } from 'lucide-react';
-import { getProductionPlans, deletePlan } from '../services/productionService';
+import { productionService } from '../services/productionService';
 import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
-
-interface ProductionPlan {
-  id: string;
-  date: string;
-  total_production: number;
-  status?: 'draft' | 'validated' | 'completed';
-  created_at: string;
-  stores: Array<{
-    id: string;
-    store_id: string;
-    store_name: string;
-    deliverydate?: string;
-    total_quantity: number;
-    production_items: Array<{
-      variety_id: string;
-      variety_name: string;
-      quantity: number;
-    }>;
-    box_productions: Array<{
-      box_id: string;
-      box_name: string;
-      quantity: number;
-    }>;
-  }>;
-}
+import { ProductionPlan, StorePlan, ProductionItem, BoxProduction } from '../types';
 
 const PlansPage: React.FC = () => {
   const [plans, setPlans] = useState<ProductionPlan[]>([]);
@@ -39,16 +15,20 @@ const PlansPage: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [recentlySavedPlanId, setRecentlySavedPlanId] = useState<string | null>(null);
 
-  const { currentUser } = useAuth();
+  const { user } = useAuth();
   const { varieties, forms, boxes } = useAdmin();
 
   // Determine permissions
-  const canEdit = currentUser && (currentUser.role === 'admin' || currentUser.role === 'production');
+  const canEdit = user && (user.role === 'admin' || user.role === 'production');
 
   const loadPlans = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
+      
+      // Get date range for last 90 days
+      const endDate = new Date().toISOString().split('T')[0];
+      const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
       // Check if we're expecting a recently saved plan
       const expectedPlanInfo = localStorage.getItem('recentlySavedPlan');
@@ -63,7 +43,7 @@ const PlansPage: React.FC = () => {
       }
       
       console.log('🔄 Loading plans from server...');
-      const plansData = await getProductionPlans(90);
+      const plansData = await productionService.getProductionPlans(startDate, endDate);
       console.log('✅ Fetched plans data:', plansData);
       console.log('📊 Plans count:', plansData?.length || 0);
       
@@ -109,14 +89,14 @@ const PlansPage: React.FC = () => {
         console.log('📅 Plan dates found:');
         plansData.forEach((plan: ProductionPlan) => {
           console.log(`  - ${plan.date} (ID: ${plan.id}, Total: ${plan.total_production})`);
-          plan.stores?.forEach((store: any) => {
-            console.log(`    Store ${store.store_name}: deliverydate = ${store.deliverydate || 'NOT SET'}`);
-            if (store.deliverydate) {
-              console.log(`    - Raw deliverydate: "${store.deliverydate}"`);
-              console.log(`    - Type: ${typeof store.deliverydate}`);
-              console.log(`    - Length: ${store.deliverydate.length}`);
-              console.log(`    - Parsed as Date: ${new Date(store.deliverydate)}`);
-              console.log(`    - Formatted (fr-FR): ${new Date(store.deliverydate).toLocaleDateString('fr-FR', {
+          plan.stores?.forEach((store: StorePlan) => {
+            console.log(`    Store ${store.store_name}: delivery_date = ${store.delivery_date || 'NOT SET'}`);
+            if (store.delivery_date) {
+              console.log(`    - Raw delivery_date: "${store.delivery_date}"`);
+              console.log(`    - Type: ${typeof store.delivery_date}`);
+              console.log(`    - Length: ${store.delivery_date.length}`);
+              console.log(`    - Parsed as Date: ${new Date(store.delivery_date)}`);
+              console.log(`    - Formatted (fr-FR): ${new Date(store.delivery_date).toLocaleDateString('fr-FR', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
@@ -127,6 +107,19 @@ const PlansPage: React.FC = () => {
         });
       } else {
         console.log('⚠️ No plans data received or empty array');
+      }
+      
+      // Debug store details
+      if (plansData && plansData.length > 0) {
+        console.log('📊 Store details:');
+        plansData[0].stores?.forEach((store: StorePlan) => {
+          console.log(`Store ${store.store_name}:`);
+          console.log(`  - Store ID: ${store.store_id}`);
+          console.log(`  - Delivery date: ${store.delivery_date || 'NOT SET'}`);
+          console.log(`  - Total quantity: ${store.total_quantity}`);
+          console.log(`  - Production items count: ${store.production_items?.length || 0}`);
+          console.log(`  - Box productions count: ${store.box_productions?.length || 0}`);
+        });
       }
       
       setPlans(plansData || []);
@@ -216,7 +209,7 @@ const PlansPage: React.FC = () => {
     plan.stores?.forEach(store => {
       console.log(`Store ${store.store_name}:`);
       console.log(`  - Store ID: ${store.store_id}`);
-      console.log(`  - Delivery date: ${store.deliverydate || 'NOT SET'}`);
+      console.log(`  - Delivery date: ${store.delivery_date || 'NOT SET'}`);
       console.log(`  - Total quantity: ${store.total_quantity}`);
       console.log(`  - Production items count: ${store.production_items?.length || 0}`);
       console.log(`  - Box productions count: ${store.box_productions?.length || 0}`);
@@ -238,34 +231,17 @@ const PlansPage: React.FC = () => {
   };
 
   const handleDeletePlan = async (plan: ProductionPlan) => {
-    const confirmMessage = `Êtes-vous sûr de vouloir supprimer le plan de production du ${formatDate(plan.date)} ?\n\nCette action est irréversible et supprimera :\n- Le plan de production\n- Toutes les productions par magasin\n- Tous les articles de production\n- Toutes les productions de boîtes\n\nTapez "SUPPRIMER" pour confirmer :`;
-    
-    const userInput = prompt(confirmMessage);
-    
-    if (userInput !== 'SUPPRIMER') {
+    if (!window.confirm(`Êtes-vous sûr de vouloir supprimer le plan de production du ${formatDate(plan.date)} ?`)) {
       return;
     }
 
     try {
       setDeleting(plan.id);
-      setError(null);
-      
-      console.log('Attempting to delete plan:', plan.id);
-      
-      const result = await deletePlan(plan.id);
-      console.log('Delete result:', result);
-      
-      // Refresh the plans list
-      await loadPlans();
-      
-      // Show success message
-      alert('Plan de production supprimé avec succès.');
+      await productionService.deleteProductionPlan(plan.id);
+      setPlans(prevPlans => prevPlans.filter(p => p.id !== plan.id));
     } catch (err) {
       console.error('Error deleting plan:', err);
-      
-      // The error messages are now already in French from the service
-      const errorMessage = err instanceof Error ? err.message : 'Erreur lors de la suppression du plan';
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Error deleting plan');
     } finally {
       setDeleting(null);
     }
@@ -334,58 +310,35 @@ const PlansPage: React.FC = () => {
 
   // Calculate production summary for a plan
   const calculatePlanSummary = (plan: ProductionPlan) => {
-    const varietyTotals: { [varietyId: string]: number } = {};
-    const formTotals: { [formId: string]: number } = {};
-    const boxTotals: { [boxId: string]: number } = {};
-    let totalIndividualDoughnuts = 0;
-    let totalBoxDoughnuts = 0;
+    const summary = {
+      totalQuantity: 0,
+      totalBoxes: 0,
+      totalBoxDoughnuts: 0,
+      stores: plan.stores.map(store => ({
+        store_id: store.store_id,
+        store_name: store.store_name,
+        delivery_date: store.delivery_date,
+        total_quantity: store.total_quantity,
+        production_items: store.production_items,
+        box_productions: store.box_productions
+      }))
+    };
 
-    plan.stores?.forEach(store => {
-      // Calculate individual variety totals
-      store.production_items?.forEach(item => {
-        varietyTotals[item.variety_id] = (varietyTotals[item.variety_id] || 0) + item.quantity;
-        totalIndividualDoughnuts += item.quantity;
-
-        // Add to form totals
-        const variety = varieties.find(v => v.id === item.variety_id);
-        if (variety && variety.formId) {
-          formTotals[variety.formId] = (formTotals[variety.formId] || 0) + item.quantity;
-        }
-      });
-
-      // Calculate box totals and add box varieties to variety and form totals
-      store.box_productions?.forEach(boxProd => {
-        const box = boxes.find(b => b.name === boxProd.box_name);
-        if (box) {
-          boxTotals[box.id] = (boxTotals[box.id] || 0) + boxProd.quantity;
-          totalBoxDoughnuts += box.size * boxProd.quantity;
-
-          // Add varieties from boxes to variety and form totals
-          if (box.varieties && box.varieties.length > 0) {
-            box.varieties.forEach(boxVariety => {
-              const variety = varieties.find(v => v.id === boxVariety.varietyId);
-              if (variety) {
-                const varietyQuantityFromBoxes = boxVariety.quantity * boxProd.quantity;
-                varietyTotals[variety.id] = (varietyTotals[variety.id] || 0) + varietyQuantityFromBoxes;
-
-                if (variety.formId) {
-                  formTotals[variety.formId] = (formTotals[variety.formId] || 0) + varietyQuantityFromBoxes;
-                }
-              }
-            });
-          }
+    // Calculate totals
+    plan.stores.forEach(store => {
+      summary.totalQuantity += store.total_quantity;
+      
+      // Add box quantities
+      store.box_productions.forEach(box => {
+        summary.totalBoxes += box.quantity;
+        const boxConfig = boxes.find(b => b.id === box.box_id);
+        if (boxConfig) {
+          summary.totalBoxDoughnuts += box.quantity * boxConfig.size;
         }
       });
     });
 
-    return {
-      varietyTotals,
-      formTotals,
-      boxTotals,
-      totalDoughnuts: totalIndividualDoughnuts + totalBoxDoughnuts,
-      totalIndividualDoughnuts,
-      totalBoxDoughnuts
-    };
+    return summary;
   };
 
   if (loading) {
@@ -556,16 +509,16 @@ const PlansPage: React.FC = () => {
                       {/* Total Doughnuts Card */}
                       <div className="bg-krispy-green bg-opacity-10 rounded-lg p-4">
                         <h5 className="text-sm font-medium text-krispy-green mb-2">Total Doughnuts</h5>
-                        <p className="text-2xl font-bold text-krispy-green">{summary.totalDoughnuts}</p>
+                        <p className="text-2xl font-bold text-krispy-green">{summary.totalBoxDoughnuts}</p>
                         <div className="mt-2 text-xs text-gray-600">
-                          <p>Individuels: {summary.totalIndividualDoughnuts}</p>
+                          <p>Individuels: {summary.totalQuantity}</p>
                           <div className="mt-1">
-                            <p className="font-medium">En Boîtes: {summary.totalBoxDoughnuts}</p>
+                            <p className="font-medium">En Boîtes: {summary.totalBoxes}</p>
                             <div className="ml-2 space-y-1 max-h-16 overflow-y-auto">
                               {boxes
                                 .filter(b => b.isActive)
                                 .map(box => {
-                                  const boxCount = summary.boxTotals[box.id] || 0;
+                                  const boxCount = summary.stores.find(s => s.store_id === box.id)?.total_quantity || 0;
                                   if (boxCount === 0) return null;
                                   const totalDoughnuts = boxCount * box.size;
                                   return (
@@ -587,7 +540,7 @@ const PlansPage: React.FC = () => {
                           {varieties
                             .filter(v => v.isActive)
                             .map(variety => {
-                              const total = summary.varietyTotals[variety.id] || 0;
+                              const total = summary.stores.find(s => s.store_id === variety.id)?.total_quantity || 0;
                               if (total === 0) return null;
                               const dozens = Math.floor(total / 12);
                               const units = total % 12;
@@ -614,10 +567,10 @@ const PlansPage: React.FC = () => {
                       <div className="bg-gray-50 rounded-lg p-4">
                         <h5 className="text-sm font-medium text-gray-800 mb-2">Par Magasin</h5>
                         <div className="space-y-2 max-h-32 overflow-y-auto">
-                          {selectedPlan.stores?.map(store => {
+                          {summary.stores.map(store => {
                             if (store.total_quantity === 0) return null;
                             return (
-                              <div key={store.id} className="flex justify-between items-center">
+                              <div key={store.store_id} className="flex justify-between items-center">
                                 <span className="text-xs text-gray-600">{store.store_name}</span>
                                 <span className="text-xs font-medium text-gray-900">{store.total_quantity}</span>
                               </div>
@@ -633,7 +586,7 @@ const PlansPage: React.FC = () => {
                           {forms
                             .filter(f => f.isActive)
                             .map(form => {
-                              const baseTotal = summary.formTotals[form.id] || 0;
+                              const baseTotal = summary.stores.find(s => s.store_id === form.id)?.total_quantity || 0;
                               if (baseTotal === 0) return null;
                               const totalWithReserve = Math.ceil(baseTotal * 1.05);
                               return (
@@ -671,15 +624,15 @@ const PlansPage: React.FC = () => {
 
               <div className="space-y-6">
                 {selectedPlan.stores?.map((store) => (
-                  <div key={store.id} className="border rounded-lg p-4">
+                  <div key={store.store_id} className="border rounded-lg p-4">
                     <div className="flex justify-between items-start mb-4">
                       <div>
                         <h4 className="text-lg font-medium text-gray-900">{store.store_name}</h4>
                         {/* Show delivery date only if manually set */}
                         <div className="mt-1 text-sm text-gray-600">
                           <span className="font-medium">Date de Livraison:</span> {
-                            store.deliverydate ? 
-                            new Date(store.deliverydate).toLocaleDateString('fr-FR', {
+                            store.delivery_date ? 
+                            new Date(store.delivery_date).toLocaleDateString('fr-FR', {
                               weekday: 'long',
                               year: 'numeric',
                               month: 'long',

@@ -1,266 +1,87 @@
-import { supabase } from '../lib/supabase';
+import { dateUtils } from '../utils/dateUtils';
+import { validationUtils } from '../utils/validationUtils';
+import { apiService } from './apiService';
 import { ProductionPlan } from '../types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-
-const getAuthHeaders = async () => {
-  const { data: { session }, error } = await supabase.auth.getSession();
-  if (error || !session) {
-    throw new Error('Authentication required');
-  }
-  return {
-    Authorization: `Bearer ${session.access_token}`,
-    'Content-Type': 'application/json',
-  };
-};
-
-const handleApiError = (error: any, customMessage: string) => {
-  console.error(`${customMessage}:`, error);
-  if (error.status === 401 || error.status === 403) {
-    // Token expired or invalid - trigger a refresh
-    supabase.auth.refreshSession();
-    throw new Error('Session expired. Please try again.');
-  }
-  if (error.status === 500) {
-    throw new Error('Server error. Please try again later.');
-  }
-  throw new Error(error.message || customMessage);
-};
-
-export const getCurrentDayPlan = async (date: string) => {
-  try {
-    console.log('🔎 GET PLAN DEBUG - Fetching plan for date:', date);
-    console.log('🔎 GET PLAN DEBUG - Date type:', typeof date);
-    console.log('🔎 GET PLAN DEBUG - Date length:', date?.length);
-    
-    const headers = await getAuthHeaders();
-    const url = `${SUPABASE_URL}/functions/v1/get-current-plan?date=${date}`;
-    
-    console.log('🔎 GET PLAN DEBUG - Request URL:', url);
-    console.log('🔎 GET PLAN DEBUG - Headers:', headers);
-    
-    const response = await fetch(url, { headers });
-
-    console.log('🔎 GET PLAN DEBUG - Response status:', response.status);
-    console.log('🔎 GET PLAN DEBUG - Response ok:', response.ok);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log('🔎 GET PLAN DEBUG - Error response:', errorText);
-      throw { status: response.status, message: errorText };
+export const productionService = {
+  async getProductionPlan(date: string): Promise<ProductionPlan | null> {
+    if (!dateUtils.isValidDateString(date)) {
+      throw new Error('Invalid date format');
     }
 
-    const data = await response.json();
-    console.log('🔎 GET PLAN DEBUG - Response data:', data);
-    console.log('🔎 GET PLAN DEBUG - Plan date in response:', data?.date);
-    console.log('🔎 GET PLAN DEBUG - Expected date was:', date);
-    console.log('🔎 GET PLAN DEBUG - Date comparison:', {
-      requested: date,
-      received: data?.date,
-      match: data?.date === date
-    });
-    
+    const formattedDate = dateUtils.formatApiDate(date);
+    const { data, error } = await apiService.production.getCurrentPlan(formattedDate);
+
+    if (error) throw error;
     return data;
-  } catch (error) {
-    console.error('🔎 GET PLAN DEBUG - Error:', error);
-    handleApiError(error, 'Failed to fetch current day plan');
-  }
-};
+  },
 
-export const getProductionPlans = async (days: number = 30) => {
-  try {
-    console.log('🔎 GET PLANS DEBUG - Fetching plans for last', days, 'days');
-    
-    const headers = await getAuthHeaders();
-    const url = `${SUPABASE_URL}/functions/v1/get-production-plans?days=${days}`;
-    
-    console.log('🔎 GET PLANS DEBUG - Request URL:', url);
-    
-    const response = await fetch(url, { headers });
-
-    console.log('🔎 GET PLANS DEBUG - Response status:', response.status);
-    console.log('🔎 GET PLANS DEBUG - Response ok:', response.ok);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log('🔎 GET PLANS DEBUG - Error response:', errorText);
-      throw { status: response.status, message: errorText };
+  async saveProductionPlan(plan: ProductionPlan): Promise<void> {
+    // Validate the plan
+    const validation = validationUtils.validateProductionPlan(plan);
+    if (!validation.isValid) {
+      throw new Error(validation.errors[0].message);
     }
 
-    const data = await response.json();
-    console.log('🔎 GET PLANS DEBUG - All plans received:', data);
-    console.log('🔎 GET PLANS DEBUG - Plans count:', data?.length || 0);
-    
-    if (data && Array.isArray(data) && data.length > 0) {
-      console.log('🔎 GET PLANS DEBUG - All plan dates in response:');
-      data.forEach((plan: any, index: number) => {
-        console.log(`  ${index + 1}. Date: ${plan.date}, ID: ${plan.id}, Total: ${plan.total_production}`);
-      });
-      
-      // Check for recent plans that might be the missing one
-      const today = new Date().toISOString().split('T')[0];
-      const recentPlans = data.filter((plan: any) => plan.date >= today);
-      console.log('🔎 GET PLANS DEBUG - Recent plans (today and future):', recentPlans.length);
-      recentPlans.forEach((plan: any) => {
-        console.log(`  Recent: ${plan.date} (ID: ${plan.id})`);
-      });
-    } else {
-      console.log('🔎 GET PLANS DEBUG - No plans found or empty response');
-    }
-    
-    return data;
-  } catch (error) {
-    console.error('🔎 GET PLANS DEBUG - Error:', error);
-    handleApiError(error, 'Failed to fetch production plans');
-  }
-};
-
-export const validatePlan = async (planId: string) => {
-  try {
-    const headers = await getAuthHeaders();
-    const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/validate-production-plan`,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ planId }),
-      }
-    );
-
-    if (!response.ok) {
-      throw { status: response.status, message: await response.text() };
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    handleApiError(error, 'Failed to validate plan');
-  }
-};
-
-export const savePlan = async (planData: any) => {
-  try {
-    console.log('🔗 API DEBUG - About to save plan with data:', planData);
-    console.log('🔗 API DEBUG - planData.date being sent:', planData.date);
-    console.log('🔗 API DEBUG - typeof planData.date:', typeof planData.date);
-    
-    // WORKAROUND: Ensure date is exactly as provided
-    const originalDate = planData.date;
-    console.log('🔧 WORKAROUND - Original date:', originalDate);
-    console.log('🔧 WORKAROUND - Date as ISO string:', new Date(originalDate).toISOString());
-    console.log('🔧 WORKAROUND - Date as YYYY-MM-DD:', originalDate);
-    
-    // Create the request payload with explicit date formatting
-    const requestPayload = {
-      ...planData,
-      date: originalDate, // Keep the original YYYY-MM-DD format
-      __originalDate: originalDate, // Backup for debugging
-      __dateDebug: {
-        originalInput: originalDate,
-        asDate: new Date(originalDate),
-        asISOString: new Date(originalDate).toISOString(),
-        asLocalString: new Date(originalDate).toLocaleDateString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-      }
+    // Format dates in the plan
+    const formattedPlan: Partial<ProductionPlan> = {
+      ...plan,
+      date: dateUtils.formatApiDate(plan.date),
+      stores: plan.stores.map(store => ({
+        ...store,
+        delivery_date: store.delivery_date 
+          ? dateUtils.formatApiDate(store.delivery_date)
+          : undefined
+      }))
     };
-    
-    const headers = await getAuthHeaders();
-    
-    console.log('🔗 API DEBUG - Headers:', headers);
-    console.log('🔗 API DEBUG - Request payload (enhanced):', requestPayload);
-    console.log('🔗 API DEBUG - Request body (stringified):', JSON.stringify(requestPayload));
-    
-    const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/save-production-plan`,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestPayload),
-      }
+
+    const { error } = await apiService.production.saveProductionPlan(formattedPlan);
+    if (error) throw error;
+  },
+
+  async validateProductionPlan(plan: ProductionPlan): Promise<boolean> {
+    // Validate the plan format first
+    const validation = validationUtils.validateProductionPlan(plan);
+    if (!validation.isValid) {
+      throw new Error(validation.errors[0].message);
+    }
+
+    // Format dates in the plan
+    const formattedPlan: Partial<ProductionPlan> = {
+      ...plan,
+      date: dateUtils.formatApiDate(plan.date),
+      stores: plan.stores.map(store => ({
+        ...store,
+        delivery_date: store.delivery_date 
+          ? dateUtils.formatApiDate(store.delivery_date)
+          : undefined
+      }))
+    };
+
+    const { data, error } = await apiService.production.validateProductionPlan(formattedPlan);
+    if (error) throw error;
+    return data?.isValid || false;
+  },
+
+  async getProductionPlans(startDate: string, endDate: string): Promise<ProductionPlan[]> {
+    if (!dateUtils.isValidDateString(startDate) || !dateUtils.isValidDateString(endDate)) {
+      throw new Error('Invalid date format');
+    }
+
+    const formattedStartDate = dateUtils.formatApiDate(startDate);
+    const formattedEndDate = dateUtils.formatApiDate(endDate);
+
+    const { data, error } = await apiService.production.getProductionPlans(
+      formattedStartDate,
+      formattedEndDate
     );
 
-    console.log('🔗 API DEBUG - Response status:', response.status);
-    console.log('🔗 API DEBUG - Response ok:', response.ok);
+    if (error) throw error;
+    return data || [];
+  },
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log('🔗 API DEBUG - Error response text:', errorText);
-      throw { status: response.status, message: errorText };
-    }
-
-    const data = await response.json();
-    console.log('🔗 API DEBUG - Response data:', data);
-    console.log('🔗 API DEBUG - Returned plan ID:', data.id);
-    console.log('🔗 API DEBUG - Response plan date:', data.date);
-    console.log('🔗 API DEBUG - Date comparison:', {
-      sent: originalDate,
-      received: data.date,
-      match: data.date === originalDate
-    });
-    
-    if (data.date !== originalDate) {
-      console.error('🚨 BACKEND DATE CONVERSION BUG DETECTED!');
-      console.error('🚨 SENT:', originalDate);
-      console.error('🚨 RECEIVED:', data.date);
-      console.error('🚨 This confirms the issue is in the Edge Function backend!');
-    }
-    
-    return data.id;
-  } catch (error) {
-    console.error('🔗 API DEBUG - Save plan error:', error);
-    handleApiError(error, 'Failed to save production plan');
-  }
-};
-
-export const updateDeliveryStatus = async (storeProductionId: string, data: { 
-  deliveryConfirmed?: boolean; 
-  received?: { [key: string]: number }; 
-  waste?: { [key: string]: number };
-  boxReceived?: { [key: string]: number };
-  boxWaste?: { [key: string]: number };
-}) => {
-  try {
-    const headers = await getAuthHeaders();
-    const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/update-delivery-status`,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          storeProductionId,
-          ...data
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      throw { status: response.status, message: await response.text() };
-    }
-
-    return true;
-  } catch (error) {
-    handleApiError(error, 'Failed to update delivery status');
-  }
-};
-
-export const deletePlan = async (planId: string) => {
-  try {
-    const headers = await getAuthHeaders();
-    const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/delete-production-plan`,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ planId }),
-      }
-    );
-
-    if (!response.ok) {
-      throw { status: response.status, message: await response.text() };
-    }
-
-    return true;
-  } catch (error) {
-    handleApiError(error, 'Failed to delete production plan');
+  async deleteProductionPlan(planId: string): Promise<void> {
+    const { error } = await apiService.production.deleteProductionPlan(planId);
+    if (error) throw error;
   }
 };

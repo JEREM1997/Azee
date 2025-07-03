@@ -5,9 +5,10 @@ export type UserRole = 'admin' | 'production' | 'store';
 export interface User {
   id: string;
   email: string;
-  fullName: string;
   role: UserRole;
   storeIds?: string[];
+  metadata?: Record<string, unknown>;
+  fullName?: string; // Made optional since it's not always available
 }
 
 export interface Store {
@@ -80,28 +81,36 @@ export interface ProductionPlanData {
 export interface ProductionPlan {
   id: string;
   date: string;
-  createdBy: string;
-  totalProduction: number;
-  stores: StoreProductionPlan[];
+  stores: StorePlan[];
+  total_production: number;
   status: 'draft' | 'confirmed' | 'completed';
 }
 
-export interface StoreProductionPlan {
-  storeId: string;
-  storeName: string;
-  items: ProductionItem[];
-  totalQuantity: number;
-  deliveryDate?: string;
+export interface StorePlan {
+  store_id: string;
+  store_name: string;
+  production_items: ProductionItem[];
+  box_productions: BoxProduction[];
+  total_quantity: number;
+  delivery_date?: string;
   confirmed: boolean;
-  deliveryConfirmed?: boolean;
-  wasteReported?: boolean;
+  delivery_confirmed: boolean;
+  waste_reported: boolean;
 }
 
 export interface ProductionItem {
-  varietyId: string;
-  varietyName: string;
-  formId: string;
-  formName: string;
+  variety_id: string;
+  variety_name: string;
+  form_id: string;
+  form_name: string;
+  quantity: number;
+  received?: number;
+  waste?: number;
+}
+
+export interface BoxProduction {
+  box_id: string;
+  box_name: string;
   quantity: number;
   received?: number;
   waste?: number;
@@ -131,4 +140,30 @@ export interface CostAnalysis {
     storeName: string;
     cost: number;
   }[];
+}
+
+// Error Types
+export interface AppError {
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
+// Authentication Types
+export interface AuthState {
+  user: User | null;
+  loading: boolean;
+  error: AppError | null;
+}
+
+// Validation Types
+export interface ValidationResult {
+  valid: boolean;
+  errors: AppError[];
+}
+
+// API Response Types
+export interface ApiResponse<T> {
+  data?: T;
+  error?: AppError;
 }

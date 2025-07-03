@@ -3,12 +3,14 @@ import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS'
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-retry-after',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
 };
 
 // @ts-ignore - Deno global
 Deno.serve(async (req) => {
+  console.log(`[get-production-plans] Incoming ${req.method} at`, new Date().toISOString());
+  console.log(`[get-production-plans] Auth header present:`, !!req.headers.get('Authorization'));
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -35,9 +37,41 @@ Deno.serve(async (req) => {
       }
     );
 
-    // Get days parameter from URL, default to 7 days
-    const url = new URL(req.url);
-    const days = parseInt(url.searchParams.get('days') || '7', 10);
+    let days: number | null = null;
+    let startDateParam: string | null = null;
+    let endDateParam: string | null = null;
+
+    if (req.method === 'POST') {
+      const body = await req.json().catch(() => ({}));
+      // Accept either { days } or { startDate, endDate }
+      if (body?.days !== undefined) {
+        days = parseInt(body.days, 10);
+      }
+      startDateParam = body?.startDate || null;
+      endDateParam = body?.endDate || null;
+    } else {
+      const url = new URL(req.url);
+      days = parseInt(url.searchParams.get('days') || '7', 10);
+    }
+
+    if (!days && (!startDateParam || !endDateParam)) {
+      // Default to 7 days if nothing provided
+      days = 7;
+    }
+
+    // Calculate date range
+    let startDate: Date;
+    let endDate: Date = new Date();
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam);
+      endDate = new Date(endDateParam);
+    } else {
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - (days || 7));
+    }
+
+    console.log(`[get-production-plans] Calculated range`, startDate.toISOString().split('T')[0], '→', endDate.toISOString().split('T')[0]);
 
     // Get the user's role and store_ids from the JWT
     const authHeader = req.headers.get('Authorization');
@@ -55,11 +89,6 @@ Deno.serve(async (req) => {
 
     const role = user.user_metadata?.role;
     const storeIds = user.user_metadata?.store_ids || [];
-
-    // Calculate date range
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
 
     // Build the query with proper join syntax
     let query = supabaseClient
@@ -109,8 +138,10 @@ Deno.serve(async (req) => {
 
     const { data: plans, error: dbError } = await query;
 
+    console.log(`[get-production-plans] DB returned`, plans?.length || 0, 'plans');
+
     if (dbError) {
-      console.error('Database error:', dbError);
+      console.error('[get-production-plans] Database error:', dbError);
       throw new Error(`Database error: ${dbError.message}`);
     }
 

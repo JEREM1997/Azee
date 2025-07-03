@@ -1,158 +1,74 @@
+import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import { AdminProvider } from './context/AdminContext';
+import ErrorBoundary from './components/ErrorBoundary';
+import LoadingSpinner from './components/LoadingSpinner';
 import AuthGuard from './components/AuthGuard';
 import Navbar from './components/Navbar';
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import ProductionPage from './pages/ProductionPage';
-import PlansPage from './pages/PlansPage';
-import DeliveryPage from './pages/DeliveryPage';
-import StatsPage from './pages/StatsPage';
-import AdminPage from './pages/AdminPage';
-import UsersPage from './pages/UsersPage';
-import CreateUserPage from './pages/CreateUserPage';
 
-// Component to handle global authentication errors
-function AuthErrorHandler({ children }: { children: React.ReactNode }) {
-  const { currentUser, logout } = useAuth();
+// Lazy load pages
+const LoginPage = React.lazy(() => import('./pages/LoginPage'));
+const DashboardPage = React.lazy(() => import('./pages/DashboardPage'));
+const ProductionPage = React.lazy(() => import('./pages/ProductionPage'));
+const DeliveryPage = React.lazy(() => import('./pages/DeliveryPage'));
+const AdminPage = React.lazy(() => import('./pages/AdminPage'));
+const UsersPage = React.lazy(() => import('./pages/UsersPage'));
+const CreateUserPage = React.lazy(() => import('./pages/CreateUserPage'));
+const StatsPage = React.lazy(() => import('./pages/StatsPage'));
+const PlansPage = React.lazy(() => import('./pages/PlansPage'));
 
-  useEffect(() => {
-    // Listen for authentication errors globally
-    const handleAuthError = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      if (customEvent.detail?.error?.includes('Invalid token') || 
-          customEvent.detail?.error?.includes('Session expired') ||
-          customEvent.detail?.error?.includes('Authentication required')) {
-        console.warn('Authentication error detected, logging out user');
-        logout();
-        window.location.href = '/login';
-      }
-    };
-
-    // Listen for fetch errors that might indicate token issues
-    const originalFetch = window.fetch;
-    window.fetch = async (...args) => {
-      try {
-        const response = await originalFetch(...args);
-        if (response.status === 401 || 
-            (response.status === 400 && response.url.includes('supabase'))) {
-          const text = await response.clone().text();
-          if (text.includes('Invalid token') || text.includes('Session expired')) {
-            console.warn('Invalid token detected in API response, redirecting to login');
-            logout();
-            window.location.href = '/login';
-            return response;
-          }
-        }
-        return response;
-      } catch (error) {
-        console.error('Fetch error:', error);
-        throw error;
-      }
-    };
-
-    window.addEventListener('auth-error', handleAuthError);
-
-    return () => {
-      window.removeEventListener('auth-error', handleAuthError);
-      window.fetch = originalFetch;
-    };
-  }, [logout]);
-
-  return <>{children}</>;
-}
-
-function App() {
+const App: React.FC = () => {
   return (
-    <Router>
-      <AuthProvider>
-        <AuthErrorHandler>
+    <ErrorBoundary>
+      <Router>
+        <AuthProvider>
           <AdminProvider>
-            <Routes>
-              <Route path="/login" element={<LoginPage />} />
-              <Route element={<AuthGuard />}>
-                <Route
-                  path="/"
-                  element={
-                    <>
-                      <Navbar />
-                      <DashboardPage />
-                    </>
-                  }
-                />
-                <Route
-                  path="/production"
-                  element={
-                    <>
-                      <Navbar />
-                      <ProductionPage />
-                    </>
-                  }
-                />
-                <Route
-                  path="/plans"
-                  element={
-                    <>
-                      <Navbar />
-                      <PlansPage />
-                    </>
-                  }
-                />
-                <Route
-                  path="/livraisons"
-                  element={
-                    <>
-                      <Navbar />
-                      <DeliveryPage />
-                    </>
-                  }
-                />
-                <Route
-                  path="/statistiques"
-                  element={
-                    <>
-                      <Navbar />
-                      <StatsPage />
-                    </>
-                  }
-                />
-                <Route
-                  path="/admin"
-                  element={
-                    <>
-                      <Navbar />
-                      <AdminPage />
-                    </>
-                  }
-                />
-                <Route
-                  path="/users"
-                  element={
-                    <>
-                      <Navbar />
-                      <UsersPage />
-                    </>
-                  }
-                />
-                <Route
-                  path="/users/create"
-                  element={
-                    <>
-                      <Navbar />
-                      <CreateUserPage />
-                    </>
-                  }
-                />
-              </Route>
-              <Route path="*" element={<Navigate to="/login" replace />} />
-            </Routes>
+            <div className="min-h-screen bg-gray-50">
+              <Suspense fallback={<LoadingSpinner fullScreen message="Loading application..." />}>
+                <Routes>
+                  <Route path="/login" element={<LoginPage />} />
+                  
+                  {/* Protected routes */}
+                  <Route element={<AuthGuard />}>
+                    <Route element={<Navbar />}>
+                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                      <Route path="/dashboard" element={<DashboardPage />} />
+                      <Route path="/production" element={<ProductionPage />} />
+                      <Route path="/delivery" element={<DeliveryPage />} />
+                      <Route path="/admin" element={<AdminPage />} />
+                      <Route path="/users" element={<UsersPage />} />
+                      <Route path="/users/create" element={<CreateUserPage />} />
+                      <Route path="/stats" element={<StatsPage />} />
+                      <Route path="/plans" element={<PlansPage />} />
+                    </Route>
+                  </Route>
+
+                  {/* 404 route */}
+                  <Route path="*" element={
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                      <div className="text-center">
+                        <h1 className="text-4xl font-bold text-gray-900">404</h1>
+                        <p className="mt-2 text-lg text-gray-600">Page not found</p>
+                        <div className="mt-6">
+                          <a
+                            href="/"
+                            className="text-base font-medium text-krispy-green hover:text-krispy-green-dark"
+                          >
+                            Go back home<span aria-hidden="true"> &rarr;</span>
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  } />
+                </Routes>
+              </Suspense>
+            </div>
           </AdminProvider>
-        </AuthErrorHandler>
-      </AuthProvider>
-    </Router>
+        </AuthProvider>
+      </Router>
+    </ErrorBoundary>
   );
-}
+};
 
 export default App;

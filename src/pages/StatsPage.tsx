@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { BarChart2, PieChart, TrendingUp, DollarSign, Store, Target, Package, Printer } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
-import { getProductionPlans } from '../services/productionService';
+import { productionService } from '../services/productionService';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
@@ -100,7 +100,7 @@ const StatsPage: React.FC = () => {
           break;
       }
       
-      const plans = await getProductionPlans(daysToFetch);
+      const plans = await productionService.getProductionPlans(daysToFetch.toString(), selectedDate);
       
       if (!plans || plans.length === 0) {
         setProductionData([]);

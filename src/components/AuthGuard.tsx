@@ -1,21 +1,34 @@
 import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import LoadingSpinner from './LoadingSpinner';
 
 const AuthGuard: React.FC = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, loading, isAdmin, isProduction } = useAuth();
   const location = useLocation();
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-krispy-green"></div>
-      </div>
-    );
+  if (loading) {
+    return <LoadingSpinner fullScreen message="Checking authentication..." />;
   }
 
-  if (!isAuthenticated) {
+  if (!user) {
+    // Redirect to login page but save the attempted location
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Role-based route protection
+  const adminOnlyRoutes = ['/admin', '/users', '/users/create', '/stats'];
+  const productionRoutes = ['/production', '/plans'];
+
+  const isAdminRoute = adminOnlyRoutes.some(route => location.pathname.startsWith(route));
+  const isProductionRoute = productionRoutes.some(route => location.pathname.startsWith(route));
+
+  if (isAdminRoute && !isAdmin) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (isProductionRoute && !isProduction && !isAdmin) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <Outlet />;

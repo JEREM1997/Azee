@@ -1,4 +1,4 @@
-import { getProductionPlans } from './productionService';
+import { productionService } from './productionService';
 
 export interface AIForecastResult {
   storeId: string;
@@ -105,7 +105,7 @@ export class AIForecastService {
     for (const strategy of dataLoadingStrategies) {
       try {
         console.log(`🤖 AI Forecast: Attempting to load ${strategy.days} days of historical data...`);
-        historicalPlans = await getProductionPlans(strategy.days);
+        historicalPlans = await productionService.getProductionPlans(strategy.days.toString(), targetDate);
         
         console.log(`🔍 AI DEBUG: Raw plans received:`, historicalPlans?.length || 0);
         if (historicalPlans && historicalPlans.length > 0) {
@@ -165,7 +165,7 @@ export class AIForecastService {
     const salesDayOfWeek = salesMapping.salesDay;
     const isWeekend = salesMapping.isWeekend;
     
-    console.log(`🤖 AI Forecast: Analyzing ${historicalPlans.length} days of historical data (${usedStrategy?.description})`);
+    console.log(`🤖 AI Forecast: Analyzing ${historicalPlans?.length || 0} days of historical data (${usedStrategy?.description})`);
     console.log(`🤖 AI Forecast: Production date is ${this.getDayName(targetDayOfWeek)} → ${salesMapping.mappingInfo}`);
     console.log(`🤖 AI Forecast: Analyzing sales patterns for ${this.getDayName(salesDayOfWeek)} (weekend: ${isWeekend})`);
 
@@ -175,11 +175,10 @@ export class AIForecastService {
     for (const store of stores.filter(s => s.isActive)) {
       console.log(`🤖 AI Forecast: Processing store ${store.name}`);
       
-      const storeHistoricalData = this.extractStoreHistoricalData(historicalPlans, store.id);
+      const storeHistoricalData = this.extractStoreHistoricalData(historicalPlans || [], store.id);
       
       if (storeHistoricalData.length === 0) {
         console.log(`⚠️ AI Forecast: No historical data for store ${store.name}, using conservative estimates`);
-        
         // Provide conservative estimates even without historical data
         const conservativeResult = this.generateConservativeEstimate(store, varieties, boxes, targetDayOfWeek, salesDayOfWeek);
         if (conservativeResult) {

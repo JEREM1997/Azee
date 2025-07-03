@@ -1,18 +1,24 @@
+// @ts-ignore - Deno runtime
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-retry-after',
 }
 
+// @ts-ignore - Deno global
 Deno.serve(async (req) => {
+  console.log(`[get-admin-data] Incoming ${req.method} at`, new Date().toISOString());
+  console.log(`[get-admin-data] Auth header present:`, !!req.headers.get('Authorization'));
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
+    // @ts-ignore - Deno env
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    // @ts-ignore - Deno env
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
     if (!supabaseUrl || !supabaseServiceKey) {
@@ -30,6 +36,8 @@ Deno.serve(async (req) => {
         }
       }
     )
+
+    console.log('[get-admin-data] Supabase client initialised')
 
     // Verify the requesting user is authenticated
     const authHeader = req.headers.get('Authorization')
@@ -64,7 +72,7 @@ Deno.serve(async (req) => {
       supabase.from('box_varieties').select('box_id, variety_id, quantity')
     ])
 
-    if (storesError) throw storesError
+    if (storesError) { console.error('[get-admin-data] stores error', storesError); throw storesError }
     if (varietiesError) throw varietiesError
     if (formsError) throw formsError
     if (boxesError) throw boxesError
