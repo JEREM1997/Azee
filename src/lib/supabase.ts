@@ -14,11 +14,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
     flowType: 'pkce'
   },
-  global: {
-    headers: {
-      'x-retry-after': '1',
-    },
-  }
+  // global: { headers: { 'x-retry-after': '1' } },
 });
 
 // Add error event listener to handle connection issues
