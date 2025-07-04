@@ -8,7 +8,7 @@ VALUES
   (gen_random_uuid(), 'Lausanne', 'Lausanne, CH', true),
   (gen_random_uuid(), 'Geneva', 'Geneva, CH', true),
   (gen_random_uuid(), 'Crissier', 'Crissier, CH', true)
-ON CONFLICT (name) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- 2. Insert donut forms
 INSERT INTO donut_forms (id, name, description, is_active)
