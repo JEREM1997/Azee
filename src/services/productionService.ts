@@ -63,16 +63,36 @@ export const productionService = {
     return data?.isValid || false;
   },
 
-  async getProductionPlans(startDate: string, endDate: string): Promise<ProductionPlan[]> {
-    if (!dateUtils.isValidDateString(startDate) || !dateUtils.isValidDateString(endDate)) {
-      throw new Error('Invalid date format');
+  async getProductionPlans(startOrDays: string, endDate: string): Promise<ProductionPlan[]> {
+    // Detect if the first argument is a numeric string (e.g. "7", "30") meaning "days"
+    const isDaysParam = /^\d+$/.test(startOrDays);
+
+    // If numeric, treat as a rolling window ending at endDate
+    let startDate: string;
+    if (isDaysParam) {
+      if (!dateUtils.isValidDateString(endDate)) {
+        throw new Error('Invalid date format');
+      }
+
+      const days = parseInt(startOrDays, 10);
+      if (isNaN(days) || days < 1) {
+        throw new Error('Days parameter must be a positive integer');
+      }
+
+      const calculatedStart = dateUtils.addDays(endDate, -days);
+      startDate = dateUtils.formatApiDate(calculatedStart);
+    } else {
+      // First argument is expected to be an explicit start date
+      if (!dateUtils.isValidDateString(startOrDays) || !dateUtils.isValidDateString(endDate)) {
+        throw new Error('Invalid date format');
+      }
+      startDate = dateUtils.formatApiDate(startOrDays);
     }
 
-    const formattedStartDate = dateUtils.formatApiDate(startDate);
     const formattedEndDate = dateUtils.formatApiDate(endDate);
 
     const { data, error } = await apiService.production.getProductionPlans(
-      formattedStartDate,
+      startDate,
       formattedEndDate
     );
 

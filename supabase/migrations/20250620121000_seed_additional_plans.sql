@@ -7,19 +7,19 @@ DECLARE
   target_start date := '2025-07-01';
   target_end   date := '2025-07-31';
   current_date_iter date;
-  plan_id uuid;
+  plan_uuid uuid;
 BEGIN
   current_date_iter := target_start;
   WHILE current_date_iter <= target_end LOOP
     -- Skip if plan already exists for the date
-    IF NOT EXISTS (SELECT 1 FROM production_plans WHERE date = current_date_iter) THEN
+    IF NOT EXISTS (SELECT 1 FROM production_plans WHERE date::date = current_date_iter) THEN
       INSERT INTO production_plans (id, date, created_by, total_production, status)
-      VALUES (gen_random_uuid(), current_date_iter, (SELECT id FROM auth.users LIMIT 1), 0, 'draft')
-      RETURNING id INTO plan_id;
+      VALUES (gen_random_uuid(), current_date_iter::text, (SELECT id FROM auth.users LIMIT 1), 0, 'draft')
+      RETURNING id INTO plan_uuid;
 
       -- For each existing store, create a store_production with 72 total (example)
       INSERT INTO store_productions (id, plan_id, store_id, store_name, total_quantity)
-      SELECT gen_random_uuid(), plan_id, s.id::text, s.name, 72
+      SELECT gen_random_uuid(), plan_uuid, s.id::text, s.name, 72
       FROM stores s;
 
       -- For each store_production, attach three fixed varieties from the catalog with quantities
@@ -30,21 +30,21 @@ BEGIN
       JOIN (
         SELECT id, name, form_id FROM donut_varieties ORDER BY name LIMIT 3
       ) v ON TRUE
-      WHERE sp.plan_id = plan_id;
+      WHERE sp.plan_id = plan_uuid;
 
       -- Update store_production totals
       UPDATE store_productions sp
       SET total_quantity = (
         SELECT COALESCE(SUM(quantity),0) FROM production_items pi WHERE pi.store_production_id = sp.id
       )
-      WHERE sp.plan_id = plan_id;
+      WHERE sp.plan_id = plan_uuid;
 
       -- Update plan total
       UPDATE production_plans pp
       SET total_production = (
         SELECT COALESCE(SUM(total_quantity),0) FROM store_productions WHERE plan_id = pp.id
       )
-      WHERE pp.id = plan_id;
+      WHERE pp.id = plan_uuid;
     END IF;
 
     -- Next day
