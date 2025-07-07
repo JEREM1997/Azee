@@ -67,9 +67,9 @@ Deno.serve(async (req) => {
       supabase.from('donut_varieties').select('*').order('name'),
       supabase.from('donut_forms').select('*').order('name'),
       supabase.from('box_configurations').select('*').order('name'),
-      supabase.from('store_donut_varieties').select('store_id, variety_id'),
-      supabase.from('store_box_configurations').select('store_id, box_id'),
-      supabase.from('box_configuration_varieties').select('box_id, variety_id, quantity')
+      supabase.from('store_varieties').select('store_id, variety_id'),
+      supabase.from('store_boxes').select('store_id, box_id'),
+      supabase.from('box_varieties').select('box_id, variety_id, quantity')
     ])
 
     if (storesError) { console.error('[get-admin-data] stores error', storesError); throw storesError }
