@@ -54,6 +54,12 @@ Deno.serve(async (req) => {
     // Get request data
     const planData: ProductionPlanRequest = await req.json();
 
+    // Fallback compute for totalProduction if missing
+    const resolvedTotalProduction =
+      typeof planData.totalProduction === 'number' && !isNaN(planData.totalProduction)
+        ? planData.totalProduction
+        : planData.stores?.reduce((sum, s) => sum + (s.totalQuantity || 0), 0) ?? 0;
+
     // Get the authorization header
     const authHeader = req.headers.get('authorization');
     if (!authHeader) {
@@ -148,10 +154,8 @@ Deno.serve(async (req) => {
       const { data: updatedPlan, error: updateError } = await supabaseClient
         .from('production_plans')
         .update({
-          total_production: planData.totalProduction,
-          status: planData.status,
-          updated_at: new Date().toISOString(),
-          updated_by: user.id
+          total_production: resolvedTotalProduction,
+          status: planData.status
         })
         .eq('id', planId)
         .select()
@@ -178,7 +182,7 @@ Deno.serve(async (req) => {
         .from('production_plans')
         .insert({
           date: planData.date,
-          total_production: planData.totalProduction,
+          total_production: resolvedTotalProduction,
           status: planData.status,
           created_by: user.id
         })
@@ -201,7 +205,7 @@ Deno.serve(async (req) => {
           store_id: store.storeId,
           store_name: store.storeName,
           total_quantity: store.totalQuantity,
-          deliveryDate: store.deliveryDate
+          deliverydate: store.deliveryDate
         })
         .select()
         .single();
