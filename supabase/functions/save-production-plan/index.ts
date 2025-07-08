@@ -54,11 +54,11 @@ Deno.serve(async (req) => {
     // Get request data
     const planData: ProductionPlanRequest = await req.json();
 
-    // Fallback compute for totalProduction if missing
+    // Ensure totalProduction is populated (frontend normally sends it, but add fallback to be safe)
     const resolvedTotalProduction =
       typeof planData.totalProduction === 'number' && !isNaN(planData.totalProduction)
         ? planData.totalProduction
-        : planData.stores?.reduce((sum, s) => sum + (s.totalQuantity || 0), 0) ?? 0;
+        : planData.stores?.reduce((acc, s) => acc + (s.totalQuantity || 0), 0) ?? 0;
 
     // Get the authorization header
     const authHeader = req.headers.get('authorization');
