@@ -7,10 +7,10 @@ interface ProductionPlanRequest {
   userId: string;
   existingPlanId?: string;
   stores: Array<{
-    storeId: string;
-    storeName: string;
-    deliveryDate: string;
-    totalQuantity: number;
+    store_id: string;
+    store_name: string;
+    delivery_date?: string;
+    total_quantity: number;
     items?: Array<{
       varietyId: string;
       varietyName: string;
@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
     const resolvedTotalProduction =
       typeof planData.totalProduction === 'number' && !isNaN(planData.totalProduction)
         ? planData.totalProduction
-        : planData.stores?.reduce((acc, s) => acc + (s.totalQuantity || 0), 0) ?? 0;
+        : planData.stores?.reduce((acc, s) => acc + (s.total_quantity || 0), 0) ?? 0;
 
     // Get the authorization header
     const authHeader = req.headers.get('authorization');
@@ -198,20 +198,43 @@ Deno.serve(async (req) => {
 
     // Create store productions and their items/boxes
     for (const store of planData.stores) {
+      // Add validation to prevent null constraint violations
+      if (!store.store_id) {
+        throw new Error(`Missing store ID for store: ${store.store_name || 'Unknown'}. Received storeId: ${store.store_id}`);
+      }
+
+      if (!store.store_name) {
+        throw new Error(`Missing store name for store ID: ${store.store_id}`);
+      }
+
+      // Ensure total_quantity is never null - calculate from items and boxes if missing
+      let totalQuantity = store.total_quantity || 0;
+      
+      console.log(`Store ${store.store_name}: originalTotal=${store.total_quantity}, items=${store.items?.length || 0}, boxes=${store.boxes?.length || 0}`);
+      
+      if (totalQuantity === 0 || totalQuantity === null || totalQuantity === undefined) {
+        // Calculate from items
+        const itemsTotal = store.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+        // Calculate from boxes (assuming each box contains some standard amount - we'll use the quantity as-is)
+        const boxesTotal = store.boxes?.reduce((sum, box) => sum + (box.quantity || 0), 0) || 0;
+        totalQuantity = itemsTotal + boxesTotal;
+        console.log(`Calculated total for ${store.store_name}: items=${itemsTotal}, boxes=${boxesTotal}, final=${totalQuantity}`);
+      }
+
       const { data: storeProduction, error: storeError } = await supabaseClient
         .from('store_productions')
         .insert({
           plan_id: plan.id,
-          store_id: store.storeId,
-          store_name: store.storeName,
-          total_quantity: store.totalQuantity,
-          deliverydate: store.deliveryDate
+          store_id: store.store_id,
+          store_name: store.store_name,
+          total_quantity: totalQuantity,
+          deliverydate: store.delivery_date
         })
         .select()
         .single();
 
       if (storeError) {
-        throw new Error(`Error creating store production for store ${store.storeName}: ${storeError.message}`);
+        throw new Error(`Error creating store production for store ${store.store_name}: ${storeError.message}`);
       }
 
       if (store.items && store.items.length > 0) {
@@ -229,7 +252,7 @@ Deno.serve(async (req) => {
           );
 
         if (itemsError) {
-          throw new Error(`Error creating production items for store ${store.storeName}: ${itemsError.message}`);
+          throw new Error(`Error creating production items for store ${store.store_name}: ${itemsError.message}`);
         }
       }
 
@@ -246,7 +269,7 @@ Deno.serve(async (req) => {
           );
 
         if (boxesError) {
-          throw new Error(`Error creating box productions for store ${store.storeName}: ${boxesError.message}`);
+          throw new Error(`Error creating box productions for store ${store.store_name}: ${boxesError.message}`);
         }
       }
     }

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { Plus, Minus, Save, AlertTriangle, Edit, Sparkles, Brain, TrendingUp, Store } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAdmin } from '../context/AdminContext';
 import { useAuth } from '../context/AuthContext';
 import { aiForecastService, AIForecastResult } from '../services/aiForecastService';
