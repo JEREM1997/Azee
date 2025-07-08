@@ -49,16 +49,15 @@ Deno.serve(async (req) => {
     }
 
     // Update plan status
-    const { error: updateError } = await supabase
+    const { error } = await supabase
       .from('production_plans')
       .update({ 
-        status: 'validated',
-        updated_at: new Date().toISOString()
+        status: 'validated'
       })
       .eq('id', planId);
 
-    if (updateError) {
-      throw updateError;
+    if (error) {
+      throw error;
     }
 
     return new Response(
