@@ -35,7 +35,13 @@ export const productionService = {
       }))
     };
 
-    const { error } = await apiService.production.saveProductionPlan(formattedPlan);
+    // Pass the existing plan ID so the edge function can update the correct record
+    const payload = {
+      ...formattedPlan,
+      existingPlanId: plan.id && plan.id.trim() !== '' ? plan.id : undefined
+    };
+
+    const { error } = await apiService.production.saveProductionPlan(payload);
     if (error) throw error;
   },
 
