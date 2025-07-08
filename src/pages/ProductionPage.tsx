@@ -124,6 +124,7 @@ const ProductionPage: React.FC = () => {
           // Initialize empty store productions and boxes if no plan exists
           initializeStoreProductions();
           initializeStoreBoxes();
+          setExistingPlanId(null);
         }
       } catch (err) {
         console.error('Error loading plan:', err);
@@ -326,8 +327,9 @@ const ProductionPage: React.FC = () => {
   };
   
   const isPlanValid = totals.grandTotal > 0;
-  // Don't validate delivery dates while loading to avoid race conditions
-  const allDeliveryDatesSet = loading ? true : areAllDeliveryDatesSet();
+  const allDeliveryDatesSet = loading
+    ? true          // skip validation while data still loading
+    : areAllDeliveryDatesSet();
   const storesNeedingDates = loading ? [] : getStoresNeedingDeliveryDates();
 
   const handleSavePlan = async () => {

@@ -122,7 +122,14 @@ const PlansPage: React.FC = () => {
         });
       }
       
-      setPlans(plansData || []);
+      setPlans(
+        (plansData || [])
+          // current line – removes plans that have no stores or totals
+          // .filter(p => (p.stores?.length ?? 0) > 0 && p.total_production > 0)
+
+          // new line – keep every plan Supabase returns
+          .filter(Boolean)
+      );
       console.log('✅ Plans state updated successfully');
     } catch (err) {
       console.error('❌ Error loading plans:', err);
@@ -191,6 +198,72 @@ const PlansPage: React.FC = () => {
       window.removeEventListener('planSaved', handlePlanUpdate as EventListener);
     };
   }, [loadPlans]);
+
+  // Calculate production summary for a plan (totals per variety / form / box)
+  const calculatePlanSummary = (plan: ProductionPlan) => {
+    const varietyTotals: { [varietyId: string]: number } = {};
+    const formTotals: { [formId: string]: number } = {};
+    const boxTotals: { [boxId: string]: number } = {};
+    const storeTotals: { [storeId: string]: number } = {};  // total doughnuts per store
+
+    let totalIndividualDoughnuts = 0;
+    let totalBoxDoughnuts = 0;
+    let totalBoxes = 0;
+
+    // Iterate through stores
+    plan.stores.forEach(store => {
+      // Individual items
+      store.production_items.forEach(item => {
+        // Variety totals
+        varietyTotals[item.variety_id] = (varietyTotals[item.variety_id] || 0) + item.quantity;
+
+        // Form totals (need to map variety -> form)
+        const variety = varieties.find(v => v.id === item.variety_id);
+        if (variety && variety.formId) {
+          formTotals[variety.formId] = (formTotals[variety.formId] || 0) + item.quantity;
+        }
+
+        totalIndividualDoughnuts += item.quantity;
+        storeTotals[store.store_id] = (storeTotals[store.store_id] || 0) + item.quantity;
+      });
+
+      // Boxes
+      store.box_productions.forEach(boxProd => {
+        boxTotals[boxProd.box_id] = (boxTotals[boxProd.box_id] || 0) + boxProd.quantity;
+        totalBoxes += boxProd.quantity;
+
+        const boxDef = boxes.find(b => b.id === boxProd.box_id);
+        if (boxDef) {
+          totalBoxDoughnuts += boxDef.size * boxProd.quantity;
+
+          // Add varieties contained in box to totals
+          boxDef.varieties?.forEach(v => {
+            const totalFromBoxes = v.quantity * boxProd.quantity;
+            varietyTotals[v.varietyId] = (varietyTotals[v.varietyId] || 0) + totalFromBoxes;
+
+            const variety = varieties.find(varObj => varObj.id === v.varietyId);
+            if (variety && variety.formId) {
+              formTotals[variety.formId] = (formTotals[variety.formId] || 0) + totalFromBoxes;
+            }
+          });
+        }
+      });
+    });
+
+    return {
+      varietyTotals,
+      formTotals,
+      boxTotals,
+      storeTotals,
+      totalIndividualDoughnuts,
+      totalBoxDoughnuts,
+      totalBoxes,
+      totalDoughnuts: totalIndividualDoughnuts + totalBoxDoughnuts
+    };
+  };
+
+  // Pre-compute summary for selected plan so it can be reused across modal sections
+  const planSummary = selectedPlan ? calculatePlanSummary(selectedPlan) : null;
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('fr-FR', {
@@ -307,39 +380,6 @@ const PlansPage: React.FC = () => {
       window.removeEventListener('focus', handleFocus);
     };
   }, [loadPlans]);
-
-  // Calculate production summary for a plan
-  const calculatePlanSummary = (plan: ProductionPlan) => {
-    const summary = {
-      totalQuantity: 0,
-      totalBoxes: 0,
-      totalBoxDoughnuts: 0,
-      stores: plan.stores.map(store => ({
-        store_id: store.store_id,
-        store_name: store.store_name,
-        delivery_date: store.delivery_date,
-        total_quantity: store.total_quantity,
-        production_items: store.production_items,
-        box_productions: store.box_productions
-      }))
-    };
-
-    // Calculate totals
-    plan.stores.forEach(store => {
-      summary.totalQuantity += store.total_quantity;
-      
-      // Add box quantities
-      store.box_productions.forEach(box => {
-        summary.totalBoxes += box.quantity;
-        const boxConfig = boxes.find(b => b.id === box.box_id);
-        if (boxConfig) {
-          summary.totalBoxDoughnuts += box.quantity * boxConfig.size;
-        }
-      });
-    });
-
-    return summary;
-  };
 
   if (loading) {
     return (
@@ -501,7 +541,7 @@ const PlansPage: React.FC = () => {
 
               {/* Production Summary Section */}
               {(() => {
-                const summary = calculatePlanSummary(selectedPlan);
+                const summary = planSummary!;
                 return (
                   <div className="mb-6">
                     <h4 className="text-lg font-semibold text-gray-800 mb-4">Résumé de la Production</h4>
@@ -509,21 +549,21 @@ const PlansPage: React.FC = () => {
                       {/* Total Doughnuts Card */}
                       <div className="bg-krispy-green bg-opacity-10 rounded-lg p-4">
                         <h5 className="text-sm font-medium text-krispy-green mb-2">Total Doughnuts</h5>
-                        <p className="text-2xl font-bold text-krispy-green">{summary.totalBoxDoughnuts}</p>
+                        <p className="text-2xl font-bold text-krispy-green">{summary.totalDoughnuts}</p>
                         <div className="mt-2 text-xs text-gray-600">
-                          <p>Individuels: {summary.totalQuantity}</p>
+                          <p>Individuels: {summary.totalIndividualDoughnuts}</p>
                           <div className="mt-1">
-                            <p className="font-medium">En Boîtes: {summary.totalBoxes}</p>
+                            <p className="font-medium">En Boîtes: {summary.totalBoxDoughnuts}</p>
                             <div className="ml-2 space-y-1 max-h-16 overflow-y-auto">
                               {boxes
                                 .filter(b => b.isActive)
                                 .map(box => {
-                                  const boxCount = summary.stores.find(s => s.store_id === box.id)?.total_quantity || 0;
+                                  const boxCount = summary.boxTotals[box.id] || 0;
                                   if (boxCount === 0) return null;
                                   const totalDoughnuts = boxCount * box.size;
                                   return (
                                     <div key={box.id} className="text-xs text-gray-500">
-                                      {box.name}: {boxCount} boîtes ({totalDoughnuts} doughnuts)
+                                      {box.name}: {planSummary?.boxTotals[box.id] || 0} boîtes ({totalDoughnuts} doughnuts)
                                     </div>
                                   );
                                 })
@@ -540,7 +580,7 @@ const PlansPage: React.FC = () => {
                           {varieties
                             .filter(v => v.isActive)
                             .map(variety => {
-                              const total = summary.stores.find(s => s.store_id === variety.id)?.total_quantity || 0;
+                              const total = planSummary?.varietyTotals[variety.id] || 0;
                               if (total === 0) return null;
                               const dozens = Math.floor(total / 12);
                               const units = total % 12;
@@ -567,12 +607,13 @@ const PlansPage: React.FC = () => {
                       <div className="bg-gray-50 rounded-lg p-4">
                         <h5 className="text-sm font-medium text-gray-800 mb-2">Par Magasin</h5>
                         <div className="space-y-2 max-h-32 overflow-y-auto">
-                          {summary.stores.map(store => {
-                            if (store.total_quantity === 0) return null;
+                          {selectedPlan.stores?.map(store => {
+                            const totalQuantity = planSummary?.storeTotals[store.store_id] || 0;
+                            if (totalQuantity === 0) return null;
                             return (
                               <div key={store.store_id} className="flex justify-between items-center">
                                 <span className="text-xs text-gray-600">{store.store_name}</span>
-                                <span className="text-xs font-medium text-gray-900">{store.total_quantity}</span>
+                                <span className="text-xs font-medium text-gray-900">{totalQuantity}</span>
                               </div>
                             );
                           }).filter(Boolean)}
@@ -586,7 +627,7 @@ const PlansPage: React.FC = () => {
                           {forms
                             .filter(f => f.isActive)
                             .map(form => {
-                              const baseTotal = summary.stores.find(s => s.store_id === form.id)?.total_quantity || 0;
+                              const baseTotal = planSummary?.formTotals[form.id] || 0;
                               if (baseTotal === 0) return null;
                               const totalWithReserve = Math.ceil(baseTotal * 1.05);
                               return (
@@ -642,7 +683,7 @@ const PlansPage: React.FC = () => {
                         </div>
                       </div>
                       <span className="text-sm px-3 py-1 rounded-full bg-krispy-green bg-opacity-10 text-krispy-green">
-                        {store.total_quantity} doughnuts
+                        {planSummary?.storeTotals[store.store_id] || 0} doughnuts
                       </span>
                     </div>
 
