@@ -104,9 +104,12 @@ const ProductionPage: React.FC = () => {
 
                 // Handle delivery dates - check both camelCase and snake_case
                 const deliveryDate = store.deliverydate;
+                console.log(`🗓️ LOAD DEBUG - Store ${store.store_id} deliverydate from DB:`, deliveryDate);
                 if (deliveryDate) {
                   console.log(`Loading delivery date for store ${store.store_id}:`, deliveryDate);
                   newStoreDeliveryDates[store.store_id] = deliveryDate;
+                } else {
+                  console.log(`⚠️ LOAD DEBUG - No delivery date found for store ${store.store_id}`);
                 }
               }
             });
@@ -114,6 +117,7 @@ const ProductionPage: React.FC = () => {
 
           setStoreProductions(newStoreProductions);
           setStoreBoxes(newStoreBoxes);
+          console.log('🗓️ LOAD DEBUG - Setting storeDeliveryDates to:', newStoreDeliveryDates);
           setStoreDeliveryDates(newStoreDeliveryDates);
         } else {
           console.log('🔍 LOAD DEBUG - No plan found for date:', date);
@@ -283,29 +287,48 @@ const ProductionPage: React.FC = () => {
   // Check if all stores have delivery dates set
   const areAllDeliveryDatesSet = () => {
     const activeStores = stores.filter((store: any) => store.isActive);
-    return activeStores.every((store: any) => {
+    
+    console.log('🚦 VALIDATION DEBUG - areAllDeliveryDatesSet called');
+    console.log('🚦 VALIDATION DEBUG - activeStores count:', activeStores.length);
+    console.log('🚦 VALIDATION DEBUG - storeDeliveryDates state:', storeDeliveryDates);
+    console.log('🚦 VALIDATION DEBUG - loading state:', loading);
+    console.log('🚦 VALIDATION DEBUG - storeTotals:', totals.storeTotals);
+    
+    const result = activeStores.every((store: any) => {
       const storeTotal = totals.storeTotals[store.id] || 0;
       // Only require delivery date if store has production
       if (storeTotal > 0) {
-        return storeDeliveryDates[store.id] && storeDeliveryDates[store.id].trim() !== '';
+        const hasDeliveryDate = storeDeliveryDates[store.id] && storeDeliveryDates[store.id].trim() !== '';
+        console.log(`🚦 VALIDATION DEBUG - Store ${store.name} (${store.id}): total=${storeTotal}, deliveryDate="${storeDeliveryDates[store.id]}", hasDeliveryDate=${hasDeliveryDate}`);
+        return hasDeliveryDate;
       }
+      console.log(`🚦 VALIDATION DEBUG - Store ${store.name} (${store.id}): total=${storeTotal}, skipping (no production)`);
       return true; // No production = no delivery date required
     });
+    
+    console.log('🚦 VALIDATION DEBUG - areAllDeliveryDatesSet result:', result);
+    return result;
   };
 
   // Get stores that need delivery dates
   const getStoresNeedingDeliveryDates = () => {
-    return stores.filter((store: any) => {
+    const storesNeeding = stores.filter((store: any) => {
       if (!store.isActive) return false;
       const storeTotal = totals.storeTotals[store.id] || 0;
       if (storeTotal === 0) return false; // No production = no delivery date needed
-      return !storeDeliveryDates[store.id] || storeDeliveryDates[store.id].trim() === '';
+      const needsDate = !storeDeliveryDates[store.id] || storeDeliveryDates[store.id].trim() === '';
+      console.log(`🚦 VALIDATION DEBUG - Store ${store.name} needs delivery date:`, needsDate);
+      return needsDate;
     });
+    
+    console.log('🚦 VALIDATION DEBUG - getStoresNeedingDeliveryDates result:', storesNeeding.map(s => s.name));
+    return storesNeeding;
   };
   
   const isPlanValid = totals.grandTotal > 0;
-  const allDeliveryDatesSet = areAllDeliveryDatesSet();
-  const storesNeedingDates = getStoresNeedingDeliveryDates();
+  // Don't validate delivery dates while loading to avoid race conditions
+  const allDeliveryDatesSet = loading ? true : areAllDeliveryDatesSet();
+  const storesNeedingDates = loading ? [] : getStoresNeedingDeliveryDates();
 
   const handleSavePlan = async () => {
     try {
