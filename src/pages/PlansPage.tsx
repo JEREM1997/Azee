@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Eye, FileText, AlertTriangle, RefreshCw, Edit, Trash2 } from 'lucide-react';
+import { Calendar, Eye, FileText, AlertTriangle, RefreshCw, Edit, Trash2, Plus } from 'lucide-react';
 import { productionService } from '../services/productionService';
 import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
@@ -14,6 +14,7 @@ const PlansPage: React.FC = () => {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [recentlySavedPlanId, setRecentlySavedPlanId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const { user } = useAuth();
   const { varieties, forms, boxes } = useAdmin();
@@ -250,6 +251,11 @@ const PlansPage: React.FC = () => {
       });
     });
 
+    // Fallback: if no items found but total_production present, use that
+    if (totalIndividualDoughnuts === 0 && plan.total_production > 0) {
+      totalIndividualDoughnuts = plan.total_production;
+    }
+
     return {
       varietyTotals,
       formTotals,
@@ -317,6 +323,36 @@ const PlansPage: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Error deleting plan');
     } finally {
       setDeleting(null);
+    }
+  };
+
+  const handleCreateNewPlan = async () => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      // pick next available date (today or tomorrow etc.)
+      const existingDates = new Set(plans.map(p => p.date));
+      let candidate = new Date();
+      while (existingDates.has(candidate.toISOString().split('T')[0])) {
+        candidate.setDate(candidate.getDate() + 1);
+      }
+      const newDate = candidate.toISOString().split('T')[0];
+
+      await productionService.saveProductionPlan({
+        id: '',
+        date: newDate,
+        total_production: 0,
+        status: 'draft',
+        stores: []
+      } as any);
+
+      // Refresh list to show the new card
+      await loadPlans();
+    } catch (error) {
+      console.error('Error creating empty plan:', error);
+      alert('Erreur lors de la création du plan.');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -397,14 +433,24 @@ const PlansPage: React.FC = () => {
             <h1 className="text-3xl font-bold text-gray-900">Plans de Production</h1>
             <p className="text-gray-600 mt-1">Historique des plans de production sauvegardés</p>
           </div>
-          <button
-            onClick={refreshPlans}
-            disabled={loading || refreshing}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading || refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Actualisation...' : 'Actualiser'}
-          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={handleCreateNewPlan}
+              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
+              disabled={creating}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              {creating ? 'Création...' : 'Nouveau Plan'}
+            </button>
+            <button
+              onClick={refreshPlans}
+              disabled={loading || refreshing}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading || refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Actualisation...' : 'Actualiser'}
+            </button>
+          </div>
         </div>
       </div>
 

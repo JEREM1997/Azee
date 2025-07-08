@@ -48,6 +48,17 @@ export const apiService = {
       });
 
       if (error && options.throwError) {
+        // Automatic sign-out on invalid / expired token so user is redirected to login
+        if (typeof error.message === 'string' && error.message.toLowerCase().includes('invalid token')) {
+          try {
+            await supabase.auth.signOut();
+          } catch (_) {}
+          // Force reload to login page preserving current route for after-login redirect if desired
+          window.location.href = '/login?expired=1';
+          // Return here to stop further processing
+          return { data: null, error } as ApiResponse<T>;
+        }
+
         throw error;
       }
 

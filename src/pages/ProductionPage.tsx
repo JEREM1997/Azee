@@ -505,6 +505,27 @@ const ProductionPage: React.FC = () => {
     }
   };
 
+  // Reset every variety & box quantity to 0
+  const resetAllQuantities = () => {
+    const clearedProductions: typeof storeProductions = {};
+    const clearedBoxes: typeof storeBoxes = {};
+
+    stores.filter(s => s.isActive).forEach(store => {
+      clearedProductions[store.id] = {};
+      store.availableVarieties.forEach(varId => {
+        clearedProductions[store.id][varId] = 0;
+      });
+
+      clearedBoxes[store.id] = {};
+      store.availableBoxes.forEach(boxId => {
+        clearedBoxes[store.id][boxId] = 0;
+      });
+    });
+
+    setStoreProductions(clearedProductions);
+    setStoreBoxes(clearedBoxes);
+  };
+
   // AI Forecasting Functions
   const generateAIForecast = async () => {
     try {
@@ -645,6 +666,15 @@ const ProductionPage: React.FC = () => {
                   Prévisions IA
                 </>
               )}
+            </button>
+            <button
+              onClick={resetAllQuantities}
+              disabled={saving}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
+              title="Remettre toutes les quantités à zéro"
+            >
+              <Minus className="h-4 w-4 mr-2" />
+              Tout à zéro
             </button>
             <button
               onClick={handleSavePlan}
