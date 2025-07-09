@@ -228,6 +228,11 @@ const PlansPage: React.FC = () => {
         storeTotals[store.store_id] = (storeTotals[store.store_id] || 0) + item.quantity;
       });
 
+      // If no items at all, ensure storeTotals includes the store's total_quantity
+      if (!(store.store_id in storeTotals)) {
+        storeTotals[store.store_id] = store.total_quantity;
+      }
+
       // Boxes
       store.box_productions.forEach(boxProd => {
         boxTotals[boxProd.box_id] = (boxTotals[boxProd.box_id] || 0) + boxProd.quantity;
@@ -623,18 +628,18 @@ const PlansPage: React.FC = () => {
                       <div className="bg-gray-50 rounded-lg p-4">
                         <h5 className="text-sm font-medium text-gray-800 mb-2">Variétés Principales</h5>
                         <div className="space-y-2 max-h-32 overflow-y-auto">
-                          {varieties
-                            .filter(v => v.isActive)
-                            .map(variety => {
-                              const total = planSummary?.varietyTotals[variety.id] || 0;
-                              if (total === 0) return null;
-                              const dozens = Math.floor(total / 12);
-                              const units = total % 12;
+                          {Object.entries(planSummary?.varietyTotals || {})
+                            .filter(([, qty]) => qty > 0)
+                            .map(([varId, qty]) => {
+                              const variety = varieties.find(v => v.id === varId);
+                              const name = variety ? variety.name : `Variété ${varId}`;
+                              const dozens = Math.floor(qty as number / 12);
+                              const units = (qty as number) % 12;
                               return (
-                                <div key={variety.id} className="space-y-1">
+                                <div key={varId} className="space-y-1">
                                   <div className="flex justify-between items-center">
-                                    <span className="text-xs text-gray-600">{variety.name}</span>
-                                    <span className="text-xs font-medium text-gray-900">{total}</span>
+                                    <span className="text-xs text-gray-600">{name}</span>
+                                    <span className="text-xs font-medium text-gray-900">{qty as number}</span>
                                   </div>
                                   <div className="text-xs text-gray-500 pl-2">
                                     {dozens > 0 && `${dozens} douzaine${dozens > 1 ? 's' : ''}`}
@@ -644,8 +649,7 @@ const PlansPage: React.FC = () => {
                                   </div>
                                 </div>
                               );
-                            })
-                            .filter(Boolean)}
+                            })}
                         </div>
                       </div>
 

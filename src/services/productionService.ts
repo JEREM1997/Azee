@@ -23,21 +23,36 @@ export const productionService = {
       throw new Error(validation.errors[0].message);
     }
 
-    // Format dates in the plan
-    const formattedPlan: Partial<ProductionPlan> = {
-      ...plan,
-      date: dateUtils.formatApiDate(plan.date),
-      stores: plan.stores.map(store => ({
-        ...store,
-        delivery_date: store.delivery_date 
-          ? dateUtils.formatApiDate(store.delivery_date)
-          : undefined
+    // Transform stores to match Edge Function contract
+    const transformedStores = plan.stores.map(store => ({
+      store_id: store.store_id,
+      store_name: store.store_name,
+      delivery_date: store.delivery_date
+        ? dateUtils.formatApiDate(store.delivery_date)
+        : undefined,
+      total_quantity: store.total_quantity,
+      // Map production_items -> items (varieties)
+      items: (store.production_items || []).map(item => ({
+        varietyId: item.variety_id,
+        varietyName: item.variety_name,
+        formId: item.form_id,
+        formName: item.form_name,
+        quantity: item.quantity
+      })),
+      // Map box_productions -> boxes
+      boxes: (store.box_productions || []).map(box => ({
+        boxId: box.box_id,
+        boxName: box.box_name,
+        quantity: box.quantity
       }))
-    };
+    }));
 
-    // Pass the existing plan ID so the edge function can update the correct record
-    const payload = {
-      ...formattedPlan,
+    // Build payload expected by save-production-plan Edge Function
+    const payload: any = {
+      date: dateUtils.formatApiDate(plan.date),
+      totalProduction: plan.total_production,
+      status: plan.status,
+      stores: transformedStores,
       existingPlanId: plan.id && plan.id.trim() !== '' ? plan.id : undefined
     };
 
