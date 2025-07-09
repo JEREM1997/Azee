@@ -15,6 +15,10 @@ const PlansPage: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [recentlySavedPlanId, setRecentlySavedPlanId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // Modal state for creating a plan on a user-chosen date
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newPlanDate, setNewPlanDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const { user } = useAuth();
   const { varieties, forms, boxes } = useAdmin();
@@ -27,9 +31,10 @@ const PlansPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Get date range for last 90 days
-      const endDate = new Date().toISOString().split('T')[0];
-      const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      // Fetch plans ±365 days so newly created future plans are included
+      const today = new Date();
+      const past365 = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const future365 = new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
       // Check if we're expecting a recently saved plan
       const expectedPlanInfo = localStorage.getItem('recentlySavedPlan');
@@ -44,7 +49,7 @@ const PlansPage: React.FC = () => {
       }
       
       console.log('🔄 Loading plans from server...');
-      const plansData = await productionService.getProductionPlans(startDate, endDate);
+      const plansData = await productionService.getProductionPlans(past365, future365);
       console.log('✅ Fetched plans data:', plansData);
       console.log('📊 Plans count:', plansData?.length || 0);
       
@@ -331,31 +336,40 @@ const PlansPage: React.FC = () => {
     }
   };
 
+  const openCreateModal = () => {
+    setNewPlanDate(new Date().toISOString().split('T')[0]);
+    setCreateError(null);
+    setShowCreateModal(true);
+  };
+
   const handleCreateNewPlan = async () => {
     if (creating) return;
-    setCreating(true);
-    try {
-      // pick next available date (today or tomorrow etc.)
-      const existingDates = new Set(plans.map(p => p.date));
-      let candidate = new Date();
-      while (existingDates.has(candidate.toISOString().split('T')[0])) {
-        candidate.setDate(candidate.getDate() + 1);
-      }
-      const newDate = candidate.toISOString().split('T')[0];
 
+    // Validate
+    if (!newPlanDate) {
+      setCreateError('Veuillez sélectionner une date.');
+      return;
+    }
+    if (plans.some(p => p.date === newPlanDate)) {
+      setCreateError('Un plan existe déjà pour cette date.');
+      return;
+    }
+
+    try {
+      setCreating(true);
       await productionService.saveProductionPlan({
         id: '',
-        date: newDate,
+        date: newPlanDate,
         total_production: 0,
         status: 'draft',
         stores: []
       } as any);
 
-      // Refresh list to show the new card
+      setShowCreateModal(false);
       await loadPlans();
     } catch (error) {
-      console.error('Error creating empty plan:', error);
-      alert('Erreur lors de la création du plan.');
+      console.error('Error creating plan:', error);
+      setCreateError('Erreur lors de la création du plan.');
     } finally {
       setCreating(false);
     }
@@ -440,7 +454,7 @@ const PlansPage: React.FC = () => {
           </div>
           <div className="flex space-x-2">
             <button
-              onClick={handleCreateNewPlan}
+              onClick={openCreateModal}
               className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
               disabled={creating}
             >
@@ -874,6 +888,37 @@ const PlansPage: React.FC = () => {
                   Fermer
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Plan Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-lg max-w-sm w-full p-6">
+            <h2 className="text-xl font-semibold mb-4">Créer un nouveau plan</h2>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Date de production</label>
+            <input
+              type="date"
+              value={newPlanDate}
+              onChange={e => setNewPlanDate(e.target.value)}
+              className="border border-gray-300 rounded-md p-2 w-full mb-4"
+            />
+            {createError && (
+              <p className="text-red-600 text-sm mb-4">{createError}</p>
+            )}
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 rounded-md text-gray-700 bg-gray-200 hover:bg-gray-300"
+                disabled={creating}
+              >Annuler</button>
+              <button
+                onClick={handleCreateNewPlan}
+                className="px-4 py-2 rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark disabled:opacity-50"
+                disabled={creating}
+              >{creating ? 'Création...' : 'Créer'}</button>
             </div>
           </div>
         </div>
