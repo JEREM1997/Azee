@@ -205,6 +205,21 @@ const PlansPage: React.FC = () => {
     };
   }, [loadPlans]);
 
+  // Timezone-safe date formatter (shared with DeliveryPage)
+  const formatDateSafe = (dateStr: string) => {
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+
+    const [year, month, day] = dateStr.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+
+    return date.toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
   // Calculate production summary for a plan (totals per variety / form / box)
   const calculatePlanSummary = (plan: ProductionPlan) => {
     const varietyTotals: { [varietyId: string]: number } = {};
@@ -281,14 +296,7 @@ const PlansPage: React.FC = () => {
   // Pre-compute summary for selected plan so it can be reused across modal sections
   const planSummary = selectedPlan ? calculatePlanSummary(selectedPlan) : null;
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('fr-FR', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
+  const formatDate = (dateString: string) => formatDateSafe(dateString);
 
   const handleViewPlan = (plan: ProductionPlan) => {
     console.log('Viewing plan with stores:', plan.stores); // Debug log
@@ -737,12 +745,7 @@ const PlansPage: React.FC = () => {
                         <div className="mt-1 text-sm text-gray-600">
                           <span className="font-medium">Date de Livraison:</span> {
                             store.delivery_date ? 
-                            new Date(store.delivery_date).toLocaleDateString('fr-FR', {
-                              weekday: 'long',
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric'
-                            }) : 'Non définie'
+                              formatDateSafe(store.delivery_date) : 'Non définie'
                           }
                         </div>
                       </div>

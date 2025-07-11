@@ -29,11 +29,11 @@ interface DeliveryBoxProduction {
 }
 
 interface DeliveryStoreProduction {
-  id: string;
-  store_id: string;
-  store_name: string;
-  deliverydate?: string;
-  total_quantity: number;
+  id: string;                 // PK in store_productions
+  store_id: string;           // FK to stores table
+  store_name: string;         // Friendly name
+  deliverydate?: string;      // YYYY-MM-DD, optional
+  total_quantity: number;     // Sum of all varieties + boxes
   delivery_confirmed: boolean;
   waste_reported: boolean;
   production_items?: DeliveryProductionItem[];
@@ -51,12 +51,35 @@ interface DeliveryProductionPlan {
 const DeliveryPage: React.FC = () => {
   const { currentUser, isAdmin, isProduction } = useAuth();
   const { forms } = useAdmin();
+  
+  // Timezone-safe date formatting function
+  const formatDateSafe = (dateStr: string) => {
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+    
+    const [year, month, day] = dateStr.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    
+    return date.toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+  
   const [selectedStore, setSelectedStore] = useState<string | null>(null);
   const [currentPlan, setCurrentPlan] = useState<DeliveryProductionPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [deliveryDate, setDeliveryDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [deliveryDate, setDeliveryDate] = useState<string>(() => {
+    // Avoid timezone issues by creating date in local timezone
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
   
   const [receivedQuantities, setReceivedQuantities] = useState<{ [key: string]: number }>({});
   const [wasteQuantities, setWasteQuantities] = useState<{ [key: string]: number }>({});
@@ -68,10 +91,9 @@ const DeliveryPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Load all recent production plans (last 30 days) to find stores with deliveries for the selected date
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 30);
+      // Load all production plans from 2024 to 2026 to find stores with deliveries for the selected date
+      const endDate = new Date('2026-12-31');
+      const startDate = new Date('2024-01-01');
       
       const { data: plans, error } = await apiService.production.getProductionPlans(
         startDate.toISOString().split('T')[0],
@@ -82,18 +104,6 @@ const DeliveryPage: React.FC = () => {
         setCurrentPlan(null);
         return;
       }
-      
-      // Debug: Show ALL plans loaded
-      console.log(`📦 Total plans loaded: ${plans.length}`);
-      plans.forEach((plan: any, index: number) => {
-        const isJune13 = plan.date === '2025-06-13';
-        console.log(`  Plan ${index + 1}: ID=${plan.id}, Date=${plan.date}, Stores=${plan.stores?.length || 0}${isJune13 ? ' ⭐ JUNE 13 PLAN!' : ''}`);
-        plan.stores?.forEach((store: any, storeIndex: number) => {
-          const isCrissier = store.store_name === 'Crissier';
-          const isJune14Delivery = store.deliverydate === '2025-06-14';
-          console.log(`    Store ${storeIndex + 1}: ${store.store_name}, DeliveryDate=${store.deliverydate || 'NOT SET'}${isCrissier && isJune14Delivery ? ' 🎯 FOUND CRISSIER WITH JUNE 14!' : ''}`);
-        });
-      });
       
       // Find all stores that have deliveries scheduled for the selected delivery date
       const storesForDeliveryDate: DeliveryStoreProduction[] = [];
@@ -106,7 +116,7 @@ const DeliveryPage: React.FC = () => {
           plan.stores.forEach((store: any) => {
             // Check if this store has a delivery date matching our selected date
             // If no delivery date is set, assume delivery is same day as production
-            const storeDeliveryDate = store.deliverydate || plan.date;
+            const storeDeliveryDate = plan.date;
             
             console.log(`  🏪 Store ${store.store_name}:`);
             console.log(`    - Raw deliverydate: "${store.deliverydate}"`);
@@ -115,10 +125,15 @@ const DeliveryPage: React.FC = () => {
             console.log(`    - Selected deliveryDate: "${deliveryDate}"`);
             console.log(`    - Match: ${storeDeliveryDate === deliveryDate}`);
             
-            // Normalize dates to YYYY-MM-DD format for comparison
+            // Normalize dates to YYYY-MM-DD format for comparison (avoid timezone issues)
             const normalizeDate = (dateStr: string) => {
+              // If already in YYYY-MM-DD format, return as-is
+              if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+                return dateStr;
+              }
+              // Otherwise try to parse and format, but avoid timezone conversion
               try {
-                const date = new Date(dateStr);
+                const date = new Date(dateStr); // Add noon time to avoid timezone issues
                 return date.toISOString().split('T')[0];
               } catch {
                 return dateStr; // Return original if parsing fails
@@ -218,10 +233,10 @@ const DeliveryPage: React.FC = () => {
     const doc = new jsPDF();
     
     // Use the actual production plan date instead of current date
-    const productionDate = currentPlan?.date ? new Date(currentPlan.date).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR');
+    const productionDate = currentPlan?.date ? formatDateSafe(currentPlan.date) : formatDateSafe(new Date().toISOString().split('T')[0]);
     
     // Use the store's delivery date if available, otherwise fall back to production date
-    const deliveryDate = storeDetails.deliverydate ? new Date(storeDetails.deliverydate).toLocaleDateString('fr-FR') : productionDate;
+    const deliveryDate = storeDetails.deliverydate ? formatDateSafe(storeDetails.deliverydate) : productionDate;
     
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
@@ -290,7 +305,7 @@ const DeliveryPage: React.FC = () => {
     doc.text('Signature:', 20, finalY + 40);
 
     // Update filename to include delivery date
-    const fileDate = storeDetails.deliverydate ? new Date(storeDetails.deliverydate).toLocaleDateString('fr-FR') : productionDate;
+    const fileDate = storeDetails.deliverydate ? formatDateSafe(storeDetails.deliverydate) : productionDate;
     doc.save(`bulletin-livraison-${storeDetails.store_name}-${fileDate}.pdf`);
   };
 
@@ -464,7 +479,7 @@ const DeliveryPage: React.FC = () => {
                     {store.total_quantity} doughnuts prévus
                     {store.deliverydate && (
                       <div className="text-xs text-gray-400 mt-1">
-                        Livraison: {new Date(store.deliverydate).toLocaleDateString('fr-FR')}
+                        Livraison: {formatDateSafe(store.deliverydate)}
                       </div>
                     )}
                   </div>
@@ -474,12 +489,7 @@ const DeliveryPage: React.FC = () => {
               {userStores.length === 0 && (
                 <div className="text-center py-8 text-gray-500">
                   <div className="text-sm">
-                    Aucune livraison prévue pour le {new Date(deliveryDate).toLocaleDateString('fr-FR', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
+                    Aucune livraison prévue pour le {formatDateSafe(deliveryDate)}
                   </div>
                   <div className="text-xs text-gray-400 mt-1">
                     Sélectionnez une autre date pour voir les livraisons
@@ -508,13 +518,7 @@ const DeliveryPage: React.FC = () => {
                   <p className="text-gray-500">Total : {storeDetails.total_quantity} doughnuts</p>
                     <p className="text-sm text-gray-600">
                       <span className="font-medium">Date de livraison:</span> {
-                        storeDetails.deliverydate ? 
-                        new Date(storeDetails.deliverydate).toLocaleDateString('fr-FR', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        }) : 'Non définie'
+                        storeDetails.deliverydate ? formatDateSafe(storeDetails.deliverydate) : 'Non définie'
                       }
                     </p>
                   </div>

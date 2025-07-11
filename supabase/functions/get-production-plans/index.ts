@@ -51,8 +51,10 @@ Deno.serve(async (req)=>{
     const role = user.user_metadata?.role;
     const storeIds = user.user_metadata?.store_ids || [];
     console.log(`Date range: ${start.toISOString().split('T')[0]} to ${end.toISOString().split('T')[0]}`);
-    // Build the query with proper join syntax
-    let query = supabaseClient.from('production_plans').select(`
+    console.log(`User role: ${role}, Store IDs: ${JSON.stringify(storeIds)}`);
+    
+    // Build the query - get ALL plans first, then filter by role in post-processing
+    const query = supabaseClient.from('production_plans').select(`
         id,
         date,
         total_production,
@@ -89,25 +91,36 @@ Deno.serve(async (req)=>{
       `).gte('date', start.toISOString().split('T')[0]).lte('date', end.toISOString().split('T')[0]).order('date', {
       ascending: false
     });
-    // If user is a store user, filter by their store_ids
-    if (role === 'store' && storeIds.length > 0) {
-      query = query.eq('store_productions.store_id', storeIds[0]);
-    }
+
     const { data: plans, error: dbError } = await query;
     if (dbError) {
       console.error('Database error:', dbError);
       throw new Error(`Database error: ${dbError.message}`);
     }
-    console.log(`Found ${plans?.length || 0} plans for user role: ${role}`);
-    console.log('Plans data:', JSON.stringify(plans, null, 2));
+    
+    console.log(`Found ${plans?.length || 0} plans before filtering for user role: ${role}`);
+    
     // For store users, filter to only show their stores
-    if (plans && role === 'store') {
+    if (plans && role === 'store' && storeIds.length > 0) {
       plans.forEach((plan)=>{
         if (plan.stores) {
           plan.stores = plan.stores.filter((store)=>storeIds.includes(store.store_id));
         }
       });
+      
+      // Remove plans that have no stores after filtering
+      const filteredPlans = plans.filter(plan => plan.stores && plan.stores.length > 0);
+      console.log(`After store filtering: ${filteredPlans.length} plans with user's stores`);
+      
+      return new Response(JSON.stringify(filteredPlans), {
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders
+        }
+      });
     }
+    
+    console.log(`Returning ${plans?.length || 0} plans for admin/production user`);
     return new Response(JSON.stringify(plans || []), {
       headers: {
         'Content-Type': 'application/json',

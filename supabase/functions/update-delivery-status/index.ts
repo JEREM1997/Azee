@@ -1,9 +1,12 @@
-import { createClient } from '@supabase/supabase-js';
+// @ts-ignore - Deno environment (npm specifier)
+import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  // ← make sure x-client-info is in here (case-insensitive, but include it!)
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type',
 };
 
 // Add Deno types for better TypeScript support

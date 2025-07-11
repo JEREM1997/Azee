@@ -11,6 +11,21 @@ const ProductionPage: React.FC = () => {
   // Get date from URL params or use today's date
   const urlParams = new URLSearchParams(window.location.search);
   const urlDate = urlParams.get('date');
+
+  // Timezone-safe date formatter (same logic as DeliveryPage)
+  const formatDateSafe = (dateStr: string) => {
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+
+    const [year, month, day] = dateStr.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+
+    return date.toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
   const [date, setDate] = useState<string>(urlDate || new Date().toISOString().split('T')[0]);
   const [storeProductions, setStoreProductions] = useState<{
     [storeId: string]: {
@@ -882,13 +897,9 @@ const ProductionPage: React.FC = () => {
                   {!canEdit && (
                     <div className="text-sm text-gray-600">
                       <span className="font-medium">Date de Livraison:</span> {
-                        storeDeliveryDates[store.id] ? 
-                        new Date(storeDeliveryDates[store.id]).toLocaleDateString('fr-FR', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        }) : 'Non définie'
+                        storeDeliveryDates[store.id]
+                          ? formatDateSafe(storeDeliveryDates[store.id])
+                          : 'Non définie'
                       }
                     </div>
                   )}
