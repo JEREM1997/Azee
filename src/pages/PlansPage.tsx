@@ -744,8 +744,7 @@ const PlansPage: React.FC = () => {
                         {/* Show delivery date only if manually set */}
                         <div className="mt-1 text-sm text-gray-600">
                           <span className="font-medium">Date de Livraison:</span> {
-                            store.delivery_date ? 
-                              formatDateSafe(store.delivery_date) : 'Non définie'
+                            formatDateSafe(store.delivery_date || selectedPlan.date)
                           }
                         </div>
                       </div>

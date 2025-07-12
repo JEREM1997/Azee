@@ -897,9 +897,7 @@ const ProductionPage: React.FC = () => {
                   {!canEdit && (
                     <div className="text-sm text-gray-600">
                       <span className="font-medium">Date de Livraison:</span> {
-                        storeDeliveryDates[store.id]
-                          ? formatDateSafe(storeDeliveryDates[store.id])
-                          : 'Non définie'
+                        formatDateSafe(storeDeliveryDates[store.id] || date)
                       }
                     </div>
                   )}

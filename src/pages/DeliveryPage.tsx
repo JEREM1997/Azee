@@ -334,6 +334,33 @@ const DeliveryPage: React.FC = () => {
           : box.quantity;
       });
 
+      // Validate: planned = received + existing waste (if any)
+      const validationErrors: string[] = [];
+
+      storeDetails.production_items?.forEach((item) => {
+        const planned = item.quantity;
+        const received = finalReceivedQuantities[item.id];
+        const waste = item.waste ?? 0;
+        if (received + waste !== planned) {
+          validationErrors.push(`${item.variety_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`);
+        }
+      });
+
+      storeDetails.box_productions?.forEach((box) => {
+        const planned = box.quantity;
+        const received = finalBoxReceivedQuantities[box.id];
+        const waste = box.waste ?? 0;
+        if (received + waste !== planned) {
+          validationErrors.push(`${box.box_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`);
+        }
+      });
+
+      if (validationErrors.length > 0) {
+        setError(`Les totaux ne correspondent pas (reçu + déchets ≠ prévu) pour:\n- ${validationErrors.join('\n- ')}`);
+        setSaving(false);
+        return;
+      }
+
       const { error } = await apiService.delivery.updateDeliveryStatus(storeDetails.id, {
         deliveryConfirmed: true,
         received: finalReceivedQuantities,
@@ -361,6 +388,55 @@ const DeliveryPage: React.FC = () => {
     try {
       setSaving(true);
       setError(null);
+
+      // Validate that for every item and box: planned = received + waste
+      const validationErrors: string[] = [];
+
+      storeDetails.production_items?.forEach((item) => {
+        const planned = item.quantity;
+        const received =
+          receivedQuantities[item.id] !== undefined
+            ? receivedQuantities[item.id]
+            : item.received ?? planned;
+        const waste =
+          wasteQuantities[item.id] !== undefined
+            ? wasteQuantities[item.id]
+            : item.waste ?? 0;
+
+        if (received + waste !== planned) {
+          validationErrors.push(
+            `${item.variety_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`
+          );
+        }
+      });
+
+      storeDetails.box_productions?.forEach((box) => {
+        const planned = box.quantity;
+        const received =
+          boxReceivedQuantities[box.id] !== undefined
+            ? boxReceivedQuantities[box.id]
+            : box.received ?? planned;
+        const waste =
+          boxWasteQuantities[box.id] !== undefined
+            ? boxWasteQuantities[box.id]
+            : box.waste ?? 0;
+
+        if (received + waste !== planned) {
+          validationErrors.push(
+            `${box.box_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`
+          );
+        }
+      });
+
+      if (validationErrors.length > 0) {
+        setError(
+          `Les totaux ne correspondent pas (reçu + déchets ≠ prévu) pour:\n- ${validationErrors.join(
+            '\n- '
+          )}`
+        );
+        setSaving(false);
+        return;
+      }
 
       // Only save waste quantities since delivery must be confirmed first
       const updateData = {
