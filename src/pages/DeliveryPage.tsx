@@ -114,10 +114,13 @@ const DeliveryPage: React.FC = () => {
         console.log(`📋 Checking plan ${plan.id} (${plan.date}):`, plan);
         if (plan.stores && Array.isArray(plan.stores)) {
           plan.stores.forEach((store: any) => {
-            // Check if this store has a delivery date matching our selected date
-            // If no delivery date is set, assume delivery is same day as production
-            const storeDeliveryDate = plan.date;
-            
+            // Determine the store's delivery date. Prefer the explicit delivery field,
+            // otherwise fall back to the production date.
+            const storeDeliveryDate: string =
+              store.delivery_date || // snake_case from API
+              store.deliverydate || // camelCase variant used elsewhere
+              plan.date; // default to production date if none provided
+ 
             console.log(`  🏪 Store ${store.store_name}:`);
             console.log(`    - Raw deliverydate: "${store.deliverydate}"`);
             console.log(`    - Plan date: "${plan.date}"`);
