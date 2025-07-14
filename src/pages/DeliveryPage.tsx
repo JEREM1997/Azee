@@ -700,10 +700,16 @@ const DeliveryPage: React.FC = () => {
                               }
                               placeholder="0"
                               value={wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : ''}
-                              onChange={(e) => setWasteQuantities({
-                                ...wasteQuantities,
-                                [item.id]: parseInt(e.target.value) || 0
-                              })}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value) || 0;
+                                const maxAllowed = item.received !== null && item.received !== undefined
+                                  ? item.received
+                                  : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity);
+                                setWasteQuantities({
+                                  ...wasteQuantities,
+                                  [item.id]: Math.min(val, maxAllowed)
+                                });
+                              }}
                               className="w-20 text-center border-2 border-orange-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-orange-50 hover:bg-white transition-colors"
                               title={`Maximum: ${
                                 item.received !== null && item.received !== undefined 
@@ -722,10 +728,16 @@ const DeliveryPage: React.FC = () => {
                               }
                               placeholder="0"
                               value={wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : (item.waste !== null && item.waste !== undefined ? item.waste : '')}
-                              onChange={(e) => setWasteQuantities({
-                                ...wasteQuantities,
-                                [item.id]: parseInt(e.target.value) || 0
-                              })}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value) || 0;
+                                const maxAllowed = item.received !== null && item.received !== undefined
+                                  ? item.received
+                                  : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity);
+                                setWasteQuantities({
+                                  ...wasteQuantities,
+                                  [item.id]: Math.min(val, maxAllowed)
+                                });
+                              }}
                               className="w-20 text-center border-2 border-red-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-red-50 hover:bg-white transition-colors"
                               title={`Admin: Modifier les déchets. Maximum: ${
                                 item.received !== null && item.received !== undefined 
@@ -814,10 +826,16 @@ const DeliveryPage: React.FC = () => {
                                   }
                                   placeholder="0"
                                   value={boxWasteQuantities[box.id] !== undefined ? boxWasteQuantities[box.id] : ''}
-                                  onChange={(e) => setBoxWasteQuantities({
-                                    ...boxWasteQuantities,
-                                    [box.id]: parseInt(e.target.value) || 0
-                                  })}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 0;
+                                    const maxAllowed = box.received !== null && box.received !== undefined
+                                      ? box.received
+                                      : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity);
+                                    setBoxWasteQuantities({
+                                      ...boxWasteQuantities,
+                                      [box.id]: Math.min(val, maxAllowed)
+                                    });
+                                  }}
                                   className="w-20 text-center border-2 border-orange-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-orange-50 hover:bg-white transition-colors"
                                   title={`Maximum: ${
                                     box.received !== null && box.received !== undefined 
@@ -836,10 +854,16 @@ const DeliveryPage: React.FC = () => {
                                   }
                                   placeholder="0"
                                   value={boxWasteQuantities[box.id] !== undefined ? boxWasteQuantities[box.id] : (box.waste !== null && box.waste !== undefined ? box.waste : '')}
-                                  onChange={(e) => setBoxWasteQuantities({
-                                    ...boxWasteQuantities,
-                                    [box.id]: parseInt(e.target.value) || 0
-                                  })}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 0;
+                                    const maxAllowed = box.received !== null && box.received !== undefined
+                                      ? box.received
+                                      : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity);
+                                    setBoxWasteQuantities({
+                                      ...boxWasteQuantities,
+                                      [box.id]: Math.min(val, maxAllowed)
+                                    });
+                                  }}
                                   className="w-20 text-center border-2 border-red-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-red-50 hover:bg-white transition-colors"
                                   title={`Admin: Modifier les déchets. Maximum: ${
                                     box.received !== null && box.received !== undefined 
