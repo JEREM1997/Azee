@@ -198,6 +198,9 @@ const DeliveryPage: React.FC = () => {
           });
           
           store.box_productions?.forEach((box: DeliveryBoxProduction) => {
+            console.log('🔍 Box:', box);
+            console.log('box.id   from API  :', box.id);
+            console.log('payload key we send:', Object.keys(boxReceivedQuantities));
             if (box.received !== null && box.received !== undefined) boxQuantities[box.id] = box.received;
             if (box.waste !== null && box.waste !== undefined) boxWaste[box.id] = box.waste;
           });
@@ -344,7 +347,7 @@ const DeliveryPage: React.FC = () => {
         const planned = item.quantity;
         const received = finalReceivedQuantities[item.id];
         const waste = item.waste ?? 0;
-        if (received + waste !== planned) {
+        if (received > planned) {
           validationErrors.push(`${item.variety_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`);
         }
       });
@@ -353,7 +356,7 @@ const DeliveryPage: React.FC = () => {
         const planned = box.quantity;
         const received = finalBoxReceivedQuantities[box.id];
         const waste = box.waste ?? 0;
-        if (received + waste !== planned) {
+        if (received > planned) {
           validationErrors.push(`${box.box_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`);
         }
       });
@@ -406,7 +409,7 @@ const DeliveryPage: React.FC = () => {
             ? wasteQuantities[item.id]
             : item.waste ?? 0;
 
-        if (received + waste !== planned) {
+        if (waste > received) {
           validationErrors.push(
             `${item.variety_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`
           );
@@ -424,7 +427,7 @@ const DeliveryPage: React.FC = () => {
             ? boxWasteQuantities[box.id]
             : box.waste ?? 0;
 
-        if (received + waste !== planned) {
+        if (waste > received) {
           validationErrors.push(
             `${box.box_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`
           );
@@ -433,7 +436,7 @@ const DeliveryPage: React.FC = () => {
 
       if (validationErrors.length > 0) {
         setError(
-          `Les totaux ne correspondent pas (reçu + déchets ≠ prévu) pour:\n- ${validationErrors.join(
+          `Les déchets dépassent les quantités reçues pour:\n- ${validationErrors.join(
             '\n- '
           )}`
         );

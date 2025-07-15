@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
       .from('store_productions')
       .update({ 
         delivery_confirmed: updates.deliveryConfirmed,
-        waste_reported: updates.waste ? true : undefined
+        waste_reported: updates.waste || updates.boxWaste ? true : undefined
       })
       .eq('id', storeProductionId)
       .select()
@@ -80,6 +80,21 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Update box received quantities if provided
+    if (updates.boxReceived) {
+      for (const [boxId, quantity] of Object.entries(updates.boxReceived)) {
+        // Some clients may send the box_productions.id, others the box_id (template id).
+        // Update whichever row matches the provided UUID and the current store_production_id.
+        const { error } = await supabase
+          .from('box_productions')
+          .update({ received: quantity })
+          .or(`id.eq.${boxId},box_id.eq.${boxId}`)
+          .eq('store_production_id', storeProductionId);
+
+        if (error) throw error;
+      }
+    }
+
     // Update waste quantities if provided
     if (updates.waste) {
       for (const [itemId, quantity] of Object.entries(updates.waste)) {
@@ -87,6 +102,19 @@ Deno.serve(async (req) => {
           .from('production_items')
           .update({ waste: quantity })
           .eq('id', itemId);
+
+        if (error) throw error;
+      }
+    }
+
+    // Update box waste quantities if provided
+    if (updates.boxWaste) {
+      for (const [boxId, quantity] of Object.entries(updates.boxWaste)) {
+        const { error } = await supabase
+          .from('box_productions')
+          .update({ waste: quantity })
+          .or(`id.eq.${boxId},box_id.eq.${boxId}`)
+          .eq('store_production_id', storeProductionId);
 
         if (error) throw error;
       }
