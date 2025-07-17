@@ -42,11 +42,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (sessionError) throw sessionError;
 
         if (session?.user) {
+          // Fetch authoritative role & store ids from user_roles (fallback to metadata)
+          let dbRole = session.user.user_metadata?.role || 'store';
+          let dbStoreIds: string[] = session.user.user_metadata?.store_ids || [];
+
+          try {
+            const { data: roleRow, error: roleErr } = await supabase
+              .from('user_roles')
+              .select('role, store_ids')
+              .eq('user_id', session.user.id)
+              .maybeSingle();
+
+            if (!roleErr && roleRow) {
+              dbRole = roleRow.role || dbRole;
+              dbStoreIds = roleRow.store_ids || dbStoreIds;
+            }
+          } catch (_) {
+            /* ignore – default to metadata */
+          }
+
           const user: User = {
             id: session.user.id,
             email: session.user.email!,
-            role: session.user.user_metadata?.role || 'store',
-            storeIds: session.user.user_metadata?.store_ids || [],
+            role: dbRole,
+            storeIds: dbStoreIds,
             fullName: session.user.user_metadata?.full_name || session.user.email!,
           };
           setState({ user, loading: false, error: null });

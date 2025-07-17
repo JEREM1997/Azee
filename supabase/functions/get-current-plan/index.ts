@@ -38,12 +38,15 @@ Deno.serve(async (req) => {
     console.log(`[get-current-plan] Auth header present:`, !!req.headers.get('Authorization'));
 
     let requestedDate: string | null;
+    let showAllStoresFlag = false;
     if (req.method === 'POST') {
       const body = await req.json().catch(() => ({}));
       requestedDate = body?.date || null;
+      showAllStoresFlag = !!body?.allStores;
     } else {
       const url = new URL(req.url);
       requestedDate = url.searchParams.get('date');
+      showAllStoresFlag = url.searchParams.get('allStores') === 'true';
     }
 
     if (!requestedDate) {
@@ -150,7 +153,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // For store users, filter the stores array to only show their stores
+    // For store-role users, always filter to only their stores (ignore allStores flag for security)
     if (role === 'store' && storeIds.length > 0) {
       plan.stores = plan.stores.filter(store => 
         storeIds.includes(store.store_id)

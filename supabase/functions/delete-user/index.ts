@@ -52,13 +52,14 @@ serve(async (req) => {
     if (!user_id) {
       throw new Error('User ID is required')
     }
-
-    // Prevent self-deletion
     if (user_id === user.id) {
       throw new Error('Cannot delete your own account')
     }
+    const { error: signOutError } = await adminClient.auth.admin.signOutUser(user_id)
 
-    // Delete the user
+    if (signOutError) {
+      throw signOutError
+    }
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(user_id)
 
     if (deleteError) {

@@ -136,12 +136,16 @@ export const apiService = {
    * Production Management Functions
    */
   production: {
-    async getCurrentPlan(date: string) {
-      return apiService.invoke<ProductionPlan>('get-current-plan', { date });
+    // Fetch a single production plan for a given date.
+    // When `allStores` is true, store users will receive *all* stores instead of only their assigned ones.
+    async getCurrentPlan(date: string, allStores: boolean = false) {
+      return apiService.invoke<ProductionPlan>('get-current-plan', { date, allStores });
     },
 
-    async getProductionPlans(startDate: string, endDate: string) {
-      return apiService.invoke<ProductionPlan[]>('get-production-plans', { startDate, endDate });
+    // Fetch all production plans between two dates.
+    // When `allStores` is true, store users will receive *all* stores instead of only their assigned ones.
+    async getProductionPlans(startDate: string, endDate: string, allStores: boolean = false) {
+      return apiService.invoke<ProductionPlan[]>('get-production-plans', { startDate, endDate, allStores });
     },
 
     async saveProductionPlan(planData: Partial<ProductionPlan>) {

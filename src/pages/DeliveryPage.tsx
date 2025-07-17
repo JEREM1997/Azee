@@ -49,8 +49,9 @@ interface DeliveryProductionPlan {
 }
 
 const DeliveryPage: React.FC = () => {
-  const { currentUser, isAdmin, isProduction } = useAuth();
+  const { currentUser, isAdmin, isProduction, isStore } = useAuth();
   const { forms } = useAdmin();
+  const [showAllStores, setShowAllStores] = useState(false);
   
   // Timezone-safe date formatting function
   const formatDateSafe = (dateStr: string) => {
@@ -91,13 +92,15 @@ const DeliveryPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Load all production plans from 2024 to 2026 to find stores with deliveries for the selected date
-      const endDate = new Date('2026-12-31');
-      const startDate = new Date('2024-01-01');
+      // Load production plans within a broad range.
+      // When showAllStores is ON we pull everything (2000-2100) so no store is missed.
+      const endDate = new Date('2100-12-31');
+      const startDate = showAllStores ? new Date('2000-01-01') : new Date('2024-01-01');
       
       const { data: plans, error } = await apiService.production.getProductionPlans(
         startDate.toISOString().split('T')[0],
-        endDate.toISOString().split('T')[0]
+        endDate.toISOString().split('T')[0],
+        showAllStores
       );
       
       if (error || !plans || plans.length === 0) {
@@ -150,7 +153,7 @@ const DeliveryPage: React.FC = () => {
             console.log(`    - Normalized selectedDate: "${normalizedSelectedDate}"`);
             console.log(`    - Normalized Match: ${normalizedStoreDate === normalizedSelectedDate}`);
             
-            if (normalizedStoreDate === normalizedSelectedDate) {
+            if (showAllStores || normalizedStoreDate === normalizedSelectedDate) {
               // Map the store data to match our interface
               const mappedStore: DeliveryStoreProduction = {
                 id: store.id,
@@ -221,11 +224,12 @@ const DeliveryPage: React.FC = () => {
 
   useEffect(() => {
     loadCurrentPlan();
-  }, [deliveryDate]);
+  }, [deliveryDate, showAllStores]);
 
   // Filter stores based on user role and store IDs
   const userStores = currentPlan?.store_productions?.filter(store => {
     if (isAdmin || isProduction) return true;
+    if (showAllStores) return true;
     return currentUser?.storeIds?.includes(store.store_id);
   }) || [];
 
@@ -474,11 +478,19 @@ const DeliveryPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
-        <div>
+        <div className="flex items-center space-x-4 flex-wrap">
         <h1 className="text-3xl font-bold text-gray-900">Gestion des Livraisons</h1>
-        <p className="text-gray-600 mt-1">Gérer les livraisons et suivre les déchets</p>
+        {(isAdmin || isProduction) && (
+          <button
+            onClick={() => setShowAllStores(prev => !prev)}
+            className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
+          >
+            {showAllStores ? 'Voir mes magasins' : 'Voir tous les magasins'}
+          </button>
+        )}
         </div>
-        
+        <p className="text-gray-600 mt-1">Gérer les livraisons et suivre les déchets</p>
+
         <div className="mt-4 md:mt-0">
           <div className="w-full md:w-auto">
             <label htmlFor="delivery-date" className="block text-sm font-medium text-gray-700 mb-1">
@@ -671,7 +683,7 @@ const DeliveryPage: React.FC = () => {
                               className="w-20 text-center border-2 border-blue-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-blue-50 hover:bg-white transition-colors"
                               title={`Quantité prévue: ${item.quantity}. Ajustez si nécessaire.`}
                             />
-                          ) : storeDetails.delivery_confirmed && isAdmin ? (
+                          ) : storeDetails.delivery_confirmed && (isAdmin || currentUser?.storeIds?.includes(storeDetails.store_id)) ? (
                             <input
                               type="number"
                               min="0"
@@ -720,7 +732,7 @@ const DeliveryPage: React.FC = () => {
                                   : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity)
                               } doughnuts`}
                             />
-                          ) : storeDetails.waste_reported && isAdmin ? (
+                          ) : storeDetails.waste_reported && (isAdmin || currentUser?.storeIds?.includes(storeDetails.store_id)) ? (
                             <input
                               type="number"
                               min="0"
@@ -797,7 +809,7 @@ const DeliveryPage: React.FC = () => {
                                   className="w-20 text-center border-2 border-blue-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-blue-50 hover:bg-white transition-colors"
                                   title={`Quantité prévue: ${box.quantity}. Ajustez si nécessaire.`}
                                 />
-                              ) : storeDetails.delivery_confirmed && isAdmin ? (
+                              ) : storeDetails.delivery_confirmed && (isAdmin || currentUser?.storeIds?.includes(storeDetails.store_id)) ? (
                                 <input
                                   type="number"
                                   min="0"
@@ -846,7 +858,7 @@ const DeliveryPage: React.FC = () => {
                                       : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity)
                                   } boîtes`}
                                 />
-                              ) : storeDetails.waste_reported && isAdmin ? (
+                              ) : storeDetails.waste_reported && (isAdmin || currentUser?.storeIds?.includes(storeDetails.store_id)) ? (
                                 <input
                                   type="number"
                                   min="0"
@@ -952,7 +964,7 @@ const DeliveryPage: React.FC = () => {
                 </div>
               )}
               
-              {storeDetails.delivery_confirmed && storeDetails.waste_reported && isAdmin && (
+              {storeDetails.delivery_confirmed && storeDetails.waste_reported && (isAdmin || currentUser?.storeIds?.includes(storeDetails.store_id)) && (
                 <div className="mt-6 flex justify-end space-x-3">
                   <button
                     onClick={handleConfirmDelivery}

@@ -6,7 +6,8 @@ import { ProductionPlan, StorePlan } from '../types';
 import { Calendar, Check, AlertTriangle, TrendingUp, FileText, Truck, X, Store } from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
-  const { user, isAdmin, isProduction } = useAuth();
+  const { currentUser: user, isAdmin, isProduction, isStore } = useAuth();
+  const [showAllStores, setShowAllStores] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [currentPlan, setCurrentPlan] = useState<ProductionPlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -18,7 +19,7 @@ const DashboardPage: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const plan = await productionService.getProductionPlan(selectedDate);
+        const plan = await productionService.getProductionPlan(selectedDate, showAllStores);
         
         // Set the plan directly since it already matches our TypeScript interface
         setCurrentPlan(plan);
@@ -31,7 +32,7 @@ const DashboardPage: React.FC = () => {
     };
 
     loadPlan();
-  }, [selectedDate]);
+  }, [selectedDate, showAllStores]);
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSelectedDate(e.target.value);
@@ -145,12 +146,20 @@ const DashboardPage: React.FC = () => {
         <div className="p-6">
           {currentPlan ? (
             <div>
-              <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+              <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
                 <div>
                   <p className="text-lg font-medium text-gray-900">
                     Production totale: <span className="font-bold">{currentPlan.total_production}</span> doughnuts
                   </p>
                 </div>
+                {(isAdmin || isProduction) && (
+                  <button
+                    onClick={() => setShowAllStores(prev => !prev)}
+                    className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
+                  >
+                    {showAllStores ? 'Voir mes magasins' : 'Voir tous les magasins'}
+                  </button>
+                )}
               </div>
               
               <div className="overflow-x-auto">
@@ -175,58 +184,65 @@ const DashboardPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {currentPlan.stores && currentPlan.stores.map((store) => {
-                      // Calculate completion metrics
-                      const totalItems = store.production_items?.length || 0;
-                      const receivedItems = store.production_items?.filter(item => item.received !== null).length || 0;
-                      const wasteItems = store.production_items?.filter(item => item.waste !== null).length || 0;
-                      
-                      const receivedPercentage = totalItems > 0 ? Math.round((receivedItems / totalItems) * 100) : 0;
-                      const wastePercentage = totalItems > 0 ? Math.round((wasteItems / totalItems) * 100) : 0;
-                      
-                      return (
-                        <tr key={store.store_id}>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">{store.store_name}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{store.total_quantity} doughnuts</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {store.delivery_confirmed ? (
-                              <div className="flex items-center">
-                                <Check className="h-5 w-5 text-green-500 mr-1.5" />
-                                <span className="text-sm text-gray-900">Confirmée ({receivedPercentage}%)</span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center">
-                                <X className="h-5 w-5 text-gray-400 mr-1.5" />
-                                <span className="text-sm text-gray-500">En attente</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {store.waste_reported ? (
-                              <div className="flex items-center">
-                                <Check className="h-5 w-5 text-green-500 mr-1.5" />
-                                <span className="text-sm text-gray-900">Reportés ({wastePercentage}%)</span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center">
-                                <X className="h-5 w-5 text-gray-400 mr-1.5" />
-                                <span className="text-sm text-gray-500">Non reportés</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(store)}`}>
-                              {getStatusIcon(store)}
-                              {getStatusText(store)}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {(() => {
+                      const visibleStores = currentPlan.stores ? currentPlan.stores.filter(store => {
+                        if (isAdmin || isProduction) return true;
+                        if (showAllStores) return true;
+                        return user?.storeIds?.includes(store.store_id);
+                      }) : [];
+                      return visibleStores.map((store) => {
+                        // Calculate completion metrics
+                        const totalItems = store.production_items?.length || 0;
+                        const receivedItems = store.production_items?.filter(item => item.received !== null).length || 0;
+                        const wasteItems = store.production_items?.filter(item => item.waste !== null).length || 0;
+                        
+                        const receivedPercentage = totalItems > 0 ? Math.round((receivedItems / totalItems) * 100) : 0;
+                        const wastePercentage = totalItems > 0 ? Math.round((wasteItems / totalItems) * 100) : 0;
+                        
+                        return (
+                          <tr key={store.store_id}>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{store.store_name}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{store.total_quantity} doughnuts</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {store.delivery_confirmed ? (
+                                <div className="flex items-center">
+                                  <Check className="h-5 w-5 text-green-500 mr-1.5" />
+                                  <span className="text-sm text-gray-900">Confirmée ({receivedPercentage}%)</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center">
+                                  <X className="h-5 w-5 text-gray-400 mr-1.5" />
+                                  <span className="text-sm text-gray-500">En attente</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {store.waste_reported ? (
+                                <div className="flex items-center">
+                                  <Check className="h-5 w-5 text-green-500 mr-1.5" />
+                                  <span className="text-sm text-gray-900">Reportés ({wastePercentage}%)</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center">
+                                  <X className="h-5 w-5 text-gray-400 mr-1.5" />
+                                  <span className="text-sm text-gray-500">Non reportés</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(store)}`}>
+                                {getStatusIcon(store)}
+                                {getStatusText(store)}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>

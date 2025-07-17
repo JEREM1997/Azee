@@ -4,13 +4,13 @@ import { apiService } from './apiService';
 import { ProductionPlan } from '../types';
 
 export const productionService = {
-  async getProductionPlan(date: string): Promise<ProductionPlan | null> {
+  async getProductionPlan(date: string, allStores: boolean = false): Promise<ProductionPlan | null> {
     if (!dateUtils.isValidDateString(date)) {
       throw new Error('Invalid date format');
     }
 
     const formattedDate = dateUtils.formatApiDate(date);
-    const { data, error } = await apiService.production.getCurrentPlan(formattedDate);
+    const { data, error } = await apiService.production.getCurrentPlan(formattedDate, allStores);
 
     if (error) throw error;
     return data;
@@ -84,7 +84,7 @@ export const productionService = {
     return data?.isValid || false;
   },
 
-  async getProductionPlans(startOrDays: string, endDate: string): Promise<ProductionPlan[]> {
+  async getProductionPlans(startOrDays: string, endDate: string, allStores: boolean = false): Promise<ProductionPlan[]> {
     // Detect if the first argument is a numeric string (e.g. "7", "30") meaning "days"
     const isDaysParam = /^\d+$/.test(startOrDays);
 
@@ -114,7 +114,8 @@ export const productionService = {
 
     const { data, error } = await apiService.production.getProductionPlans(
       startDate,
-      formattedEndDate
+      formattedEndDate,
+      allStores
     );
 
     if (error) throw error;

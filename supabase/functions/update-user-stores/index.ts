@@ -41,12 +41,27 @@ Deno.serve(async (req) => {
       throw new Error('Invalid token');
     }
 
+    // Ensure the caller is an admin
+    const { data: callerRoleRow } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (callerRoleRow?.role !== 'admin') {
+      throw new Error('Only administrators can update store assignments');
+    }
+
     // Get request data
     const { userId, storeIds } = await req.json();
 
     if (!userId || !Array.isArray(storeIds)) {
       throw new Error('Invalid request data');
     }
+
+    // Fetch the target user once, we need it for metadata later
+    const { data: targetUser, error: tErr } = await supabase.auth.admin.getUserById(userId);
+    if (tErr || !targetUser) throw new Error('Target user not found');
 
     // Get current user role from user_roles table
     const { data: userRole, error: roleError } = await supabase
@@ -59,10 +74,10 @@ Deno.serve(async (req) => {
       throw roleError;
     }
 
-    // If role not found in user_roles table, check user metadata
+    // If role not found in user_roles table, check target user's metadata
     let role = userRole?.role;
-    if (!role && user.user_metadata?.role) {
-      role = user.user_metadata.role;
+    if (!role && targetUser.user_metadata?.role) {
+      role = targetUser.user_metadata.role;
       
       // Create user role record if it doesn't exist
       const { error: insertError } = await supabase
@@ -107,21 +122,12 @@ Deno.serve(async (req) => {
       throw new Error('Failed to update user stores');
     }
 
-    // Update user metadata
-    const { error: metadataError } = await supabase.auth.admin.updateUserById(
-      userId,
-      {
-        user_metadata: {
-          ...user.user_metadata,
-          store_ids: storeIds,
-          updated_at: Date.now()
-        }
-      }
-    );
-
-    if (metadataError) {
-      throw metadataError;
-    }
+    const newMeta = {
+      ...targetUser.user_metadata,   // preserve existing fields including role
+      store_ids: storeIds,
+      updated_at: Date.now()
+    };
+    await supabase.auth.admin.updateUserById(userId, { user_metadata: newMeta });
 
     return new Response(
       JSON.stringify(updatedRole),

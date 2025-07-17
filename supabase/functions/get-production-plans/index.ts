@@ -29,7 +29,7 @@ Deno.serve(async (req)=>{
     });
     // Get startDate and endDate from request body
     const requestBody = await req.json();
-    const { startDate, endDate } = requestBody;
+    const { startDate, endDate, allStores } = requestBody;
     if (!startDate || !endDate) {
       throw new Error('Missing required startDate or endDate in request body');
     }
@@ -100,7 +100,7 @@ Deno.serve(async (req)=>{
     
     console.log(`Found ${plans?.length || 0} plans before filtering for user role: ${role}`);
     
-    // For store users, filter to only show their stores
+    // For store-role users, always filter to only their stores (ignore allStores flag)
     if (plans && role === 'store' && storeIds.length > 0) {
       plans.forEach((plan)=>{
         if (plan.stores) {
