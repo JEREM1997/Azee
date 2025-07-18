@@ -10,12 +10,12 @@ const Navbar: React.FC = () => {
   const location = useLocation();
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', visible: true },
+    { name: 'Tableau de bord', href: '/dashboard', visible: true },
     { name: 'Production', href: '/production', visible: isProduction || isAdmin },
     { name: 'Plans', href: '/plans', visible: isProduction || isAdmin },
-    { name: 'Delivery', href: '/delivery', visible: true },
-    { name: 'Statistics', href: '/stats', visible: isAdmin },
-    { name: 'Users', href: '/users', visible: isAdmin },
+    { name: 'Livraison', href: '/delivery', visible: true },
+    { name: 'Statistiques', href: '/stats', visible: isAdmin },
+    { name: 'Utilisateurs', href: '/users', visible: isAdmin },
     { name: 'Admin', href: '/admin', visible: isAdmin },
   ];
 
@@ -63,7 +63,7 @@ const Navbar: React.FC = () => {
                     onClick={() => logout()}
                     className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
                   >
-                    Sign out
+                    Se déconnecter
                   </button>
                 </div>
               </div>
@@ -157,7 +157,7 @@ const Navbar: React.FC = () => {
                 }}
                 className="block w-full text-left px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
               >
-                Sign out
+                Se déconnecter
               </button>
             </div>
           </div>

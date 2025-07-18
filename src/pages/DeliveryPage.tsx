@@ -38,6 +38,7 @@ interface DeliveryStoreProduction {
   waste_reported: boolean;
   production_items?: DeliveryProductionItem[];
   box_productions?: DeliveryBoxProduction[];
+  production_date?: string;
 }
 
 interface DeliveryProductionPlan {
@@ -146,7 +147,8 @@ const DeliveryPage: React.FC = () => {
                 delivery_confirmed: store.delivery_confirmed || false,
                 waste_reported: store.waste_reported || false,
                 production_items: store.production_items || [],
-                box_productions: store.box_productions || []
+                box_productions: store.box_productions || [],
+                production_date: plan.date
               });
             }
           });
@@ -236,7 +238,7 @@ const DeliveryPage: React.FC = () => {
     const doc = new jsPDF();
     
     // Use the actual production plan date instead of current date
-    const productionDate = currentPlan?.date ? formatDateSafe(currentPlan.date) : formatDateSafe(new Date().toISOString().split('T')[0]);
+    const productionDate = storeDetails.production_date ? formatDateSafe(storeDetails.production_date) : formatDateSafe(currentPlan?.date ?? new Date().toISOString().split('T')[0]);
     
     // Use the store's delivery date if available, otherwise fall back to production date
     const deliveryDate = storeDetails.deliverydate ? formatDateSafe(storeDetails.deliverydate) : productionDate;
