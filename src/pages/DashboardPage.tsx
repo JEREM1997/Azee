@@ -185,10 +185,13 @@ const DashboardPage: React.FC = () => {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {(() => {
+                      const allowedStoreIds = new Set(
+                        (user?.storeIds || []).map(id => id.toString().toLowerCase())
+                      );
                       const visibleStores = currentPlan.stores ? currentPlan.stores.filter(store => {
                         if (isAdmin || isProduction) return true;
                         if (showAllStores) return true;
-                        return user?.storeIds?.includes(store.store_id);
+                        return allowedStoreIds.has(store.store_id?.toString().toLowerCase());
                       }) : [];
                       return visibleStores.map((store) => {
                         // Calculate completion metrics

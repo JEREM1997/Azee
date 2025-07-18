@@ -114,48 +114,30 @@ const DeliveryPage: React.FC = () => {
       console.log('🔍 Looking for deliveries on date:', deliveryDate); // Debug log
       
       plans.forEach((plan: any) => {
-        console.log(`📋 Checking plan ${plan.id} (${plan.date}):`, plan);
         if (plan.stores && Array.isArray(plan.stores)) {
           plan.stores.forEach((store: any) => {
-            // Determine the store's delivery date. Prefer the explicit delivery field,
-            // otherwise fall back to the production date.
             const storeDeliveryDate: string =
-              store.delivery_date || // snake_case from API
-              store.deliverydate || // camelCase variant used elsewhere
-              plan.date; // default to production date if none provided
- 
-            console.log(`  🏪 Store ${store.store_name}:`);
-            console.log(`    - Raw deliverydate: "${store.deliverydate}"`);
-            console.log(`    - Plan date: "${plan.date}"`);
-            console.log(`    - Computed storeDeliveryDate: "${storeDeliveryDate}"`);
-            console.log(`    - Selected deliveryDate: "${deliveryDate}"`);
-            console.log(`    - Match: ${storeDeliveryDate === deliveryDate}`);
-            
-            // Normalize dates to YYYY-MM-DD format for comparison (avoid timezone issues)
-            const normalizeDate = (dateStr: string) => {
-              // If already in YYYY-MM-DD format, return as-is
-              if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-                return dateStr;
-              }
-              // Otherwise try to parse and format, but avoid timezone conversion
-              try {
-                const date = new Date(dateStr); // Add noon time to avoid timezone issues
-                return date.toISOString().split('T')[0];
-              } catch {
-                return dateStr; // Return original if parsing fails
-              }
-            };
-            
-            const normalizedStoreDate = normalizeDate(storeDeliveryDate);
-            const normalizedSelectedDate = normalizeDate(deliveryDate);
-            
-            console.log(`    - Normalized storeDate: "${normalizedStoreDate}"`);
-            console.log(`    - Normalized selectedDate: "${normalizedSelectedDate}"`);
-            console.log(`    - Normalized Match: ${normalizedStoreDate === normalizedSelectedDate}`);
-            
-            if (showAllStores || normalizedStoreDate === normalizedSelectedDate) {
-              // Map the store data to match our interface
-              const mappedStore: DeliveryStoreProduction = {
+              store.delivery_date ??
+              store.deliverydate ??
+              plan.date;
+
+            // Normalise for comparison
+            const normalize = (d: string) => d?.slice(0, 10);
+            const sameDate   = normalize(storeDeliveryDate) === normalize(deliveryDate);
+
+            // ADD store-level debug (remove later if noisy)
+            console.log(`[DeliveryPage] ${store.store_name}`, {
+              deliveryDate: storeDeliveryDate,
+              selected: deliveryDate,
+              sameDate,
+              userHasAccess: currentUser?.storeIds?.includes(store.store_id)
+            });
+
+            const passesOwnership = isAdmin || isProduction || currentUser?.storeIds?.includes(store.store_id);
+            const passesDate      = showAllStores || sameDate;
+
+            if (passesOwnership && passesDate) {
+              storesForDeliveryDate.push({
                 id: store.id,
                 store_id: store.store_id,
                 store_name: store.store_name,
@@ -165,8 +147,7 @@ const DeliveryPage: React.FC = () => {
                 waste_reported: store.waste_reported || false,
                 production_items: store.production_items || [],
                 box_productions: store.box_productions || []
-              };
-              storesForDeliveryDate.push(mappedStore);
+              });
             }
           });
         }
@@ -176,12 +157,21 @@ const DeliveryPage: React.FC = () => {
       if (storesForDeliveryDate.length > 0) {
         const totalProduction = storesForDeliveryDate.reduce((sum, store) => sum + store.total_quantity, 0);
         
+        // use Map to de-dupe by store.id
+        const storeMap = new Map<string, DeliveryStoreProduction>();
+
+        storesForDeliveryDate.forEach(store => {
+          storeMap.set(store.id, store);
+        });
+
+        const uniqueStores = Array.from(storeMap.values());
+
         setCurrentPlan({
           id: `delivery-${deliveryDate}`,
           date: deliveryDate,
           total_production: totalProduction,
           status: 'delivery',
-          store_productions: storesForDeliveryDate
+          store_productions: uniqueStores
         });
       } else {
         setCurrentPlan(null);
@@ -201,9 +191,6 @@ const DeliveryPage: React.FC = () => {
           });
           
           store.box_productions?.forEach((box: DeliveryBoxProduction) => {
-            console.log('🔍 Box:', box);
-            console.log('box.id   from API  :', box.id);
-            console.log('payload key we send:', Object.keys(boxReceivedQuantities));
             if (box.received !== null && box.received !== undefined) boxQuantities[box.id] = box.received;
             if (box.waste !== null && box.waste !== undefined) boxWaste[box.id] = box.waste;
           });
@@ -227,10 +214,16 @@ const DeliveryPage: React.FC = () => {
   }, [deliveryDate, showAllStores]);
 
   // Filter stores based on user role and store IDs
-  const userStores = currentPlan?.store_productions?.filter(store => {
+  const clean = (s:string)=>s.trim().toLowerCase();
+
+  const allowedStoreIds = new Set(
+    (currentUser?.storeIds || []).map(clean)
+  );
+
+  const userStores = currentPlan?.store_productions?.filter(store=>{
     if (isAdmin || isProduction) return true;
     if (showAllStores) return true;
-    return currentUser?.storeIds?.includes(store.store_id);
+    return allowedStoreIds.has(clean(store.store_id ?? ''));
   }) || [];
 
   const storeDetails = selectedStore 

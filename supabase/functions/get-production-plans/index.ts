@@ -104,7 +104,9 @@ Deno.serve(async (req)=>{
     if (plans && role === 'store' && storeIds.length > 0) {
       plans.forEach((plan)=>{
         if (plan.stores) {
-          plan.stores = plan.stores.filter((store)=>storeIds.includes(store.store_id));
+          plan.stores = plan.stores.filter(sp =>
+            storeIds.includes(sp.store_id)       // storeIds taken from the caller’s profile
+          );
         }
       });
       
