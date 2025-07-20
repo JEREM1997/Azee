@@ -39,6 +39,9 @@ export interface HistoricalPattern {
 }
 
 export class AIForecastService {
+  // Minimum production safeguards
+  private readonly MIN_VAR_PRODUCTION = 4; // At least 4 doughnuts per variety
+  private readonly MIN_BOX_PRODUCTION = 2; // At least 2 boxes per configuration
   private readonly WASTE_TARGET = 0.25; // Target 25% waste (well below 30% limit)
   private readonly SAFETY_STOCK_MIN = 0.15; // Minimum 15% safety stock
   private readonly SAFETY_STOCK_MAX = 0.35; // Maximum 35% safety stock
@@ -103,9 +106,10 @@ export class AIForecastService {
         { throwError: false }
       );
 
+      // We keep the backend call for future use, but predictions will rely on the
+      // refined local algorithm that focuses on the last 5 matching weekdays.
       if (!error && backendData && backendData.production_items) {
-        console.log('🤖 AI Forecast: Using backend generate-production function');
-        return this.convertBackendResponseToForecast(backendData, stores, varieties, boxes);
+        console.log('ℹ️ AI Forecast: Backend generate-production response ignored for weekday-specific analysis');
       }
 
       if (error) {
@@ -197,8 +201,47 @@ export class AIForecastService {
     const salesMapping = this.getProductionSalesMapping(targetDayOfWeek);
     const salesDayOfWeek = salesMapping.salesDay;
     const isWeekend = salesMapping.isWeekend;
-    
-    console.log(`🤖 AI Forecast: Analyzing ${historicalPlans?.length || 0} days of historical data (${usedStrategy?.description})`);
+
+    // =================================================================================
+    // Restrict historical data to the most recent 5 occurrences of the *same* weekday
+    // =================================================================================
+    const targetDateObj = new Date(targetDate);
+    const windowStart = new Date(targetDateObj);
+    windowStart.setDate(windowStart.getDate() - 35); // last 5 weeks
+
+    // 1) keep only same weekday, within last 5 weeks, and strictly before target date
+    let weekdayFilteredPlans = (historicalPlans || [])
+      .filter((p: any) => {
+        const d = new Date(p.date);
+        return (
+          d.getDay() === targetDayOfWeek &&
+          d < targetDateObj &&
+          d >= windowStart
+        );
+      })
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // 2) Deduplicate by calendar date (there can be duplicates due to DB issues)
+    const seenDates = new Set<string>();
+    weekdayFilteredPlans = weekdayFilteredPlans.filter((p: any) => {
+      const dateStr = p.date;
+      if (seenDates.has(dateStr)) return false;
+      seenDates.add(dateStr);
+      return true;
+    });
+
+    // 3) Limit to most recent 5 occurrences
+    weekdayFilteredPlans = weekdayFilteredPlans.slice(0, 5);
+
+    // Fallback if still empty (e.g., no historical plans in last 5 weeks)
+    if (weekdayFilteredPlans.length === 0) {
+      weekdayFilteredPlans = (historicalPlans || [])
+        .filter((p: any) => new Date(p.date).getDay() === targetDayOfWeek)
+        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 5);
+    }
+
+    console.log(`🤖 AI Forecast: Using ${weekdayFilteredPlans.length} historical plan(s) matching ${this.getDayName(targetDayOfWeek)} (max 5)`);
     console.log(`🤖 AI Forecast: Production date is ${this.getDayName(targetDayOfWeek)} → ${salesMapping.mappingInfo}`);
     console.log(`🤖 AI Forecast: Analyzing sales patterns for ${this.getDayName(salesDayOfWeek)} (weekend: ${isWeekend})`);
 
@@ -208,15 +251,10 @@ export class AIForecastService {
     for (const store of stores.filter(s => s.isActive)) {
       console.log(`🤖 AI Forecast: Processing store ${store.name}`);
       
-      const storeHistoricalData = this.extractStoreHistoricalData(historicalPlans || [], store.id);
+      const storeHistoricalData = this.extractStoreHistoricalData(weekdayFilteredPlans, store.id);
       
       if (storeHistoricalData.length === 0) {
-        console.log(`⚠️ AI Forecast: No historical data for store ${store.name}, using conservative estimates`);
-        // Provide conservative estimates even without historical data
-        const conservativeResult = this.generateConservativeEstimate(store, varieties, boxes, targetDayOfWeek, salesDayOfWeek);
-        if (conservativeResult) {
-          results.push(conservativeResult);
-        }
+        console.log(`ℹ️ AI Forecast: Skipping store ${store.name} – no data for the last 5 matching weekdays`);
         continue;
       }
 
@@ -242,30 +280,32 @@ export class AIForecastService {
         targetDayOfWeek
       );
 
-      const totalPredictedSales = varietyPredictions.reduce((sum, v) => sum + v.predictedSales, 0) +
-                                 boxPredictions.reduce((sum, b) => sum + b.predictedSales * this.getBoxSize(b.boxId, boxes), 0);
-      
-      const totalRecommendedProduction = varietyPredictions.reduce((sum, v) => sum + v.recommendedProduction, 0) +
-                                        boxPredictions.reduce((sum, b) => sum + b.recommendedProduction * this.getBoxSize(b.boxId, boxes), 0);
+      if (varietyPredictions.length > 0 || boxPredictions.length > 0) {
+        const totalPredictedSales = varietyPredictions.reduce((sum, v) => sum + v.predictedSales, 0) +
+                                   boxPredictions.reduce((sum, b) => sum + b.predictedSales * this.getBoxSize(b.boxId, boxes), 0);
 
-      const estimatedWastePercent = totalRecommendedProduction > 0 ? 
-        ((totalRecommendedProduction - totalPredictedSales) / totalRecommendedProduction) * 100 : 0;
+        const totalRecommendedProduction = varietyPredictions.reduce((sum, v) => sum + v.recommendedProduction, 0) +
+                                          boxPredictions.reduce((sum, b) => sum + b.recommendedProduction * this.getBoxSize(b.boxId, boxes), 0);
 
-      const avgSafetyStock = varietyPredictions.length > 0 ? 
-        varietyPredictions.reduce((sum, v) => sum + v.confidence, 0) / varietyPredictions.length : 0.20;
+        const estimatedWastePercent = totalRecommendedProduction > 0 ? 
+          ((totalRecommendedProduction - totalPredictedSales) / totalRecommendedProduction) * 100 : 0;
 
-      results.push({
-        storeId: store.id,
-        storeName: store.name,
-        predictions: varietyPredictions,
-        boxPredictions: boxPredictions,
-        totalPredictedSales,
-        totalRecommendedProduction,
-        estimatedWastePercent,
-        safetyStockPercent: avgSafetyStock * 100
-      });
+        const avgSafetyStock = varietyPredictions.length > 0 ? 
+          varietyPredictions.reduce((sum, v) => sum + v.confidence, 0) / varietyPredictions.length : 0.20;
 
-      console.log(`✅ AI Forecast: ${store.name} - Predicted sales: ${totalPredictedSales}, Recommended production: ${totalRecommendedProduction}, Estimated waste: ${estimatedWastePercent.toFixed(1)}%`);
+        results.push({
+          storeId: store.id,
+          storeName: store.name,
+          predictions: varietyPredictions,
+          boxPredictions: boxPredictions,
+          totalPredictedSales,
+          totalRecommendedProduction,
+          estimatedWastePercent,
+          safetyStockPercent: avgSafetyStock * 100
+        });
+
+        console.log(`✅ AI Forecast: ${store.name} - Predicted sales: ${totalPredictedSales}, Recommended production: ${totalRecommendedProduction}, Estimated waste: ${estimatedWastePercent.toFixed(1)}%`);
+      }
     }
 
     console.log(`🤖 AI Forecast: Completed analysis for ${results.length} stores (${storesWithData} with historical data, ${results.length - storesWithData} with conservative estimates)`);
@@ -286,7 +326,8 @@ export class AIForecastService {
     backendData: any,
     stores: any[],
     varieties: any[],
-    boxes: any[]
+    boxes: any[],
+    targetDate: string
   ): AIForecastResult[] {
     type PredictionMap = {
       storeName: string;
@@ -316,7 +357,7 @@ export class AIForecastService {
           varietyId: item.product,
           varietyName: variety?.name || 'Inconnu',
           predictedSales: baseSales,
-          recommendedProduction: item.quantity,
+          recommendedProduction: Math.max(item.quantity, this.MIN_VAR_PRODUCTION),
           confidence: finalBuffer,
           reasoning: 'Prévision générée par le backend'
         });
@@ -328,7 +369,7 @@ export class AIForecastService {
           boxId: item.product,
           boxName: box?.name || 'Boîte inconnue',
           predictedSales: baseSales,
-          recommendedProduction: item.quantity,
+          recommendedProduction: Math.max(item.quantity, this.MIN_BOX_PRODUCTION),
           confidence: finalBuffer,
           reasoning: 'Prévision générée par le backend'
         });
@@ -361,6 +402,51 @@ export class AIForecastService {
       });
     }
 
+    // -------------------------------------------------------------
+    // Add conservative estimates for stores missing from backend data
+    // -------------------------------------------------------------
+    const targetDayOfWeek = new Date(targetDate).getDay();
+    const salesDayOfWeek = this.getProductionSalesMapping(targetDayOfWeek).salesDay;
+
+    for (const store of stores.filter(s => s.isActive)) {
+      if (results.find(r => r.storeId === store.id)) continue; // already present
+
+      const conservative = this.generateConservativeEstimate(
+        store,
+        varieties,
+        boxes,
+        targetDayOfWeek,
+        salesDayOfWeek
+      );
+
+      if (conservative) {
+        // Apply minimum thresholds
+        conservative.predictions = conservative.predictions.map(p => ({
+          ...p,
+          recommendedProduction: Math.max(p.recommendedProduction, this.MIN_VAR_PRODUCTION)
+        }));
+
+        conservative.boxPredictions = conservative.boxPredictions.map(p => ({
+          ...p,
+          recommendedProduction: Math.max(p.recommendedProduction, this.MIN_BOX_PRODUCTION)
+        }));
+
+        // Recalculate totals
+        conservative.totalPredictedSales = conservative.predictions.reduce((s, v) => s + v.predictedSales, 0) +
+          conservative.boxPredictions.reduce((s, b) => s + b.predictedSales * (boxes.find(x => x.id === b.boxId)?.size || 1), 0);
+
+        conservative.totalRecommendedProduction = conservative.predictions.reduce((s, v) => s + v.recommendedProduction, 0) +
+          conservative.boxPredictions.reduce((s, b) => s + b.recommendedProduction * (boxes.find(x => x.id === b.boxId)?.size || 1), 0);
+
+        conservative.estimatedWastePercent = conservative.totalRecommendedProduction > 0 ?
+          ((conservative.totalRecommendedProduction - conservative.totalPredictedSales) / conservative.totalRecommendedProduction) * 100 : 0;
+
+        conservative.safetyStockPercent = 25; // default buffer
+
+        results.push(conservative);
+      }
+    }
+
     return results;
   }
 
@@ -387,15 +473,7 @@ export class AIForecastService {
       const pattern = this.analyzeVarietyPattern(historicalData, varietyId, targetDayOfWeek);
       
       if (pattern.dataPoints === 0) {
-        // No historical data, use conservative estimate
-        predictions.push({
-          varietyId,
-          varietyName: variety.name,
-          predictedSales: 12, // Conservative 1 dozen
-          recommendedProduction: 15, // 25% safety stock
-          confidence: 0.20, // Low confidence
-          reasoning: "No historical data - conservative estimate of 1 dozen"
-        });
+        // Skip varieties with no matching data in the last 5 corresponding weekdays
         continue;
       }
 
@@ -432,18 +510,21 @@ export class AIForecastService {
       // Cap safety stock
       safetyStockPercent = Math.min(safetyStockPercent, this.SAFETY_STOCK_MAX);
 
-      const recommendedProduction = Math.ceil(basePrediction * (1 + safetyStockPercent));
+      const recommendedProductionRaw = Math.ceil(basePrediction * (1 + safetyStockPercent));
 
       // Ensure we don't exceed waste target
-      const impliedWaste = (recommendedProduction - basePrediction) / recommendedProduction;
+      const impliedWaste = (recommendedProductionRaw - basePrediction) / recommendedProductionRaw;
       const adjustedProduction = impliedWaste > this.WASTE_TARGET ? 
-        Math.ceil(basePrediction / (1 - this.WASTE_TARGET)) : recommendedProduction;
+        Math.ceil(basePrediction / (1 - this.WASTE_TARGET)) : recommendedProductionRaw;
+
+      // Enforce minimum threshold for varieties
+      const finalRecommended = Math.max(adjustedProduction, this.MIN_VAR_PRODUCTION);
 
       predictions.push({
         varietyId,
         varietyName: variety.name,
         predictedSales: Math.round(basePrediction),
-        recommendedProduction: adjustedProduction,
+        recommendedProduction: finalRecommended,
         confidence: safetyStockPercent,
         reasoning: this.generateReasoningText(pattern, targetDayOfWeek, safetyStockPercent, isWeekendProduction, productionDayOfWeek)
       });
@@ -475,15 +556,7 @@ export class AIForecastService {
       const pattern = this.analyzeBoxPattern(historicalData, box.name, targetDayOfWeek);
       
       if (pattern.dataPoints === 0) {
-        // No historical data for boxes, use conservative estimate
-        predictions.push({
-          boxId,
-          boxName: box.name,
-          predictedSales: 2, // Conservative 2 boxes
-          recommendedProduction: 3, // 50% safety stock
-          confidence: 0.25,
-          reasoning: "No historical data - conservative estimate"
-        });
+        // Skip boxes without weekday-matched history
         continue;
       }
 
@@ -502,7 +575,10 @@ export class AIForecastService {
       if (isWeekendProduction) safetyStockPercent += 0.05;
       safetyStockPercent = Math.min(safetyStockPercent, this.SAFETY_STOCK_MAX);
 
-      const recommendedProduction = Math.ceil(basePrediction * (1 + safetyStockPercent));
+      const recommendedProductionRaw = Math.ceil(basePrediction * (1 + safetyStockPercent));
+
+      // Enforce minimum threshold for boxes
+      const recommendedProduction = Math.max(recommendedProductionRaw, this.MIN_BOX_PRODUCTION);
 
       predictions.push({
         boxId,
