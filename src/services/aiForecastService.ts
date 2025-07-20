@@ -1,4 +1,5 @@
 import { productionService } from './productionService';
+import { apiService } from './apiService';
 
 export interface AIForecastResult {
   storeId: string;
@@ -87,6 +88,38 @@ export class AIForecastService {
    * Generate AI-powered production forecasts for a specific date
    */
   async generateForecast(targetDate: string, stores: any[], varieties: any[], boxes: any[]): Promise<AIForecastResult[]> {
+    // -------------------------------------------------------------
+    // 1. Try to use the new backend AI service (generate-production)
+    // -------------------------------------------------------------
+    try {
+      // The Edge Function expects the target production day as a lowercase weekday string e.g. "thursday"
+      const dayName = new Date(targetDate)
+        .toLocaleDateString('en-US', { weekday: 'long' })
+        .toLowerCase();
+
+      const { data: backendData, error } = await apiService.invoke<any>(
+        'generate-production',
+        { target_production_day: dayName },
+        { throwError: false }
+      );
+
+      if (!error && backendData && backendData.production_items) {
+        console.log('🤖 AI Forecast: Using backend generate-production function');
+        return this.convertBackendResponseToForecast(backendData, stores, varieties, boxes);
+      }
+
+      if (error) {
+        console.warn('⚠️ AI Forecast: Backend generate-production error – falling back to local algorithm:', error.message || error);
+      } else {
+        console.warn('⚠️ AI Forecast: Backend generate-production returned no data – falling back to local algorithm');
+      }
+    } catch (backendErr) {
+      console.warn('⚠️ AI Forecast: Exception while calling backend generate-production – falling back to local algorithm:', backendErr);
+    }
+
+    // -------------------------------------------------------------
+    // 2. Fallback to existing local algorithm (current implementation)
+    // -------------------------------------------------------------
     console.log('🤖 AI Forecast: Starting prediction analysis for', targetDate);
     
     // Enhanced data loading: try much larger timeframes due to backend date conversion issue
@@ -239,6 +272,93 @@ export class AIForecastService {
     
     if (results.length === 0) {
       throw new Error("No production forecasts could be generated. Please ensure stores are properly configured with available varieties and boxes.");
+    }
+
+    return results;
+  }
+
+  /**
+   * Convert the response from the `generate-production` Edge Function
+   * to the local `AIForecastResult[]` structure so the rest of the UI
+   * continues to work without major changes.
+   */
+  private convertBackendResponseToForecast(
+    backendData: any,
+    stores: any[],
+    varieties: any[],
+    boxes: any[]
+  ): AIForecastResult[] {
+    type PredictionMap = {
+      storeName: string;
+      predictions: any[];
+      boxPredictions: any[];
+    };
+
+    const storeIndexById = new Map(stores.map((s: any) => [s.id, s]));
+    const resMap: Record<string, PredictionMap> = {};
+
+    const finalBuffer = backendData.final_buffer ?? 0.25;
+
+    // Iterate over production_items (they keep IDs for store/product)
+    (backendData.production_items || []).forEach((item: any) => {
+      const storeId = item.store;
+      const kind = item.kind as 'var' | 'box';
+
+      if (!resMap[storeId]) {
+        const storeName = storeIndexById.get(storeId)?.name || storeId;
+        resMap[storeId] = { storeName, predictions: [], boxPredictions: [] };
+      }
+
+      if (kind === 'var') {
+        const variety = varieties.find(v => v.id === item.product);
+        const baseSales = Math.round(item.quantity / (1 + finalBuffer));
+        resMap[storeId].predictions.push({
+          varietyId: item.product,
+          varietyName: variety?.name || 'Inconnu',
+          predictedSales: baseSales,
+          recommendedProduction: item.quantity,
+          confidence: finalBuffer,
+          reasoning: 'Prévision générée par le backend'
+        });
+      } else {
+        const box = boxes.find(b => b.id === item.product);
+        const boxSize = box?.size || 1;
+        const baseSales = Math.round((item.quantity * boxSize) / (1 + finalBuffer));
+        resMap[storeId].boxPredictions.push({
+          boxId: item.product,
+          boxName: box?.name || 'Boîte inconnue',
+          predictedSales: baseSales,
+          recommendedProduction: item.quantity,
+          confidence: finalBuffer,
+          reasoning: 'Prévision générée par le backend'
+        });
+      }
+    });
+
+    // Build final array
+    const results: AIForecastResult[] = [];
+    for (const [storeId, data] of Object.entries(resMap)) {
+      const totalPred = [...data.predictions, ...data.boxPredictions].reduce((sum, p: any) => sum + p.predictedSales, 0);
+
+      const totalRec = data.predictions.reduce((sum, p: any) => sum + p.recommendedProduction, 0) +
+        data.boxPredictions.reduce((sum, p: any) => {
+          const box = boxes.find(b => b.id === p.boxId);
+          const size = box?.size || 1;
+          return sum + p.recommendedProduction * size;
+        }, 0);
+
+      const wastePct = totalRec > 0 ? ((totalRec - totalPred) / totalRec) * 100 : 0;
+
+      results.push({
+        storeId,
+        storeName: data.storeName,
+        predictions: data.predictions,
+        boxPredictions: data.boxPredictions,
+        totalPredictedSales: totalPred,
+        totalRecommendedProduction: totalRec,
+        estimatedWastePercent: wastePct,
+        safetyStockPercent: finalBuffer * 100
+      });
     }
 
     return results;
