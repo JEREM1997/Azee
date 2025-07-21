@@ -339,29 +339,18 @@ const DeliveryPage: React.FC = () => {
           : box.quantity;
       });
 
-      // Validate: planned = received + existing waste (if any)
       const validationErrors: string[] = [];
 
       storeDetails.production_items?.forEach((item) => {
-        const planned = item.quantity;
-        const received = finalReceivedQuantities[item.id];
-        const waste = item.waste ?? 0;
-        if (received > planned) {
-          validationErrors.push(`${item.variety_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`);
-        }
+        // No validation on over-receipt at this stage
       });
 
       storeDetails.box_productions?.forEach((box) => {
-        const planned = box.quantity;
-        const received = finalBoxReceivedQuantities[box.id];
-        const waste = box.waste ?? 0;
-        if (received > planned) {
-          validationErrors.push(`${box.box_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`);
-        }
+        // No validation on over-receipt at this stage
       });
 
       if (validationErrors.length > 0) {
-        setError(`Les totaux ne correspondent pas (reçu + déchets ≠ prévu) pour:\n- ${validationErrors.join('\n- ')}`);
+        setError(validationErrors.join('\n'));
         setSaving(false);
         return;
       }

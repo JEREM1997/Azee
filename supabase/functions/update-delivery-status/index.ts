@@ -68,31 +68,26 @@ Deno.serve(async (req) => {
 
     if (updateError) throw updateError;
 
-    // -------------------------------------------------------------------
-    // Configuration: allowed overage (absolute number, default 2)
-    // -------------------------------------------------------------------
-    const ALLOWED_OVERAGE = parseInt(Deno.env.get('RECEIPT_OVERAGE_ABS') || '2', 10);
-
-    // Helper to fetch planned & current received for validation
+    // Helper to fetch current received for waste validation
     async function getItemInfo(itemId: string) {
       const { data, error } = await supabase
         .from('production_items')
-        .select('quantity, received')
+        .select('received')
         .eq('id', itemId)
         .single();
       if (error) throw error;
-      return data as { quantity: number; received: number | null };
+      return data as { received: number | null };
     }
 
     async function getBoxInfo(boxProdId: string) {
       const { data, error } = await supabase
         .from('box_productions')
-        .select('quantity, received')
+        .select('received')
         .or(`id.eq.${boxProdId},box_id.eq.${boxProdId}`)
         .eq('store_production_id', storeProductionId)
         .single();
       if (error) throw error;
-      return data as { quantity: number; received: number | null };
+      return data as { received: number | null };
     }
 
     // ----------------------- RECEIVED -----------------------------------
@@ -103,11 +98,7 @@ Deno.serve(async (req) => {
           throw new Error('Quantité reçue invalide');
         }
 
-        const info = await getItemInfo(itemId);
-        const maxAllowed = info.quantity + ALLOWED_OVERAGE;
-        if (q > maxAllowed) {
-          throw new Error(`Réception trop élevée (${q}). Maximum autorisé : ${maxAllowed}.`);
-        }
+        // No upper limit check – only non-negative enforced
 
         const { error } = await supabase
           .from('production_items')
@@ -122,11 +113,7 @@ Deno.serve(async (req) => {
         const q = Number(quantity);
         if (isNaN(q) || q < 0) throw new Error('Quantité reçue invalide');
 
-        const info = await getBoxInfo(boxId);
-        const maxAllowed = info.quantity + ALLOWED_OVERAGE;
-        if (q > maxAllowed) {
-          throw new Error(`Réception boîte trop élevée (${q}). Maximum autorisé : ${maxAllowed}.`);
-        }
+        // No upper limit check
 
         const { error } = await supabase
           .from('box_productions')
@@ -143,7 +130,7 @@ Deno.serve(async (req) => {
         const w = Number(quantity);
         if (isNaN(w) || w < 0) throw new Error('Quantité perte invalide');
 
-        const info = await getItemInfo(itemId); // includes latest received value
+        const info = await getItemInfo(itemId);
         const receivedQty = info.received ?? 0;
         if (w > receivedQty) {
           throw new Error(`Les pertes (${w}) ne peuvent pas dépasser la quantité reçue (${receivedQty}).`);
