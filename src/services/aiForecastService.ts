@@ -42,10 +42,14 @@ export class AIForecastService {
   // Minimum production safeguards
   private readonly MIN_VAR_PRODUCTION = 4; // At least 4 doughnuts per variety
   private readonly MIN_BOX_PRODUCTION = 2; // At least 2 boxes per configuration
-  private readonly WASTE_TARGET = 0.25; // Target 25% waste (well below 30% limit)
-  private readonly SAFETY_STOCK_MIN = 0.15; // Minimum 15% safety stock
+  // === Tunable parameters (see requirements table) ===
+  private readonly BUFFER_INITIAL = 0.25;       // Starting buffer
+  private readonly BUFFER_MIN = 0.10;           // Minimum buffer after reductions
+  private readonly BUFFER_STEP = 0.05;          // Step size for buffer reduction
+  private readonly MAX_WASTE_RATIO = 0.30;      // Maximum acceptable waste ratio
+  private readonly SAFETY_STOCK_MIN = 0.10;     // Align with BUFFER_MIN
   private readonly SAFETY_STOCK_MAX = 0.35; // Maximum 35% safety stock
-  private readonly MIN_DATA_POINTS = 1; // Reduced from 3 to 1 to work with current backend issue
+  private readonly MIN_DATA_POINTS = 1; // At least 1 same-weekday record required
 
   /**
    * Map production day to sales day
@@ -491,42 +495,26 @@ export class AIForecastService {
       // Apply seasonal adjustment (simplified)
       basePrediction *= pattern.seasonalFactor;
 
-      // Ensure minimum viable quantity
-      basePrediction = Math.max(basePrediction, 6); // At least half dozen
+      // Dynamic buffer logic
+      let bufferPct = this.BUFFER_INITIAL;
+      let recommendedProductionRaw = Math.ceil(basePrediction * (1 + bufferPct));
+      let impliedWaste = (recommendedProductionRaw - basePrediction) / recommendedProductionRaw;
 
-      // Calculate safety stock based on volatility and production day type
-      let safetyStockPercent = this.SAFETY_STOCK_MIN;
-      
-      // Higher safety stock for volatile products
-      if (pattern.volatility > 0.3) {
-        safetyStockPercent += 0.10;
-      }
-      
-      // Higher safety stock for weekend production (Friday/Saturday - less predictable)
-      if (isWeekendProduction) {
-        safetyStockPercent += 0.05;
+      while (impliedWaste > this.MAX_WASTE_RATIO && bufferPct > this.BUFFER_MIN) {
+        bufferPct = Math.max(bufferPct - this.BUFFER_STEP, this.BUFFER_MIN);
+        recommendedProductionRaw = Math.ceil(basePrediction * (1 + bufferPct));
+        impliedWaste = (recommendedProductionRaw - basePrediction) / recommendedProductionRaw;
       }
 
-      // Cap safety stock
-      safetyStockPercent = Math.min(safetyStockPercent, this.SAFETY_STOCK_MAX);
-
-      const recommendedProductionRaw = Math.ceil(basePrediction * (1 + safetyStockPercent));
-
-      // Ensure we don't exceed waste target
-      const impliedWaste = (recommendedProductionRaw - basePrediction) / recommendedProductionRaw;
-      const adjustedProduction = impliedWaste > this.WASTE_TARGET ? 
-        Math.ceil(basePrediction / (1 - this.WASTE_TARGET)) : recommendedProductionRaw;
-
-      // Enforce minimum threshold for varieties
-      const finalRecommended = Math.max(adjustedProduction, this.MIN_VAR_PRODUCTION);
+      const finalRecommended = Math.max(recommendedProductionRaw, this.MIN_VAR_PRODUCTION);
 
       predictions.push({
         varietyId,
         varietyName: variety.name,
         predictedSales: Math.round(basePrediction),
         recommendedProduction: finalRecommended,
-        confidence: safetyStockPercent,
-        reasoning: this.generateReasoningText(pattern, targetDayOfWeek, safetyStockPercent, isWeekendProduction, productionDayOfWeek)
+        confidence: bufferPct,
+        reasoning: this.generateReasoningText(pattern, targetDayOfWeek, bufferPct, isWeekendProduction, productionDayOfWeek)
       });
     }
 
@@ -570,23 +558,27 @@ export class AIForecastService {
 
       basePrediction = Math.max(basePrediction, 1); // At least 1 box
 
-      let safetyStockPercent = this.SAFETY_STOCK_MIN;
-      if (pattern.volatility > 0.3) safetyStockPercent += 0.10;
-      if (isWeekendProduction) safetyStockPercent += 0.05;
-      safetyStockPercent = Math.min(safetyStockPercent, this.SAFETY_STOCK_MAX);
+      // Dynamic buffer logic for boxes
+      let bufferPct = this.BUFFER_INITIAL;
+      let recommendedProductionCalc = Math.ceil(basePrediction * (1 + bufferPct));
+      let impliedWaste = (recommendedProductionCalc - basePrediction) / recommendedProductionCalc;
 
-      const recommendedProductionRaw = Math.ceil(basePrediction * (1 + safetyStockPercent));
+      while (impliedWaste > this.MAX_WASTE_RATIO && bufferPct > this.BUFFER_MIN) {
+        bufferPct = Math.max(bufferPct - this.BUFFER_STEP, this.BUFFER_MIN);
+        recommendedProductionCalc = Math.ceil(basePrediction * (1 + bufferPct));
+        impliedWaste = (recommendedProductionCalc - basePrediction) / recommendedProductionCalc;
+      }
 
       // Enforce minimum threshold for boxes
-      const recommendedProduction = Math.max(recommendedProductionRaw, this.MIN_BOX_PRODUCTION);
+      const recommendedProduction = Math.max(recommendedProductionCalc, this.MIN_BOX_PRODUCTION);
 
       predictions.push({
         boxId,
         boxName: box.name,
         predictedSales: Math.round(basePrediction),
         recommendedProduction: recommendedProduction,
-        confidence: safetyStockPercent,
-        reasoning: this.generateBoxReasoningText(pattern, targetDayOfWeek, safetyStockPercent, isWeekendProduction, productionDayOfWeek)
+        confidence: bufferPct,
+        reasoning: this.generateBoxReasoningText(pattern, targetDayOfWeek, bufferPct, isWeekendProduction, productionDayOfWeek)
       });
     }
 
