@@ -68,54 +68,111 @@ Deno.serve(async (req) => {
 
     if (updateError) throw updateError;
 
-    // Update received quantities if provided
+    // -------------------------------------------------------------------
+    // Configuration: allowed overage (absolute number, default 2)
+    // -------------------------------------------------------------------
+    const ALLOWED_OVERAGE = parseInt(Deno.env.get('RECEIPT_OVERAGE_ABS') || '2', 10);
+
+    // Helper to fetch planned & current received for validation
+    async function getItemInfo(itemId: string) {
+      const { data, error } = await supabase
+        .from('production_items')
+        .select('quantity, received')
+        .eq('id', itemId)
+        .single();
+      if (error) throw error;
+      return data as { quantity: number; received: number | null };
+    }
+
+    async function getBoxInfo(boxProdId: string) {
+      const { data, error } = await supabase
+        .from('box_productions')
+        .select('quantity, received')
+        .or(`id.eq.${boxProdId},box_id.eq.${boxProdId}`)
+        .eq('store_production_id', storeProductionId)
+        .single();
+      if (error) throw error;
+      return data as { quantity: number; received: number | null };
+    }
+
+    // ----------------------- RECEIVED -----------------------------------
     if (updates.received) {
       for (const [itemId, quantity] of Object.entries(updates.received)) {
+        const q = Number(quantity);
+        if (isNaN(q) || q < 0) {
+          throw new Error('Quantité reçue invalide');
+        }
+
+        const info = await getItemInfo(itemId);
+        const maxAllowed = info.quantity + ALLOWED_OVERAGE;
+        if (q > maxAllowed) {
+          throw new Error(`Réception trop élevée (${q}). Maximum autorisé : ${maxAllowed}.`);
+        }
+
         const { error } = await supabase
           .from('production_items')
-          .update({ received: quantity })
+          .update({ received: q })
           .eq('id', itemId);
-
         if (error) throw error;
       }
     }
 
-    // Update box received quantities if provided
     if (updates.boxReceived) {
       for (const [boxId, quantity] of Object.entries(updates.boxReceived)) {
-        // Some clients may send the box_productions.id, others the box_id (template id).
-        // Update whichever row matches the provided UUID and the current store_production_id.
+        const q = Number(quantity);
+        if (isNaN(q) || q < 0) throw new Error('Quantité reçue invalide');
+
+        const info = await getBoxInfo(boxId);
+        const maxAllowed = info.quantity + ALLOWED_OVERAGE;
+        if (q > maxAllowed) {
+          throw new Error(`Réception boîte trop élevée (${q}). Maximum autorisé : ${maxAllowed}.`);
+        }
+
         const { error } = await supabase
           .from('box_productions')
-          .update({ received: quantity })
+          .update({ received: q })
           .or(`id.eq.${boxId},box_id.eq.${boxId}`)
           .eq('store_production_id', storeProductionId);
-
         if (error) throw error;
       }
     }
 
-    // Update waste quantities if provided
+    // ----------------------- WASTE --------------------------------------
     if (updates.waste) {
       for (const [itemId, quantity] of Object.entries(updates.waste)) {
+        const w = Number(quantity);
+        if (isNaN(w) || w < 0) throw new Error('Quantité perte invalide');
+
+        const info = await getItemInfo(itemId); // includes latest received value
+        const receivedQty = info.received ?? 0;
+        if (w > receivedQty) {
+          throw new Error(`Les pertes (${w}) ne peuvent pas dépasser la quantité reçue (${receivedQty}).`);
+        }
+
         const { error } = await supabase
           .from('production_items')
-          .update({ waste: quantity })
+          .update({ waste: w })
           .eq('id', itemId);
-
         if (error) throw error;
       }
     }
 
-    // Update box waste quantities if provided
     if (updates.boxWaste) {
       for (const [boxId, quantity] of Object.entries(updates.boxWaste)) {
+        const w = Number(quantity);
+        if (isNaN(w) || w < 0) throw new Error('Quantité perte invalide');
+
+        const info = await getBoxInfo(boxId);
+        const receivedQty = info.received ?? 0;
+        if (w > receivedQty) {
+          throw new Error(`Les pertes (${w}) ne peuvent pas dépasser la quantité reçue (${receivedQty}).`);
+        }
+
         const { error } = await supabase
           .from('box_productions')
-          .update({ waste: quantity })
+          .update({ waste: w })
           .or(`id.eq.${boxId},box_id.eq.${boxId}`)
           .eq('store_production_id', storeProductionId);
-
         if (error) throw error;
       }
     }
