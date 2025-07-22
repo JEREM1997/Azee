@@ -280,7 +280,7 @@ const StatsPage: React.FC = () => {
               
               // Get variety-specific production cost from admin configuration
               const variety = varieties.find(v => v.id === item.variety_id);
-              const varietyCost = variety?.productionCost || 0.50; // Use productionCost from admin config
+              const varietyCost = variety?.productionCost || 0; // Use productionCost from admin config
               
               storeProduction += quantity;
               storeReceived += received;
@@ -321,7 +321,7 @@ const StatsPage: React.FC = () => {
                     const variety = varieties.find(v => v.id === boxVariety.varietyId);
                     if (variety) {
                       // Cost = variety production cost × quantity of this variety per box
-                      const varietyCostPerBox = (variety.productionCost || 0.50) * boxVariety.quantity;
+                      const varietyCostPerBox = (variety.productionCost || 0) * boxVariety.quantity;
                       boxUnitCost += varietyCostPerBox;
                     }
                   });
@@ -351,8 +351,8 @@ const StatsPage: React.FC = () => {
                     box.varieties.forEach(boxVariety => {
                       const variety = varieties.find(v => v.id === boxVariety.varietyId);
                       if (variety) {
-                        const varietyCostPerBox = (variety.productionCost || 0.50) * boxVariety.quantity;
-                        console.log(`     - ${variety.name}: ${boxVariety.quantity} × CHF ${variety.productionCost || 0.50} = CHF ${varietyCostPerBox.toFixed(2)}`);
+                        const varietyCostPerBox = (variety.productionCost || 0) * boxVariety.quantity;
+                        console.log(`     - ${variety.name}: ${boxVariety.quantity} × CHF ${variety.productionCost || 0} = CHF ${varietyCostPerBox.toFixed(2)}`);
                       }
                     });
                   }
@@ -412,7 +412,7 @@ const StatsPage: React.FC = () => {
             store.production_items.forEach((item: any) => {
               const waste = item.waste || 0;
               const variety = varieties.find(v => v.id === item.variety_id);
-              const varietyCost = variety?.productionCost || 0.50; // Use admin-configured production cost
+              const varietyCost = variety?.productionCost || 0; // Use admin-configured production cost
               
               totalWasteCost += waste * varietyCost;
             });
@@ -431,7 +431,7 @@ const StatsPage: React.FC = () => {
                   box.varieties.forEach(boxVariety => {
                     const variety = varieties.find(v => v.id === boxVariety.varietyId);
                     if (variety) {
-                      const varietyCostPerBox = (variety.productionCost || 0.50) * boxVariety.quantity;
+                      const varietyCostPerBox = (variety.productionCost || 0) * boxVariety.quantity;
                       boxUnitCost += varietyCostPerBox;
                     }
                   });
@@ -516,7 +516,7 @@ const StatsPage: React.FC = () => {
   
   // Cost calculations now use variety-specific and box-specific costs
   const avgDailyCost = totalProductionCost / (data.length || 1);
-  const avgCostPerDonut = totalProduction > 0 ? totalProductionCost / totalProduction : 0.50;
+  const avgCostPerDonut = totalProduction > 0 ? totalProductionCost / totalProduction : 0;
   
   // Performance comparison (current period vs same period last week/month/year)
   const getPerformanceComparison = (): { production: PerformanceComparison; waste: PerformanceComparison } => {
@@ -1807,7 +1807,7 @@ const StatsPage: React.FC = () => {
                 <Target className="h-5 w-5 mr-2 text-krispy-green" />
                 Popularité des Doughnuts Individuels
                 <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  Based on sales (quantities sold)
+                  Basé sur les ventes (quantities sold)
                 </span>
               </h2>
               <div className="text-sm text-gray-500">
@@ -1913,7 +1913,7 @@ const StatsPage: React.FC = () => {
                 <Package className="h-5 w-5 mr-2 text-krispy-green" />
                 Popularité des Boîtes
                 <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  Based on sales (quantities sold)
+                  Basé sur les ventes (quantities sold)
                 </span>
               </h2>
               <div className="text-sm text-gray-500">
