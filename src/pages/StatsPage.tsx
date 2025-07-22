@@ -6,6 +6,9 @@ import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 
+// Helper: consistent number format for PDF (comma as thousands separator)
+const formatNum = (n: number) => n.toLocaleString('en-US');
+
 const getWeek = (date: Date) => {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayNum = d.getUTCDay() || 7;
@@ -128,9 +131,7 @@ const StatsPage: React.FC = () => {
               store.production_items.forEach((item: any) => {
                 if (item.received !== null && item.received !== undefined) {
                   totalReceived += item.received;
-                } else {
-                  totalReceived += item.quantity; // If not received yet, assume planned quantity
-                }
+                } // else do not add planned quantity – received not yet reported
                 
                 if (item.waste !== null && item.waste !== undefined) {
                   totalWaste += item.waste;
@@ -152,8 +153,6 @@ const StatsPage: React.FC = () => {
                 
                 if (box.received !== null && box.received !== undefined) {
                   totalReceived += box.received * boxSize;
-                } else {
-                  totalReceived += boxDoughnuts;
                 }
                 
                 if (box.waste !== null && box.waste !== undefined) {
@@ -1063,9 +1062,9 @@ const StatsPage: React.FC = () => {
       row.storeName,
       row.variety,
       row.boxFormat,
-      row.received.toLocaleString(),
-      row.waste.toLocaleString(),
-      row.sales.toLocaleString(),
+      formatNum(row.received),
+      formatNum(row.waste),
+      formatNum(row.sales),
       row.received > 0 ? ((row.waste / row.received) * 100).toFixed(1) + '%' : '0%'
     ]);
     
@@ -1114,9 +1113,9 @@ const StatsPage: React.FC = () => {
     
     // Prepare summary data
     const summaryData = [
-      ['Total Reçu:', totals.received.toLocaleString() + ' doughnuts'],
-      ['Total Ventes:', totals.sales.toLocaleString() + ' doughnuts'],
-      ['Total Déchets:', totals.waste.toLocaleString() + ' doughnuts (' + overallWastePercent.toFixed(1) + '%)'],
+      ['Total Reçu:', formatNum(totals.received) + ' doughnuts'],
+      ['Total Ventes:', formatNum(totals.sales) + ' doughnuts'],
+      ['Total Déchets:', formatNum(totals.waste) + ' doughnuts (' + overallWastePercent.toFixed(1) + '%)'],
       ['Coût de Production:', 'CHF ' + totalProductionCost.toFixed(2)],
       ['Coût des Déchets:', 'CHF ' + totalWasteCost.toFixed(2)]
     ];
@@ -1207,10 +1206,10 @@ const StatsPage: React.FC = () => {
     
     const sales = store.received - store.waste;
     const overviewData = [
-      ['Production Totale:', store.production.toLocaleString() + ' doughnuts'],
-      ['Quantité Reçue:', store.received.toLocaleString() + ' doughnuts'],
-      ['Ventes Réalisées:', sales.toLocaleString() + ' doughnuts'],
-      ['Déchets:', store.waste.toLocaleString() + ' doughnuts (' + store.wastePercent.toFixed(1) + '%)'],
+      ['Production Totale:', formatNum(store.production) + ' doughnuts'],
+      ['Quantité Reçue:', formatNum(store.received) + ' doughnuts'],
+      ['Ventes Réalisées:', formatNum(sales) + ' doughnuts'],
+      ['Déchets:', formatNum(store.waste) + ' doughnuts (' + store.wastePercent.toFixed(1) + '%)'],
       ['Coût de Production:', 'CHF ' + store.cost.toFixed(2)],
       ['Coût des Déchets:', 'CHF ' + store.wasteCost.toFixed(2)]
     ];
@@ -1305,9 +1304,9 @@ const StatsPage: React.FC = () => {
       const tableData = storeDetailedData.map(row => [
         row.variety,
         row.boxFormat,
-        row.received.toLocaleString(),
-        row.waste.toLocaleString(),
-        row.sales.toLocaleString(),
+        formatNum(row.received),
+        formatNum(row.waste),
+        formatNum(row.sales),
         row.received > 0 ? ((row.waste / row.received) * 100).toFixed(1) + '%' : '0%'
       ]);
       
@@ -2078,21 +2077,21 @@ const StatsPage: React.FC = () => {
                         {store.name}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                        {store.production.toLocaleString()}
+                        {formatNum(store.production)}
                         <div className="text-xs text-gray-400">({productionPercent}%)</div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                        {store.received.toLocaleString()}
+                        {formatNum(store.received)}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                        <span className="font-medium text-krispy-green">{sales.toLocaleString()}</span>
+                        <span className="font-medium text-krispy-green">{formatNum(sales)}</span>
                         <div className="text-xs text-gray-400">doughnuts vendus</div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                         <span className={`${store.wastePercent > 10 ? 'text-red-600 font-medium' : store.wastePercent > 5 ? 'text-orange-600' : 'text-green-600'}`}>
                         {store.wastePercent.toFixed(1)}%
                         </span>
-                        <div className="text-xs text-gray-400">{store.waste.toLocaleString()} déchets</div>
+                        <div className="text-xs text-gray-400">{formatNum(store.waste)} déchets</div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                         CHF {store.cost.toFixed(2)}
