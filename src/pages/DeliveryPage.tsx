@@ -644,7 +644,7 @@ const DeliveryPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {storeDetails.production_items?.map((item) => (
+                    {storeDetails.production_items?.slice().sort((a,b)=>a.variety_name.localeCompare(b.variety_name)).map((item) => (
                       <tr key={item.id}>
                         <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                           {item.variety_name}
@@ -773,7 +773,7 @@ const DeliveryPage: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {storeDetails.box_productions.map((box) => (
+                        {storeDetails.box_productions.slice().sort((a,b)=>a.box_name.localeCompare(b.box_name)).map((box) => (
                           <tr key={box.id}>
                             <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                               {box.box_name}
