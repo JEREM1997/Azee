@@ -1807,7 +1807,7 @@ const StatsPage: React.FC = () => {
                 <Target className="h-5 w-5 mr-2 text-krispy-green" />
                 Popularité des Doughnuts Individuels
                 <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  Basé sur les ventes (quantities sold)
+                  Basé sur les ventes (quantités vendues)
                 </span>
               </h2>
               <div className="text-sm text-gray-500">
@@ -1913,7 +1913,7 @@ const StatsPage: React.FC = () => {
                 <Package className="h-5 w-5 mr-2 text-krispy-green" />
                 Popularité des Boîtes
                 <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  Basé sur les ventes (quantities sold)
+                  Basé sur les ventes (quantités vendues)
                 </span>
               </h2>
               <div className="text-sm text-gray-500">
