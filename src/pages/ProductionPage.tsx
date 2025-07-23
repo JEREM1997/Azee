@@ -928,7 +928,8 @@ const ProductionPage: React.FC = () => {
                         variety.isActive && 
                         store.availableVarieties.includes(variety.id)
                       )
-                        .map(variety => {
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map(variety => {
                           const form = variety.formId ? forms.find(f => f.id === variety.formId) : null;
                           return (
                         <tr key={variety.id}>
@@ -1021,6 +1022,7 @@ const ProductionPage: React.FC = () => {
                           box.isActive && 
                           store.availableBoxes.includes(box.id)
                         )
+                        .sort((a, b) => a.name.localeCompare(b.name))
                         .map(box => {
                           const boxCount = storeBoxes[store.id]?.[box.id] || 0;
                           const totalDoughnuts = boxCount * box.size;

@@ -222,11 +222,13 @@ const DeliveryPage: React.FC = () => {
     (currentUser?.storeIds || []).map(clean)
   );
 
-  const userStores = currentPlan?.store_productions?.filter(store=>{
+  const userStoresUnsorted = currentPlan?.store_productions?.filter(store=>{
     if (isAdmin || isProduction) return true;
     if (showAllStores) return true;
     return allowedStoreIds.has(clean(store.store_id ?? ''));
   }) || [];
+
+  const userStores = userStoresUnsorted.sort((a,b)=>a.store_name.localeCompare(b.store_name));
 
   const storeDetails = selectedStore 
     ? currentPlan?.store_productions?.find(store => store.id === selectedStore)
@@ -262,7 +264,7 @@ const DeliveryPage: React.FC = () => {
       ['Variété', 'Quantité Prévue (unité)', 'Quantité Reçue (unité)', 'Déchets (unité)']
     ];
 
-    const itemsTableData = storeDetails.production_items?.map(item => [
+    const itemsTableData = storeDetails.production_items?.slice().sort((a,b)=>a.variety_name.localeCompare(b.variety_name)).map(item => [
       item.variety_name,
       item.quantity.toString(),
       receivedQuantities[item.id]?.toString() || item.received?.toString() || '',
@@ -286,7 +288,7 @@ const DeliveryPage: React.FC = () => {
         ['Boîte', 'Quantité Prévue (unité)', 'Quantité Reçue (unité)', 'Déchets (unité)']
       ];
 
-      const boxesTableData = storeDetails.box_productions.map(box => [
+      const boxesTableData = storeDetails.box_productions.slice().sort((a,b)=>a.box_name.localeCompare(b.box_name)).map(box => [
         box.box_name,
         box.quantity.toString(),
         boxReceivedQuantities[box.id]?.toString() || box.received?.toString() || '',
