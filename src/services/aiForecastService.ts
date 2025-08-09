@@ -47,9 +47,14 @@ export class AIForecastService {
   private readonly BUFFER_MIN = 0.10;           // Minimum buffer after reductions
   private readonly BUFFER_STEP = 0.05;          // Step size for buffer reduction
   private readonly MAX_WASTE_RATIO = 0.30;      // Maximum acceptable waste ratio
-  private readonly SAFETY_STOCK_MIN = 0.10;     // Align with BUFFER_MIN
+  // private readonly SAFETY_STOCK_MIN = 0.10;     // Align with BUFFER_MIN
   private readonly SAFETY_STOCK_MAX = 0.35; // Maximum 35% safety stock
   private readonly MIN_DATA_POINTS = 1; // At least 1 same-weekday record required
+
+  // Stability controls
+  private readonly MAX_WEEKLY_INCREASE = 0.30; // cap +30% vs last same-weekday
+  private readonly MAX_WEEKLY_DECREASE = 0.25; // cap -25% vs last same-weekday
+  private readonly ZERO_SALES_UPPER_BOUND = 8; // when last observed sales were 0
 
   /**
    * Map production day to sales day
@@ -141,7 +146,6 @@ export class AIForecastService {
     ];
     
     let historicalPlans = null;
-    let usedStrategy = null;
 
     for (const strategy of dataLoadingStrategies) {
       try {
@@ -165,7 +169,7 @@ export class AIForecastService {
           }
         }
         
-        usedStrategy = strategy;
+        // Note which strategy succeeded (debug)
         console.log(`✅ AI Forecast: Successfully loaded ${historicalPlans?.length || 0} plans using ${strategy.description}`);
         
         // If we have at least the minimum, break
@@ -203,51 +207,35 @@ export class AIForecastService {
 
     const targetDayOfWeek = new Date(targetDate).getDay();
     const salesMapping = this.getProductionSalesMapping(targetDayOfWeek);
-    const salesDayOfWeek = salesMapping.salesDay;
-    const isWeekend = salesMapping.isWeekend;
 
     // =================================================================================
-    // Restrict historical data to the most recent 5 occurrences of the *same* weekday
+    // Restrict historical data to the most recent 5 exact same-weekday dates
+    // Take targetDate and step backwards by 7 days up to 5 times, then pick plans whose
+    // date matches any of those exact step dates. This yields stable, deterministic input.
     // =================================================================================
     const targetDateObj = new Date(targetDate);
-    const windowStart = new Date(targetDateObj);
-    windowStart.setDate(windowStart.getDate() - 35); // last 5 weeks
+    const desiredDates = [] as string[];
+    for (let i = 1; i <= 5; i++) {
+      const d = new Date(targetDateObj);
+      d.setDate(d.getDate() - (7 * i));
+      desiredDates.push(d.toISOString().slice(0, 10));
+    }
 
-    // 1) keep only same weekday, within last 5 weeks, and strictly before target date
     let weekdayFilteredPlans = (historicalPlans || [])
-      .filter((p: any) => {
-        const d = new Date(p.date);
-        return (
-          d.getDay() === targetDayOfWeek &&
-          d < targetDateObj &&
-          d >= windowStart
-        );
-      })
+      .filter((p: any) => desiredDates.includes(new Date(p.date).toISOString().slice(0, 10)))
       .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    // 2) Deduplicate by calendar date (there can be duplicates due to DB issues)
-    const seenDates = new Set<string>();
-    weekdayFilteredPlans = weekdayFilteredPlans.filter((p: any) => {
-      const dateStr = p.date;
-      if (seenDates.has(dateStr)) return false;
-      seenDates.add(dateStr);
-      return true;
-    });
-
-    // 3) Limit to most recent 5 occurrences
-    weekdayFilteredPlans = weekdayFilteredPlans.slice(0, 5);
-
-    // Fallback if still empty (e.g., no historical plans in last 5 weeks)
+    // If none matched exact step dates, fall back to last 5 with same weekday (but still sorted)
     if (weekdayFilteredPlans.length === 0) {
       weekdayFilteredPlans = (historicalPlans || [])
-        .filter((p: any) => new Date(p.date).getDay() === targetDayOfWeek)
+        .filter((p: any) => new Date(p.date).getDay() === targetDayOfWeek && new Date(p.date) < targetDateObj)
         .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, 5);
     }
 
     console.log(`🤖 AI Forecast: Using ${weekdayFilteredPlans.length} historical plan(s) matching ${this.getDayName(targetDayOfWeek)} (max 5)`);
     console.log(`🤖 AI Forecast: Production date is ${this.getDayName(targetDayOfWeek)} → ${salesMapping.mappingInfo}`);
-    console.log(`🤖 AI Forecast: Analyzing sales patterns for ${this.getDayName(salesDayOfWeek)} (weekend: ${isWeekend})`);
+    console.log(`🤖 AI Forecast: Analyzing sales patterns for ${this.getDayName(salesMapping.salesDay)} (weekend: ${salesMapping.isWeekend})`);
 
     const results: AIForecastResult[] = [];
     let storesWithData = 0;
@@ -269,8 +257,7 @@ export class AIForecastService {
         store, 
         varieties, 
         storeHistoricalData, 
-        salesDayOfWeek, 
-        isWeekend,
+        salesMapping.salesDay, 
         targetDayOfWeek
       );
 
@@ -279,8 +266,7 @@ export class AIForecastService {
         store, 
         boxes, 
         storeHistoricalData, 
-        salesDayOfWeek, 
-        isWeekend,
+        salesMapping.salesDay, 
         targetDayOfWeek
       );
 
@@ -312,6 +298,13 @@ export class AIForecastService {
       }
     }
 
+    // Ensure deterministic ordering of outputs
+    results.forEach(r => {
+      r.predictions.sort((a, b) => a.varietyName.localeCompare(b.varietyName));
+      r.boxPredictions.sort((a, b) => a.boxName.localeCompare(b.boxName));
+    });
+    results.sort((a, b) => a.storeName.localeCompare(b.storeName));
+
     console.log(`🤖 AI Forecast: Completed analysis for ${results.length} stores (${storesWithData} with historical data, ${results.length - storesWithData} with conservative estimates)`);
     
     if (results.length === 0) {
@@ -326,12 +319,13 @@ export class AIForecastService {
    * to the local `AIForecastResult[]` structure so the rest of the UI
    * continues to work without major changes.
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private convertBackendResponseToForecast(
     backendData: any,
     stores: any[],
     varieties: any[],
     boxes: any[],
-    targetDate: string
+    _targetDate: string
   ): AIForecastResult[] {
     type PredictionMap = {
       storeName: string;
@@ -394,64 +388,21 @@ export class AIForecastService {
 
       const wastePct = totalRec > 0 ? ((totalRec - totalPred) / totalRec) * 100 : 0;
 
-      results.push({
+      const entry: AIForecastResult = {
         storeId,
         storeName: data.storeName,
-        predictions: data.predictions,
-        boxPredictions: data.boxPredictions,
+        predictions: data.predictions.sort((a, b) => a.varietyName.localeCompare(b.varietyName)),
+        boxPredictions: data.boxPredictions.sort((a, b) => a.boxName.localeCompare(b.boxName)),
         totalPredictedSales: totalPred,
         totalRecommendedProduction: totalRec,
         estimatedWastePercent: wastePct,
         safetyStockPercent: finalBuffer * 100
-      });
+      };
+      results.push(entry);
     }
 
-    // -------------------------------------------------------------
-    // Add conservative estimates for stores missing from backend data
-    // -------------------------------------------------------------
-    const targetDayOfWeek = new Date(targetDate).getDay();
-    const salesDayOfWeek = this.getProductionSalesMapping(targetDayOfWeek).salesDay;
-
-    for (const store of stores.filter(s => s.isActive)) {
-      if (results.find(r => r.storeId === store.id)) continue; // already present
-
-      const conservative = this.generateConservativeEstimate(
-        store,
-        varieties,
-        boxes,
-        targetDayOfWeek,
-        salesDayOfWeek
-      );
-
-      if (conservative) {
-        // Apply minimum thresholds
-        conservative.predictions = conservative.predictions.map(p => ({
-          ...p,
-          recommendedProduction: Math.max(p.recommendedProduction, this.MIN_VAR_PRODUCTION)
-        }));
-
-        conservative.boxPredictions = conservative.boxPredictions.map(p => ({
-          ...p,
-          recommendedProduction: Math.max(p.recommendedProduction, this.MIN_BOX_PRODUCTION)
-        }));
-
-        // Recalculate totals
-        conservative.totalPredictedSales = conservative.predictions.reduce((s, v) => s + v.predictedSales, 0) +
-          conservative.boxPredictions.reduce((s, b) => s + b.predictedSales * (boxes.find(x => x.id === b.boxId)?.size || 1), 0);
-
-        conservative.totalRecommendedProduction = conservative.predictions.reduce((s, v) => s + v.recommendedProduction, 0) +
-          conservative.boxPredictions.reduce((s, b) => s + b.recommendedProduction * (boxes.find(x => x.id === b.boxId)?.size || 1), 0);
-
-        conservative.estimatedWastePercent = conservative.totalRecommendedProduction > 0 ?
-          ((conservative.totalRecommendedProduction - conservative.totalPredictedSales) / conservative.totalRecommendedProduction) * 100 : 0;
-
-        conservative.safetyStockPercent = 25; // default buffer
-
-        results.push(conservative);
-      }
-    }
-
-    return results;
+    // Sort stores for determinism
+    return results.sort((a, b) => a.storeName.localeCompare(b.storeName));
   }
 
   /**
@@ -462,7 +413,6 @@ export class AIForecastService {
     varieties: any[], 
     historicalData: any[], 
     targetDayOfWeek: number, 
-    isWeekend: boolean,
     productionDayOfWeek: number
   ) {
     const predictions = [];
@@ -495,8 +445,26 @@ export class AIForecastService {
       // Apply seasonal adjustment (simplified)
       basePrediction *= pattern.seasonalFactor;
 
+      // Clamp change vs last observed sales to limit volatility
+      if (pattern.dataPoints > 0) {
+        const last = (pattern as any).lastSales ?? 0;
+        if (last > 0) {
+          const capLow = Math.max(0, last * (1 - this.MAX_WEEKLY_DECREASE));
+          const capHigh = last * (1 + this.MAX_WEEKLY_INCREASE);
+          basePrediction = Math.min(Math.max(basePrediction, capLow), capHigh);
+        } else {
+          // Previously zero sales: keep a conservative ceiling
+          basePrediction = Math.min(basePrediction, this.ZERO_SALES_UPPER_BOUND);
+        }
+      }
+
       // Dynamic buffer logic
       let bufferPct = this.BUFFER_INITIAL;
+      if ((pattern as any).avgWastePercent > 25) {
+        bufferPct = Math.max(this.BUFFER_MIN, bufferPct - 0.10);
+      } else if ((pattern as any).avgWastePercent < 5 && basePrediction > 0) {
+        bufferPct = Math.min(this.SAFETY_STOCK_MAX, bufferPct + 0.05);
+      }
       let recommendedProductionRaw = Math.ceil(basePrediction * (1 + bufferPct));
       let impliedWaste = (recommendedProductionRaw - basePrediction) / recommendedProductionRaw;
 
@@ -529,7 +497,6 @@ export class AIForecastService {
     boxes: any[], 
     historicalData: any[], 
     targetDayOfWeek: number, 
-    isWeekend: boolean,
     productionDayOfWeek: number
   ) {
     const predictions = [];
@@ -558,8 +525,25 @@ export class AIForecastService {
 
       basePrediction = Math.max(basePrediction, 1); // At least 1 box
 
+      // Clamp change vs last observed sales to limit volatility
+      if (pattern.dataPoints > 0) {
+        const last = (pattern as any).lastSales ?? 0;
+        if (last > 0) {
+          const capLow = Math.max(0, last * (1 - this.MAX_WEEKLY_DECREASE));
+          const capHigh = last * (1 + this.MAX_WEEKLY_INCREASE);
+          basePrediction = Math.min(Math.max(basePrediction, capLow), capHigh);
+        } else {
+          basePrediction = Math.min(basePrediction, Math.ceil(this.ZERO_SALES_UPPER_BOUND / 12));
+        }
+      }
+
       // Dynamic buffer logic for boxes
       let bufferPct = this.BUFFER_INITIAL;
+      if ((pattern as any).avgWastePercent > 25) {
+        bufferPct = Math.max(this.BUFFER_MIN, bufferPct - 0.10);
+      } else if ((pattern as any).avgWastePercent < 5 && basePrediction > 0) {
+        bufferPct = Math.min(this.SAFETY_STOCK_MAX, bufferPct + 0.05);
+      }
       let recommendedProductionCalc = Math.ceil(basePrediction * (1 + bufferPct));
       let impliedWaste = (recommendedProductionCalc - basePrediction) / recommendedProductionCalc;
 
@@ -633,11 +617,12 @@ export class AIForecastService {
         }>
       };
 
-      // Extract variety sales data (received - waste)
+      // Extract variety sales data (received - waste) — only when confirmed
       if (store.production_items) {
         for (const item of store.production_items) {
-          const received = item.received !== null ? item.received : item.quantity;
-          const waste = item.waste || 0;
+          if (item.received == null || item.waste == null) continue;
+          const received = item.received;
+          const waste = item.waste;
           const sales = received - waste;
 
           dayData.varieties.push({
@@ -650,11 +635,12 @@ export class AIForecastService {
         }
       }
 
-      // Extract box sales data
+      // Extract box sales data — only when confirmed
       if (store.box_productions) {
         for (const boxProd of store.box_productions) {
-          const received = boxProd.received !== null ? boxProd.received : boxProd.quantity;
-          const waste = boxProd.waste || 0;
+          if (boxProd.received == null || boxProd.waste == null) continue;
+          const received = boxProd.received;
+          const waste = boxProd.waste;
           const sales = received - waste;
 
           dayData.boxes.push({
@@ -677,7 +663,7 @@ export class AIForecastService {
    * Analyze historical pattern for a specific variety
    */
   private analyzeVarietyPattern(historicalData: any[], varietyId: string, targetSalesDayOfWeek: number) {
-    const varietyData = [];
+    const varietyData: any[] = [];
 
     for (const day of historicalData) {
       // Map this historical production day to its sales day
@@ -700,12 +686,25 @@ export class AIForecastService {
     }
 
     if (varietyData.length === 0) {
-      return { dataPoints: 0, avgSales: 0, volatility: 0, trend: 0, seasonalFactor: 1.0 };
+      return { dataPoints: 0, avgSales: 0, volatility: 0, trend: 0, seasonalFactor: 1.0, lastSales: 0, avgWastePercent: 0 };
     }
 
-    // Calculate basic statistics
+    // Sort most recent first to identify last observed sales
+    varietyData.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // Calculate robust statistics
     const sales = varietyData.map(d => d.sales);
-    const avgSales = sales.reduce((sum, s) => sum + s, 0) / sales.length;
+    let avgSales: number;
+    if (sales.length >= 3) {
+      const sorted = [...sales].sort((a, b) => a - b);
+      const trimmed = sorted.slice(1, sorted.length - 1);
+      avgSales = trimmed.reduce((sum, s) => sum + s, 0) / trimmed.length;
+    } else if (sales.length === 2) {
+      const sorted = [...sales].sort((a, b) => a - b);
+      avgSales = (sorted[0] + sorted[1]) / 2;
+    } else {
+      avgSales = sales[0];
+    }
     const variance = sales.reduce((sum, s) => sum + Math.pow(s - avgSales, 2), 0) / sales.length;
     const volatility = avgSales > 0 ? Math.sqrt(variance) / avgSales : 0;
 
@@ -715,12 +714,22 @@ export class AIForecastService {
     // All the data points are already for the target sales day, so seasonal factor is based on that
     const seasonalFactor = 1.0; // Since we've already filtered for the target sales day
 
+    const lastSales = varietyData[0]?.sales ?? 0;
+    const wastePercents = varietyData
+      .filter((d: any) => (d.planned ?? 0) >= 0)
+      .map((d: any) => d.sales >= 0 && d.planned >= 0 ? ((d.planned > 0) ? ((d.planned - d.sales) / d.planned) * 100 : 0) : 0);
+    const avgWastePercent = wastePercents.length > 0
+      ? wastePercents.reduce((s: number, v: number) => s + v, 0) / wastePercents.length
+      : 0;
+
     return {
       dataPoints: varietyData.length,
       avgSales: avgSales,
       volatility: volatility,
       trend: trend,
-      seasonalFactor: seasonalFactor
+      seasonalFactor: seasonalFactor,
+      lastSales,
+      avgWastePercent
     };
   }
 
@@ -728,7 +737,7 @@ export class AIForecastService {
    * Analyze historical pattern for boxes
    */
   private analyzeBoxPattern(historicalData: any[], boxName: string, targetSalesDayOfWeek: number) {
-    const boxData = [];
+    const boxData: any[] = [];
 
     for (const day of historicalData) {
       // Map this historical production day to its sales day
@@ -750,11 +759,25 @@ export class AIForecastService {
     }
 
     if (boxData.length === 0) {
-      return { dataPoints: 0, avgSales: 0, volatility: 0, trend: 0, seasonalFactor: 1.0 };
+      return { dataPoints: 0, avgSales: 0, volatility: 0, trend: 0, seasonalFactor: 1.0, lastSales: 0, avgWastePercent: 0 };
     }
 
+    // Sort most recent first
+    boxData.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // Robust average for boxes
     const sales = boxData.map(d => d.sales);
-    const avgSales = sales.reduce((sum, s) => sum + s, 0) / sales.length;
+    let avgSales: number;
+    if (sales.length >= 3) {
+      const sorted = [...sales].sort((a, b) => a - b);
+      const trimmed = sorted.slice(1, sorted.length - 1);
+      avgSales = trimmed.reduce((s, v) => s + v, 0) / trimmed.length;
+    } else if (sales.length === 2) {
+      const sorted = [...sales].sort((a, b) => a - b);
+      avgSales = (sorted[0] + sorted[1]) / 2;
+    } else {
+      avgSales = sales[0];
+    }
     const variance = sales.reduce((sum, s) => sum + Math.pow(s - avgSales, 2), 0) / sales.length;
     const volatility = avgSales > 0 ? Math.sqrt(variance) / avgSales : 0;
 
@@ -763,12 +786,22 @@ export class AIForecastService {
     // All the data points are already for the target sales day, so seasonal factor is based on that
     const seasonalFactor = 1.0; // Since we've already filtered for the target sales day
 
+    const lastSales = boxData[0]?.sales ?? 0;
+    const wastePercents = boxData
+      .filter((d: any) => (d.planned ?? 0) >= 0)
+      .map((d: any) => d.sales >= 0 && d.planned >= 0 ? ((d.planned > 0) ? ((d.planned - d.sales) / d.planned) * 100 : 0) : 0);
+    const avgWastePercent = wastePercents.length > 0
+      ? wastePercents.reduce((s: number, v: number) => s + v, 0) / wastePercents.length
+      : 0;
+
     return {
       dataPoints: boxData.length,
       avgSales: avgSales,
       volatility: volatility,
       trend: trend,
-      seasonalFactor: seasonalFactor
+      seasonalFactor: seasonalFactor,
+      lastSales,
+      avgWastePercent
     };
   }
 
@@ -800,7 +833,7 @@ export class AIForecastService {
   /**
    * Get day of week adjustment factor based on production day
    */
-  private getDayOfWeekFactor(productionDayOfWeek: number, pattern: any): number {
+  private getDayOfWeekFactor(productionDayOfWeek: number, _pattern: any): number {
     // Weekend production covers Friday and Saturday production days
     const isWeekendProduction = productionDayOfWeek === 5 || productionDayOfWeek === 6;
     
@@ -824,7 +857,7 @@ export class AIForecastService {
    * Generate human-readable reasoning for the prediction
    */
   private generateReasoningText(pattern: any, dayOfWeek: number, safetyStock: number, isWeekendProduction: boolean, productionDayOfWeek: number): string {
-    const dayName = this.getDayName(dayOfWeek);
+    // const dayName = this.getDayName(dayOfWeek);
     const productionDayName = this.getDayName(productionDayOfWeek);
     const reasons = [];
 
@@ -861,7 +894,7 @@ export class AIForecastService {
    * Generate reasoning text for box predictions
    */
   private generateBoxReasoningText(pattern: any, dayOfWeek: number, safetyStock: number, isWeekendProduction: boolean, productionDayOfWeek: number): string {
-    const dayName = this.getDayName(dayOfWeek);
+    // const dayName = this.getDayName(dayOfWeek);
     const productionDayName = this.getDayName(productionDayOfWeek);
     const reasons = [];
 
@@ -871,11 +904,7 @@ export class AIForecastService {
       reasons.push(`Limited box data (${pattern.dataPoints} days)`);
     }
 
-    if (pattern.seasonalFactor > 1.1) {
-      reasons.push(`${dayName}s show higher box demand`);
-    } else if (pattern.seasonalFactor < 0.9) {
-      reasons.push(`${dayName}s show lower box demand`);
-    }
+    // Note: seasonal messaging suppressed to reduce verbosity
 
     if (isWeekendProduction) {
       reasons.push(`Weekend production (${productionDayName}) applied`);
@@ -909,12 +938,13 @@ export class AIForecastService {
   /**
    * Generate conservative estimates for stores without historical data
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private generateConservativeEstimate(
     store: any, 
     varieties: any[], 
     boxes: any[], 
     targetDayOfWeek: number, 
-    salesDayOfWeek: number
+    _salesDayOfWeek: number
   ): AIForecastResult | null {
     const predictions = [];
     const boxPredictions = [];
