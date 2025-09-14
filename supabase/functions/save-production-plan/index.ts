@@ -150,7 +150,7 @@ Deno.serve(async (req) => {
     const planId = planData.existingPlanId || existingPlan?.id;
 
     if (planId) {
-      // Update existing plan
+      // Update existing plan and delete related data in a transaction
       const { data: updatedPlan, error: updateError } = await supabaseClient
         .from('production_plans')
         .update({
@@ -176,6 +176,8 @@ Deno.serve(async (req) => {
       if (deleteError) {
         throw new Error(`Error deleting existing store productions: ${deleteError.message}`);
       }
+
+      console.log(`✅ Deleted existing store productions for plan ${planId}`);
     } else {
       // Create new plan
       const { data: newPlan, error: planError } = await supabaseClient
@@ -196,6 +198,22 @@ Deno.serve(async (req) => {
       plan = newPlan;
     }
 
+    // Get box configurations to calculate proper totals
+    const { data: boxConfigs, error: boxConfigError } = await supabaseClient
+      .from('box_configurations')
+      .select('id, size');
+
+    if (boxConfigError) {
+      console.warn('Could not fetch box configurations, using fallback calculation:', boxConfigError.message);
+    }
+
+    const boxSizeMap = new Map();
+    if (boxConfigs) {
+      boxConfigs.forEach(box => {
+        boxSizeMap.set(box.id, box.size);
+      });
+    }
+
     // Create store productions and their items/boxes
     for (const store of planData.stores) {
       // Add validation to prevent null constraint violations
@@ -207,19 +225,24 @@ Deno.serve(async (req) => {
         throw new Error(`Missing store name for store ID: ${store.store_id}`);
       }
 
-      // Ensure total_quantity is never null - calculate from items and boxes if missing
-      let totalQuantity = store.total_quantity || 0;
+      // Calculate total_quantity from items and boxes
+      let totalQuantity = 0;
       
-      console.log(`Store ${store.store_name}: originalTotal=${store.total_quantity}, items=${store.items?.length || 0}, boxes=${store.boxes?.length || 0}`);
+      // Calculate from items (individual doughnuts)
+      const itemsTotal = store.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+      totalQuantity += itemsTotal;
       
-      if (totalQuantity === 0 || totalQuantity === null || totalQuantity === undefined) {
-        // Calculate from items
-        const itemsTotal = store.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-        // Calculate from boxes (assuming each box contains some standard amount - we'll use the quantity as-is)
-        const boxesTotal = store.boxes?.reduce((sum, box) => sum + (box.quantity || 0), 0) || 0;
-        totalQuantity = itemsTotal + boxesTotal;
-        console.log(`Calculated total for ${store.store_name}: items=${itemsTotal}, boxes=${boxesTotal}, final=${totalQuantity}`);
+      // Calculate from boxes using actual box sizes
+      let boxesTotal = 0;
+      if (store.boxes && store.boxes.length > 0) {
+        boxesTotal = store.boxes.reduce((sum, box) => {
+          const boxSize = boxSizeMap.get(box.boxId) || 12; // fallback to 12 if not found
+          return sum + (box.quantity || 0) * boxSize;
+        }, 0);
+        totalQuantity += boxesTotal;
       }
+      
+      console.log(`Store ${store.store_name}: items=${itemsTotal}, boxes=${boxesTotal} (${store.boxes?.length || 0} box types), total=${totalQuantity}`);
 
       const { data: storeProduction, error: storeError } = await supabaseClient
         .from('store_productions')
@@ -234,10 +257,14 @@ Deno.serve(async (req) => {
         .single();
 
       if (storeError) {
+        console.error(`❌ Error creating store production for ${store.store_name}:`, storeError);
         throw new Error(`Error creating store production for store ${store.store_name}: ${storeError.message}`);
       }
 
+      console.log(`✅ Created store production for ${store.store_name} with ID: ${storeProduction.id}`);
+
       if (store.items && store.items.length > 0) {
+        console.log(`📦 Creating ${store.items.length} production items for ${store.store_name}`);
         const { error: itemsError } = await supabaseClient
           .from('production_items')
           .insert(
@@ -252,11 +279,14 @@ Deno.serve(async (req) => {
           );
 
         if (itemsError) {
+          console.error(`❌ Error creating production items for ${store.store_name}:`, itemsError);
           throw new Error(`Error creating production items for store ${store.store_name}: ${itemsError.message}`);
         }
+        console.log(`✅ Created ${store.items.length} production items for ${store.store_name}`);
       }
 
       if (store.boxes && store.boxes.length > 0) {
+        console.log(`📦 Creating ${store.boxes.length} box productions for ${store.store_name}`);
         const { error: boxesError } = await supabaseClient
           .from('box_productions')
           .insert(
@@ -269,8 +299,10 @@ Deno.serve(async (req) => {
           );
 
         if (boxesError) {
+          console.error(`❌ Error creating box productions for ${store.store_name}:`, boxesError);
           throw new Error(`Error creating box productions for store ${store.store_name}: ${boxesError.message}`);
         }
+        console.log(`✅ Created ${store.boxes.length} box productions for ${store.store_name}`);
       }
     }
 

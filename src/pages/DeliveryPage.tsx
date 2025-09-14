@@ -5,7 +5,6 @@ import { useAdmin } from '../context/AdminContext';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { apiService } from '../services/apiService';
-import { productionService } from '../services/productionService';
 
 // Delivery-specific types
 interface DeliveryProductionItem {
@@ -88,8 +87,59 @@ const DeliveryPage: React.FC = () => {
   const [boxReceivedQuantities, setBoxReceivedQuantities] = useState<{ [key: string]: number }>({});
   const [boxWasteQuantities, setBoxWasteQuantities] = useState<{ [key: string]: number }>({});
   
+  // Function to initialize local state with current values from the plan
+  const initializeLocalState = (stores: DeliveryStoreProduction[]) => {
+    console.log('🔄 Initializing local state for', stores.length, 'stores');
+    
+    const newReceivedQuantities: { [key: string]: number } = {};
+    const newWasteQuantities: { [key: string]: number } = {};
+    const newBoxReceivedQuantities: { [key: string]: number } = {};
+    const newBoxWasteQuantities: { [key: string]: number } = {};
+    
+    stores.forEach(store => {
+      console.log(`🏪 Store ${store.store_name}: delivery_confirmed=${store.delivery_confirmed}, waste_reported=${store.waste_reported}`);
+      
+      // Initialize production items
+      store.production_items?.forEach(item => {
+        if (item.received !== null && item.received !== undefined) {
+          newReceivedQuantities[item.id] = item.received;
+          console.log(`  📦 Item ${item.variety_name}: received=${item.received}`);
+        }
+        if (item.waste !== null && item.waste !== undefined) {
+          newWasteQuantities[item.id] = item.waste;
+          console.log(`  🗑️ Item ${item.variety_name}: waste=${item.waste}`);
+        }
+      });
+      
+      // Initialize box productions
+      store.box_productions?.forEach(box => {
+        if (box.received !== null && box.received !== undefined) {
+          newBoxReceivedQuantities[box.id] = box.received;
+          console.log(`  📦 Box ${box.box_name}: received=${box.received}`);
+        }
+        if (box.waste !== null && box.waste !== undefined) {
+          newBoxWasteQuantities[box.id] = box.waste;
+          console.log(`  🗑️ Box ${box.box_name}: waste=${box.waste}`);
+        }
+      });
+    });
+    
+    console.log('📊 Setting local state:', {
+      receivedQuantities: Object.keys(newReceivedQuantities).length,
+      wasteQuantities: Object.keys(newWasteQuantities).length,
+      boxReceivedQuantities: Object.keys(newBoxReceivedQuantities).length,
+      boxWasteQuantities: Object.keys(newBoxWasteQuantities).length
+    });
+    
+    setReceivedQuantities(newReceivedQuantities);
+    setWasteQuantities(newWasteQuantities);
+    setBoxReceivedQuantities(newBoxReceivedQuantities);
+    setBoxWasteQuantities(newBoxWasteQuantities);
+  };
+  
   const loadCurrentPlan = async () => {
     try {
+      console.log('🔄 Loading current plan...');
       setLoading(true);
       setError(null);
       
@@ -98,6 +148,8 @@ const DeliveryPage: React.FC = () => {
       const endDate = new Date('2100-12-31');
       const startDate = showAllStores ? new Date('2000-01-01') : new Date('2024-01-01');
       
+      console.log('📅 Fetching plans from', startDate.toISOString().split('T')[0], 'to', endDate.toISOString().split('T')[0]);
+      
       const { data: plans, error } = await apiService.production.getProductionPlans(
         startDate.toISOString().split('T')[0],
         endDate.toISOString().split('T')[0],
@@ -105,9 +157,12 @@ const DeliveryPage: React.FC = () => {
       );
       
       if (error || !plans || plans.length === 0) {
+        console.log('❌ No plans found or error:', error);
         setCurrentPlan(null);
         return;
       }
+      
+      console.log('📋 Found', plans.length, 'plans from server');
       
       // Find all stores that have deliveries scheduled for the selected delivery date
       const storesForDeliveryDate: DeliveryStoreProduction[] = [];
@@ -159,6 +214,8 @@ const DeliveryPage: React.FC = () => {
       if (storesForDeliveryDate.length > 0) {
         const totalProduction = storesForDeliveryDate.reduce((sum, store) => sum + store.total_quantity, 0);
         
+        console.log('🏪 Found', storesForDeliveryDate.length, 'stores for delivery date', deliveryDate);
+        
         // use Map to de-dupe by store.id
         const storeMap = new Map<string, DeliveryStoreProduction>();
 
@@ -167,6 +224,13 @@ const DeliveryPage: React.FC = () => {
         });
 
         const uniqueStores = Array.from(storeMap.values());
+        
+        console.log('🏪 Unique stores:', uniqueStores.map(s => ({ 
+          id: s.id, 
+          name: s.store_name, 
+          delivery_confirmed: s.delivery_confirmed, 
+          waste_reported: s.waste_reported 
+        })));
 
         setCurrentPlan({
           id: `delivery-${deliveryDate}`,
@@ -175,34 +239,14 @@ const DeliveryPage: React.FC = () => {
           status: 'delivery',
           store_productions: uniqueStores
         });
+        
+        // Initialize local state with current values from the plan
+        initializeLocalState(uniqueStores);
       } else {
+        console.log('❌ No stores found for delivery date', deliveryDate);
         setCurrentPlan(null);
       }
       
-      // Initialize received quantities from plan data
-      if (storesForDeliveryDate.length > 0) {
-        const quantities: { [key: string]: number } = {};
-        const waste: { [key: string]: number } = {};
-        const boxQuantities: { [key: string]: number } = {};
-        const boxWaste: { [key: string]: number } = {};
-        
-        storesForDeliveryDate.forEach((store: DeliveryStoreProduction) => {
-          store.production_items?.forEach((item: DeliveryProductionItem) => {
-            if (item.received !== null && item.received !== undefined) quantities[item.id] = item.received;
-            if (item.waste !== null && item.waste !== undefined) waste[item.id] = item.waste;
-          });
-          
-          store.box_productions?.forEach((box: DeliveryBoxProduction) => {
-            if (box.received !== null && box.received !== undefined) boxQuantities[box.id] = box.received;
-            if (box.waste !== null && box.waste !== undefined) boxWaste[box.id] = box.waste;
-          });
-        });
-        
-        setReceivedQuantities(quantities);
-        setWasteQuantities(waste);
-        setBoxReceivedQuantities(boxQuantities);
-        setBoxWasteQuantities(boxWaste);
-      }
     } catch (err) {
       console.error('Error loading current production plan:', err);
       setError(err instanceof Error ? err.message : 'Error loading current production plan');
@@ -214,6 +258,125 @@ const DeliveryPage: React.FC = () => {
   useEffect(() => {
     loadCurrentPlan();
   }, [deliveryDate, showAllStores]);
+
+  // Effect to restore local state when component mounts or when plan changes
+  // Only initialize state if it's empty to avoid overwriting user changes
+  useEffect(() => {
+    if (currentPlan?.store_productions) {
+      // Only restore if local state is empty (initial load)
+      const hasLocalState = Object.keys(receivedQuantities).length > 0 || 
+                           Object.keys(wasteQuantities).length > 0 ||
+                           Object.keys(boxReceivedQuantities).length > 0 ||
+                           Object.keys(boxWasteQuantities).length > 0;
+      
+      if (!hasLocalState) {
+        // Restore local state from the current plan
+        const newReceivedQuantities: { [key: string]: number } = {};
+        const newWasteQuantities: { [key: string]: number } = {};
+        const newBoxReceivedQuantities: { [key: string]: number } = {};
+        const newBoxWasteQuantities: { [key: string]: number } = {};
+        
+        currentPlan.store_productions.forEach(store => {
+          store.production_items?.forEach(item => {
+            if (item.received !== null && item.received !== undefined) {
+              newReceivedQuantities[item.id] = item.received;
+            }
+            if (item.waste !== null && item.waste !== undefined) {
+              newWasteQuantities[item.id] = item.waste;
+            }
+          });
+          
+          store.box_productions?.forEach(box => {
+            if (box.received !== null && box.received !== undefined) {
+              newBoxReceivedQuantities[box.id] = box.received;
+            }
+            if (box.waste !== null && box.waste !== undefined) {
+              newBoxWasteQuantities[box.id] = box.waste;
+            }
+          });
+        });
+        
+        // Update local state with server values only if no local changes exist
+        setReceivedQuantities(newReceivedQuantities);
+        setWasteQuantities(newWasteQuantities);
+        setBoxReceivedQuantities(newBoxReceivedQuantities);
+        setBoxWasteQuantities(newBoxWasteQuantities);
+      }
+    }
+  }, [currentPlan]);
+
+  // Effect to sync local state when selected store changes
+  // Only merge server data if local state doesn't have values to preserve user input
+  useEffect(() => {
+    if (storeDetails && currentPlan) {
+      // Update local state to reflect the current store's data
+      const newReceivedQuantities: { [key: string]: number } = {};
+      const newWasteQuantities: { [key: string]: number } = {};
+      const newBoxReceivedQuantities: { [key: string]: number } = {};
+      const newBoxWasteQuantities: { [key: string]: number } = {};
+      
+      // Initialize with current values from the store
+      storeDetails.production_items?.forEach(item => {
+        if (item.received !== null && item.received !== undefined) {
+          newReceivedQuantities[item.id] = item.received;
+        }
+        if (item.waste !== null && item.waste !== undefined) {
+          newWasteQuantities[item.id] = item.waste;
+        }
+      });
+      
+      storeDetails.box_productions?.forEach(box => {
+        if (box.received !== null && box.received !== undefined) {
+          newBoxReceivedQuantities[box.id] = box.received;
+        }
+        if (box.waste !== null && box.waste !== undefined) {
+          newBoxWasteQuantities[box.id] = box.waste;
+        }
+      });
+      
+      // Merge with existing local state to preserve user input
+      // Only update if the local state doesn't already have a value for that item
+      setReceivedQuantities(prev => {
+        const merged = { ...prev };
+        Object.keys(newReceivedQuantities).forEach(key => {
+          if (merged[key] === undefined) {
+            merged[key] = newReceivedQuantities[key];
+          }
+        });
+        return merged;
+      });
+      
+      setWasteQuantities(prev => {
+        const merged = { ...prev };
+        Object.keys(newWasteQuantities).forEach(key => {
+          if (merged[key] === undefined) {
+            merged[key] = newWasteQuantities[key];
+          }
+        });
+        return merged;
+      });
+      
+      setBoxReceivedQuantities(prev => {
+        const merged = { ...prev };
+        Object.keys(newBoxReceivedQuantities).forEach(key => {
+          if (merged[key] === undefined) {
+            merged[key] = newBoxReceivedQuantities[key];
+          }
+        });
+        return merged;
+      });
+      
+      setBoxWasteQuantities(prev => {
+        const merged = { ...prev };
+        Object.keys(newBoxWasteQuantities).forEach(key => {
+          if (merged[key] === undefined) {
+            merged[key] = newBoxWasteQuantities[key];
+          }
+        });
+        return merged;
+      });
+    }
+  }, [selectedStore, currentPlan]);
 
   // Filter stores based on user role and store IDs
   const clean = (s:string)=>s.trim().toLowerCase();
@@ -369,7 +532,51 @@ const DeliveryPage: React.FC = () => {
       setReceivedQuantities(finalReceivedQuantities);
       setBoxReceivedQuantities(finalBoxReceivedQuantities);
 
-      await loadCurrentPlan();
+      // Update the current plan state immediately to reflect changes
+      if (currentPlan && storeDetails) {
+        const updatedPlan = { ...currentPlan };
+        const storeIndex = updatedPlan.store_productions?.findIndex(s => s.id === storeDetails.id);
+        
+        if (storeIndex !== undefined && updatedPlan.store_productions) {
+          updatedPlan.store_productions[storeIndex] = {
+            ...updatedPlan.store_productions[storeIndex],
+            delivery_confirmed: true
+          };
+          
+          // Update production items with received quantities
+          if (updatedPlan.store_productions[storeIndex].production_items) {
+            updatedPlan.store_productions[storeIndex].production_items = 
+              updatedPlan.store_productions[storeIndex].production_items!.map(item => ({
+                ...item,
+                received: finalReceivedQuantities[item.id] ?? item.received ?? item.quantity
+              }));
+          }
+          
+          // Update box productions with received quantities
+          if (updatedPlan.store_productions[storeIndex].box_productions) {
+            updatedPlan.store_productions[storeIndex].box_productions = 
+              updatedPlan.store_productions[storeIndex].box_productions!.map(box => ({
+                ...box,
+                received: finalBoxReceivedQuantities[box.id] ?? box.received ?? box.quantity
+              }));
+          }
+          
+          setCurrentPlan(updatedPlan);
+        }
+      }
+
+      // Add a small delay to ensure server has processed the update
+      console.log('✅ Delivery confirmed, reloading plan in 500ms...');
+      setTimeout(async () => {
+        try {
+          console.log('🔄 Reloading plan after delivery confirmation...');
+          await loadCurrentPlan();
+          console.log('✅ Plan reloaded successfully');
+        } catch (error) {
+          console.error('Error reloading plan after delivery confirmation:', error);
+          // Don't show error to user as the main operation succeeded
+        }
+      }, 500);
     } catch (err) {
       console.error('Error confirming delivery:', err);
       setError(err instanceof Error ? err.message : 'Error confirming delivery');
@@ -444,7 +651,51 @@ const DeliveryPage: React.FC = () => {
       
       if (error) throw error;
 
-      await loadCurrentPlan();
+      // Update the current plan state immediately to reflect changes
+      if (currentPlan && storeDetails) {
+        const updatedPlan = { ...currentPlan };
+        const storeIndex = updatedPlan.store_productions?.findIndex(s => s.id === storeDetails.id);
+        
+        if (storeIndex !== undefined && updatedPlan.store_productions) {
+          updatedPlan.store_productions[storeIndex] = {
+            ...updatedPlan.store_productions[storeIndex],
+            waste_reported: true
+          };
+          
+          // Update production items with waste quantities
+          if (updatedPlan.store_productions[storeIndex].production_items) {
+            updatedPlan.store_productions[storeIndex].production_items = 
+              updatedPlan.store_productions[storeIndex].production_items!.map(item => ({
+                ...item,
+                waste: wasteQuantities[item.id] ?? item.waste ?? 0
+              }));
+          }
+          
+          // Update box productions with waste quantities
+          if (updatedPlan.store_productions[storeIndex].box_productions) {
+            updatedPlan.store_productions[storeIndex].box_productions = 
+              updatedPlan.store_productions[storeIndex].box_productions!.map(box => ({
+                ...box,
+                waste: boxWasteQuantities[box.id] ?? box.waste ?? 0
+              }));
+          }
+          
+          setCurrentPlan(updatedPlan);
+        }
+      }
+
+      // Add a small delay to ensure server has processed the update
+      console.log('✅ Waste reported, reloading plan in 500ms...');
+      setTimeout(async () => {
+        try {
+          console.log('🔄 Reloading plan after waste reporting...');
+          await loadCurrentPlan();
+          console.log('✅ Plan reloaded successfully');
+        } catch (error) {
+          console.error('Error reloading plan after waste reporting:', error);
+          // Don't show error to user as the main operation succeeded
+        }
+      }, 500);
     } catch (err) {
       console.error('Error reporting waste:', err);
       setError(err instanceof Error ? err.message : 'Error reporting waste');

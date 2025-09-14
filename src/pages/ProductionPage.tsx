@@ -484,9 +484,58 @@ const ProductionPage: React.FC = () => {
       
       console.log('🗓️ SAVE DEBUG - Expected date after save:', date);
       
+      // Reload the plan data to ensure we have the latest from the server
+      console.log('🔄 Reloading plan data after save...');
+      const reloadedPlan = await productionService.getProductionPlan(date);
+      
+      if (reloadedPlan) {
+        console.log('✅ Plan reloaded successfully, updating state...');
+        setExistingPlanId(reloadedPlan.id);
+        
+        // Convert plan data to storeProductions format
+        const newStoreProductions: typeof storeProductions = {};
+        const newStoreBoxes: typeof storeBoxes = {};
+        const newStoreDeliveryDates: typeof storeDeliveryDates = {};
+        
+        if (reloadedPlan.stores && Array.isArray(reloadedPlan.stores)) {
+          reloadedPlan.stores.forEach((store: any) => {
+            if (store && store.store_id) {
+              // Handle variety productions
+              if (store.production_items && Array.isArray(store.production_items)) {
+                newStoreProductions[store.store_id] = store.production_items.reduce((acc: any, item: any) => ({
+                  ...acc,
+                  [item.variety_id]: item.quantity
+                }), {});
+              }
+              
+              // Handle box productions
+              if (store.box_productions && Array.isArray(store.box_productions)) {
+                newStoreBoxes[store.store_id] = store.box_productions.reduce((acc: any, box: any) => ({
+                  ...acc,
+                  [box.box_id]: box.quantity
+                }), {});
+              }
+
+              // Handle delivery dates
+              const deliveryDate = store.deliverydate;
+              if (deliveryDate) {
+                newStoreDeliveryDates[store.store_id] = deliveryDate;
+              }
+            }
+          });
+        }
+
+        setStoreProductions(newStoreProductions);
+        setStoreBoxes(newStoreBoxes);
+        setStoreDeliveryDates(newStoreDeliveryDates);
+        console.log('✅ State updated with reloaded data');
+      } else {
+        console.warn('⚠️ No plan data returned after reload');
+      }
+      
       // Store the saved plan info in localStorage for immediate access by PlansPage
       const savedPlanInfo = {
-        id: existingPlanId,
+        id: reloadedPlan?.id || existingPlanId,
         date: date,
         timestamp: Date.now()
       };
@@ -496,7 +545,7 @@ const ProductionPage: React.FC = () => {
       
       // Dispatch event to notify Plans page to refresh
       window.dispatchEvent(new CustomEvent('planSaved', { 
-        detail: { planId: existingPlanId, date: date }
+        detail: { planId: reloadedPlan?.id || existingPlanId, date: date }
       }));
       
       console.log('🗓️ SAVE DEBUG - Dispatched planSaved event with date:', date);
