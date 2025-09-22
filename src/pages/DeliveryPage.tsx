@@ -143,95 +143,85 @@ const DeliveryPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Load production plans within a broad range.
-      // When showAllStores is ON we pull everything (2000-2100) so no store is missed.
-      const endDate = new Date('2100-12-31');
-      const startDate = showAllStores ? new Date('2000-01-01') : new Date('2024-01-01');
+      // Always load from a very early date to ensure we get all relevant data
+      const startDate = '2000-01-01';  // Very early date to ensure we get all data
+      const endDate = '2100-12-31';    // Very far future date
       
-      console.log('📅 Fetching plans from', startDate.toISOString().split('T')[0], 'to', endDate.toISOString().split('T')[0]);
+      console.log('📅 Fetching ALL plans from', startDate, 'to', endDate);
       
       const { data: plans, error } = await apiService.production.getProductionPlans(
-        startDate.toISOString().split('T')[0],
-        endDate.toISOString().split('T')[0],
+        startDate,
+        endDate,
         showAllStores
       );
       
-      if (error || !plans || plans.length === 0) {
-        console.log('❌ No plans found or error:', error);
+      if (error) {
+        console.error('❌ Error fetching plans:', error);
         setCurrentPlan(null);
         return;
       }
       
-      console.log('📋 Found', plans.length, 'plans from server');
+      if (!plans || plans.length === 0) {
+        console.log('ℹ️ No production plans found in the database');
+        setCurrentPlan(null);
+        return;
+      }
       
-      // Find all stores that have deliveries scheduled for the selected delivery date
-      const storesForDeliveryDate: DeliveryStoreProduction[] = [];
+      console.log(`📋 Found ${plans.length} plans from server`);
       
-      console.log('🔍 Looking for deliveries on date:', deliveryDate); // Debug log
+      // Process all stores from all plans
+      const allStores: DeliveryStoreProduction[] = [];
       
       plans.forEach((plan: any) => {
         if (plan.stores && Array.isArray(plan.stores)) {
           plan.stores.forEach((store: any) => {
-            const storeDeliveryDate: string =
-              store.delivery_date ??
-              store.deliverydate ??
-              plan.date;
-
-            // Normalise for comparison
-            const normalize = (d: string) => d?.slice(0, 10);
-            const sameDate   = normalize(storeDeliveryDate) === normalize(deliveryDate);
-
-            // ADD store-level debug (remove later if noisy)
-            console.log(`[DeliveryPage] ${store.store_name}`, {
-              deliveryDate: storeDeliveryDate,
-              selected: deliveryDate,
-              sameDate,
-              userHasAccess: currentUser?.storeIds?.includes(store.store_id)
+            // For each store, create a store production record
+            allStores.push({
+              id: store.id,
+              store_id: store.store_id,
+              store_name: store.store_name,
+              deliverydate: store.delivery_date || store.deliverydate || plan.date,
+              total_quantity: store.total_quantity || 0,
+              delivery_confirmed: store.delivery_confirmed || false,
+              waste_reported: store.waste_reported || false,
+              production_items: store.production_items || [],
+              box_productions: store.box_productions || [],
+              production_date: plan.date
             });
-
-            const passesOwnership = isAdmin || isProduction || currentUser?.storeIds?.includes(store.store_id);
-            const passesDate      = showAllStores || sameDate;
-
-            if (passesOwnership && passesDate) {
-              storesForDeliveryDate.push({
-                id: store.id,
-                store_id: store.store_id,
-                store_name: store.store_name,
-                deliverydate: storeDeliveryDate,
-                total_quantity: store.total_quantity,
-                delivery_confirmed: store.delivery_confirmed || false,
-                waste_reported: store.waste_reported || false,
-                production_items: store.production_items || [],
-                box_productions: store.box_productions || [],
-                production_date: plan.date
-              });
-            }
           });
         }
       });
       
-      // Create a virtual plan for the delivery date with all matching stores
-      if (storesForDeliveryDate.length > 0) {
-        const totalProduction = storesForDeliveryDate.reduce((sum, store) => sum + store.total_quantity, 0);
+      // Filter stores based on the selected delivery date and user permissions
+      const filteredStores = allStores.filter(store => {
+        // Normalize dates for comparison
+        const normalize = (d: string) => d ? new Date(d).toISOString().split('T')[0] : '';
+        const isMatchingDate = normalize(store.deliverydate || '') === normalize(deliveryDate);
         
-        console.log('🏪 Found', storesForDeliveryDate.length, 'stores for delivery date', deliveryDate);
+        // Check if user has access to this store
+        const hasAccess = isAdmin || isProduction || 
+                         !currentUser?.storeIds || 
+                         currentUser.storeIds.length === 0 || 
+                         currentUser.storeIds.includes(store.store_id);
         
-        // use Map to de-dupe by store.id
-        const storeMap = new Map<string, DeliveryStoreProduction>();
-
-        storesForDeliveryDate.forEach(store => {
+        return isMatchingDate && (showAllStores || hasAccess);
+      });
+      
+      if (filteredStores.length > 0) {
+        console.log(`✅ Found ${filteredStores.length} stores for delivery date ${deliveryDate}`);
+        
+        // Calculate total production
+        const totalProduction = filteredStores.reduce((sum, store) => sum + (store.total_quantity || 0), 0);
+        
+        // Create a map to ensure unique stores by ID
+        const storeMap = new Map();
+        filteredStores.forEach(store => {
           storeMap.set(store.id, store);
         });
-
+        
         const uniqueStores = Array.from(storeMap.values());
         
-        console.log('🏪 Unique stores:', uniqueStores.map(s => ({ 
-          id: s.id, 
-          name: s.store_name, 
-          delivery_confirmed: s.delivery_confirmed, 
-          waste_reported: s.waste_reported 
-        })));
-
+        // Create the production plan with all stores
         setCurrentPlan({
           id: `delivery-${deliveryDate}`,
           date: deliveryDate,
@@ -240,16 +230,15 @@ const DeliveryPage: React.FC = () => {
           store_productions: uniqueStores
         });
         
-        // Initialize local state with current values from the plan
+        // Always initialize local state with the latest data
         initializeLocalState(uniqueStores);
       } else {
-        console.log('❌ No stores found for delivery date', deliveryDate);
+        console.log(`ℹ️ No stores found for delivery date ${deliveryDate}`);
         setCurrentPlan(null);
       }
-      
     } catch (err) {
-      console.error('Error loading current production plan:', err);
-      setError(err instanceof Error ? err.message : 'Error loading current production plan');
+      console.error('❌ Error loading production plan:', err);
+      setError(err instanceof Error ? err.message : 'Error loading production plan');
     } finally {
       setLoading(false);
     }
