@@ -30,6 +30,9 @@ Deno.serve(async (req)=>{
     // Get startDate and endDate from request body
     const requestBody = await req.json();
     const { startDate, endDate, allStores } = requestBody;
+    console.log('startDate', startDate);
+    console.log('endDate', endDate);
+    console.log('allStores', allStores);
     if (!startDate || !endDate) {
       throw new Error('Missing required startDate or endDate in request body');
     }
@@ -89,9 +92,15 @@ Deno.serve(async (req)=>{
           )
         )
       `).gte('date', start.toISOString().split('T')[0]).lte('date', end.toISOString().split('T')[0]).order('date', {
+        //greater than or equal to (gte) and less than or equal to (lte)
+        //order by date in descending order (false)
+        //order by date in ascending order (true)
+        //order by date in descending order (false)
       ascending: false
     });
-
+    //console the query
+    console.log('query', query);
+    console.time();
     const { data: plans, error: dbError } = await query;
     if (dbError) {
       console.error('Database error:', dbError);

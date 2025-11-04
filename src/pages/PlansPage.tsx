@@ -19,6 +19,10 @@ const PlansPage: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlanDate, setNewPlanDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [createError, setCreateError] = useState<string | null>(null);
+  // Filters
+  const [filterMode, setFilterMode] = useState<'last7' | 'last30' | 'thisMonth' | 'all' | 'custom'>('last7');
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
 
   const { user } = useAuth();
   const { varieties, forms, boxes } = useAdmin();
@@ -30,11 +34,34 @@ const PlansPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
-      // Fetch plans ±365 days so newly created future plans are included
+
+      // Determine requested date window based on filter
       const today = new Date();
-      const past365 = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const future365 = new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const todayStr = new Date(today.getTime()).toISOString().split('T')[0];
+      let plansData: ProductionPlan[] = [];
+
+      if (filterMode === 'all') {
+        // Broad range to effectively fetch all
+        const start = '2000-01-01';
+        const end = '2100-12-31';
+        plansData = await productionService.getProductionPlans(start, end);
+      } else if (filterMode === 'last7') {
+        // Last 7 days up to today (rolling window)
+        plansData = await productionService.getProductionPlans('7', todayStr);
+      } else if (filterMode === 'last30') {
+        plansData = await productionService.getProductionPlans('30', todayStr);
+      } else if (filterMode === 'thisMonth') {
+        const year = today.getFullYear();
+        const month = today.getMonth();
+        const startDate = new Date(year, month, 1).toISOString().split('T')[0];
+        // End of month
+        const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+        plansData = await productionService.getProductionPlans(startDate, endDate);
+      } else if (filterMode === 'custom') {
+        const startDate = customStart || '2000-01-01';
+        const endDate = customEnd || todayStr;
+        plansData = await productionService.getProductionPlans(startDate, endDate);
+      }
       
       // Check if we're expecting a recently saved plan
       const expectedPlanInfo = localStorage.getItem('recentlySavedPlan');
@@ -49,7 +76,6 @@ const PlansPage: React.FC = () => {
       }
       
       console.log('🔄 Loading plans from server...');
-      const plansData = await productionService.getProductionPlans(past365, future365);
       console.log('✅ Fetched plans data:', plansData);
       console.log('📊 Plans count:', plansData?.length || 0);
       
@@ -143,7 +169,7 @@ const PlansPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filterMode, customStart, customEnd]);
 
   useEffect(() => {
     loadPlans();
@@ -461,6 +487,39 @@ const PlansPage: React.FC = () => {
             <p className="text-gray-600 mt-1">Historique des plans de production sauvegardés</p>
           </div>
           <div className="flex space-x-2">
+            <div className="flex items-center space-x-2">
+              <select
+                value={filterMode}
+                onChange={e => setFilterMode(e.target.value as any)}
+                className="border border-gray-300 rounded-md px-2 py-2 text-sm"
+                title="Filtrer par période"
+              >
+                <option value="last7">7 derniers jours</option>
+                <option value="last30">30 derniers jours</option>
+                <option value="thisMonth">Ce mois</option>
+                <option value="all">Tout</option>
+                <option value="custom">Plage personnalisée…</option>
+              </select>
+              {filterMode === 'custom' && (
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="date"
+                    value={customStart}
+                    onChange={e => setCustomStart(e.target.value)}
+                    className="border border-gray-300 rounded-md px-2 py-2 text-sm"
+                    placeholder="Début"
+                  />
+                  <span className="text-gray-500">→</span>
+                  <input
+                    type="date"
+                    value={customEnd}
+                    onChange={e => setCustomEnd(e.target.value)}
+                    className="border border-gray-300 rounded-md px-2 py-2 text-sm"
+                    placeholder="Fin"
+                  />
+                </div>
+              )}
+            </div>
             <button
               onClick={openCreateModal}
               className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"

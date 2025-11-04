@@ -100,177 +100,145 @@ export class AIForecastService {
    * Generate AI-powered production forecasts for a specific date
    */
   async generateForecast(targetDate: string, stores: any[], varieties: any[], boxes: any[]): Promise<AIForecastResult[]> {
-    // -------------------------------------------------------------
-    // 1. Try to use the new backend AI service (generate-production)
-    // -------------------------------------------------------------
-    try {
-      // The Edge Function expects the target production day as a lowercase weekday string e.g. "thursday"
-      const dayName = new Date(targetDate)
-        .toLocaleDateString('en-US', { weekday: 'long' })
-        .toLowerCase();
+    // Simplified logic per request: only use last week's same weekday
+    console.log('🤖 AI Forecast (simple): Starting last-week analysis for', targetDate);
 
-      const { data: backendData, error } = await apiService.invoke<any>(
-        'generate-production',
-        { target_production_day: dayName },
-        { throwError: false }
-      );
-
-      // We keep the backend call for future use, but predictions will rely on the
-      // refined local algorithm that focuses on the last 5 matching weekdays.
-      if (!error && backendData && backendData.production_items) {
-        console.log('ℹ️ AI Forecast: Backend generate-production response ignored for weekday-specific analysis');
-      }
-
-      if (error) {
-        console.warn('⚠️ AI Forecast: Backend generate-production error – falling back to local algorithm:', error.message || error);
-      } else {
-        console.warn('⚠️ AI Forecast: Backend generate-production returned no data – falling back to local algorithm');
-      }
-    } catch (backendErr) {
-      console.warn('⚠️ AI Forecast: Exception while calling backend generate-production – falling back to local algorithm:', backendErr);
-    }
-
-    // -------------------------------------------------------------
-    // 2. Fallback to existing local algorithm (current implementation)
-    // -------------------------------------------------------------
-    console.log('🤖 AI Forecast: Starting prediction analysis for', targetDate);
-    
-    // Enhanced data loading: try much larger timeframes due to backend date conversion issue
-    const dataLoadingStrategies = [
-      { days: 180, description: "180 days (comprehensive - to work around date conversion issue)" },
-      { days: 90, description: "90 days (extended)" },
-      { days: 60, description: "60 days (expanded)" },
-      { days: 30, description: "30 days (standard)" },
-      { days: 14, description: "14 days (reduced)" },
-      { days: 7, description: "7 days (minimal)" }
-    ];
-    
-    let historicalPlans = null;
-
-    for (const strategy of dataLoadingStrategies) {
-      try {
-        console.log(`🤖 AI Forecast: Attempting to load ${strategy.days} days of historical data...`);
-        historicalPlans = await productionService.getProductionPlans(strategy.days.toString(), targetDate);
-        
-        console.log(`🔍 AI DEBUG: Raw plans received:`, historicalPlans?.length || 0);
-        if (historicalPlans && historicalPlans.length > 0) {
-          console.log(`🔍 AI DEBUG: Plan details:`);
-          historicalPlans.forEach((plan: any, index: number) => {
-            console.log(`  ${index + 1}. Date: ${plan.date}, ID: ${plan.id}, Stores: ${plan.stores?.length || 0}, Total: ${plan.total_production}`);
-          });
-          
-          // Check for unique plan IDs vs unique dates
-          const uniqueIds = new Set(historicalPlans.map((p: any) => p.id));
-          const uniqueDates = new Set(historicalPlans.map((p: any) => p.date));
-          console.log(`🔍 AI DEBUG: Unique plan IDs: ${uniqueIds.size}, Unique dates: ${uniqueDates.size}`);
-          
-          if (uniqueIds.size > uniqueDates.size) {
-            console.warn(`⚠️ AI DEBUG: Backend date conversion issue detected! Multiple plans (${uniqueIds.size}) have the same dates (${uniqueDates.size})`);
-          }
-        }
-        
-        // Note which strategy succeeded (debug)
-        console.log(`✅ AI Forecast: Successfully loaded ${historicalPlans?.length || 0} plans using ${strategy.description}`);
-        
-        // If we have at least the minimum, break
-        if (historicalPlans && historicalPlans.length >= this.MIN_DATA_POINTS) {
-          break;
-        } else if (historicalPlans && historicalPlans.length > 0) {
-          console.log(`⚠️ AI Forecast: Found ${historicalPlans.length} plans with ${strategy.description}, continuing to try larger timeframes...`);
-        }
-      } catch (error) {
-        console.warn(`⚠️ AI Forecast: Failed to load ${strategy.days} days of data:`, error instanceof Error ? error.message : String(error));
-        if (strategy === dataLoadingStrategies[dataLoadingStrategies.length - 1]) {
-          // Last strategy failed, throw error
-          throw new Error(
-            `Unable to load historical data. Tried ${dataLoadingStrategies.map(s => s.days).join(', ')} days. ` +
-            `Please ensure you have saved production plans in the system or try again later.`
-          );
-        }
-        continue;
-      }
-    }
-    
-    if (!historicalPlans || historicalPlans.length < this.MIN_DATA_POINTS) {
-      const availablePlans = historicalPlans?.length || 0;
-      const message = availablePlans === 0 
-        ? "No historical production plans found in the system. Please save at least one production plan before using AI predictions."
-        : `Found only ${availablePlans} plan(s). AI forecasting will work with limited data, but results may be less accurate. Consider saving more production plans for better predictions.`;
-        
-      if (availablePlans === 0) {
-        throw new Error(message);
-      } else {
-        console.warn(`⚠️ AI Forecast: ${message}`);
-        // Continue with limited data
-      }
-    }
-
-    const targetDayOfWeek = new Date(targetDate).getDay();
-    const salesMapping = this.getProductionSalesMapping(targetDayOfWeek);
-
-    // =================================================================================
-    // Restrict historical data to the most recent 5 exact same-weekday dates
-    // Take targetDate and step backwards by 7 days up to 5 times, then pick plans whose
-    // date matches any of those exact step dates. This yields stable, deterministic input.
-    // =================================================================================
     const targetDateObj = new Date(targetDate);
-    const desiredDates = [] as string[];
-    for (let i = 1; i <= 5; i++) {
-      const d = new Date(targetDateObj);
-      d.setDate(d.getDate() - (7 * i));
-      desiredDates.push(d.toISOString().slice(0, 10));
+    const lastWeekDateObj = new Date(targetDateObj);
+    lastWeekDateObj.setDate(targetDateObj.getDate() - 7);
+    const lastWeekDate = lastWeekDateObj.toISOString().slice(0, 10);
+
+    // Check if there's an existing plan for the target date (to use as baseline)
+    const currentPlan = await productionService.getProductionPlan(targetDate);
+    console.log('📋 Current plan for target date:', currentPlan ? 'Found' : 'Not found');
+
+    // Fetch exactly the plan from last week's same weekday (for waste data)
+    const lastWeekPlan = await productionService.getProductionPlan(lastWeekDate);
+
+    if (!lastWeekPlan || !lastWeekPlan.stores || lastWeekPlan.stores.length === 0) {
+      throw new Error('Not enough historical data – need last week\'s same weekday with received and waste filled.');
     }
 
-    let weekdayFilteredPlans = (historicalPlans || [])
-      .filter((p: any) => desiredDates.includes(new Date(p.date).toISOString().slice(0, 10)))
-      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-    // If none matched exact step dates, fall back to last 5 with same weekday (but still sorted)
-    if (weekdayFilteredPlans.length === 0) {
-      weekdayFilteredPlans = (historicalPlans || [])
-        .filter((p: any) => new Date(p.date).getDay() === targetDayOfWeek && new Date(p.date) < targetDateObj)
-        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .slice(0, 5);
-    }
-
-    console.log(`🤖 AI Forecast: Using ${weekdayFilteredPlans.length} historical plan(s) matching ${this.getDayName(targetDayOfWeek)} (max 5)`);
-    console.log(`🤖 AI Forecast: Production date is ${this.getDayName(targetDayOfWeek)} → ${salesMapping.mappingInfo}`);
-    console.log(`🤖 AI Forecast: Analyzing sales patterns for ${this.getDayName(salesMapping.salesDay)} (weekend: ${salesMapping.isWeekend})`);
+    // Build store data from that single plan
+    const weekdayFilteredPlans = [lastWeekPlan];
 
     const results: AIForecastResult[] = [];
     let storesWithData = 0;
 
-    for (const store of stores.filter(s => s.isActive)) {
-      console.log(`🤖 AI Forecast: Processing store ${store.name}`);
-      
-      const storeHistoricalData = this.extractStoreHistoricalData(weekdayFilteredPlans, store.id);
-      
+    for (const store of stores.filter((s: any) => s.isActive)) {
+      const storeHistoricalData = this.extractStoreHistoricalData(weekdayFilteredPlans as any, store.id);
       if (storeHistoricalData.length === 0) {
-        console.log(`ℹ️ AI Forecast: Skipping store ${store.name} – no data for the last 5 matching weekdays`);
+        continue;
+      }
+
+      // Use the single day
+      const dayData = storeHistoricalData[0];
+
+      // Get current plan data for this store (if exists)
+      const currentStoreData = currentPlan?.stores?.find((s: any) => s.store_id === store.id);
+
+      const varietyPredictions: any[] = [];
+      for (const varietyId of store.availableVarieties) {
+        const variety = varieties.find(v => v.id === varietyId && v.isActive);
+        if (!variety) continue;
+
+        const vItem = dayData.varieties.find((v: any) => v.varietyId === varietyId);
+        if (!vItem || vItem.received == null || vItem.waste == null) {
+          continue; // require last-week confirmed data
+        }
+
+        // Get current plan quantity for this variety (if exists)
+        const currentQuantity = currentStoreData?.production_items?.find((item: any) => item.variety_id === varietyId)?.quantity || null;
+
+        // Calculate sales from last week: received - waste = sales
+        const lastWeekSales = Math.max(0, vItem.received - vItem.waste);
+        const wastePercent = vItem.received > 0 ? (vItem.waste / vItem.received) * 100 : 0;
+
+        // If current plan has a quantity, use it as baseline and adjust based on waste
+        // Otherwise, use last week's sales as baseline
+        let baselineSales: number;
+        let useCurrentPlan: boolean;
+        
+        if (currentQuantity !== null && currentQuantity > 0) {
+          // Use current plan quantity as baseline (this is what user has set)
+          baselineSales = currentQuantity;
+          useCurrentPlan = true;
+        } else {
+          // Use last week's sales as baseline
+          baselineSales = lastWeekSales;
+          useCurrentPlan = false;
+        }
+
+        // Adjust baseline with percentage factor based on waste level
+        const factor = this.getAdjustmentFactorFromWaste(wastePercent);
+        const recommended = Math.max(this.MIN_VAR_PRODUCTION, Math.ceil(baselineSales * factor));
+
+        varietyPredictions.push({
+          varietyId,
+          varietyName: variety.name,
+          predictedSales: Math.round(useCurrentPlan ? baselineSales : lastWeekSales),
+          recommendedProduction: recommended,
+          confidence: factor - 1,
+          reasoning: useCurrentPlan 
+            ? `Baseline: ${baselineSales} (plan actuel) → ajustement ${(factor * 100 - 100).toFixed(0)}% basé sur déchets ${wastePercent.toFixed(0)}% de la semaine dernière`
+            : `Baseline: ${baselineSales} (ventes semaine dernière) → ajustement ${(factor * 100 - 100).toFixed(0)}% basé sur déchets ${wastePercent.toFixed(0)}%`
+        });
+      }
+
+      const boxPredictions: any[] = [];
+      for (const boxId of store.availableBoxes) {
+        const box = boxes.find(b => b.id === boxId && b.isActive);
+        if (!box) continue;
+
+        const bItem = dayData.boxes.find((b: any) => b.boxName === box.name);
+        if (!bItem || bItem.received == null || bItem.waste == null) {
+          continue; // require last-week confirmed data
+        }
+
+        // Get current plan quantity for this box (if exists)
+        const currentBoxQuantity = currentStoreData?.box_productions?.find((bp: any) => bp.box_id === boxId)?.quantity || null;
+
+        // Calculate box sales from last week: received - waste = sales
+        const lastWeekBoxSales = Math.max(0, bItem.received - bItem.waste);
+        const wastePercent = bItem.received > 0 ? (bItem.waste / bItem.received) * 100 : 0;
+
+        // If current plan has a quantity, use it as baseline and adjust based on waste
+        // Otherwise, use last week's sales as baseline
+        let baselineBoxSales: number;
+        let useCurrentBoxPlan: boolean;
+        
+        if (currentBoxQuantity !== null && currentBoxQuantity > 0) {
+          // Use current plan quantity as baseline (this is what user has set)
+          baselineBoxSales = currentBoxQuantity;
+          useCurrentBoxPlan = true;
+        } else {
+          // Use last week's sales as baseline
+          baselineBoxSales = lastWeekBoxSales;
+          useCurrentBoxPlan = false;
+        }
+
+        // Adjust baseline with percentage factor based on waste level
+        const factor = this.getAdjustmentFactorFromWaste(wastePercent);
+        const recommendedBoxes = Math.max(this.MIN_BOX_PRODUCTION, Math.ceil(baselineBoxSales * factor));
+
+        boxPredictions.push({
+          boxId,
+          boxName: box.name,
+          predictedSales: Math.round(useCurrentBoxPlan ? baselineBoxSales : lastWeekBoxSales),
+          recommendedProduction: recommendedBoxes,
+          confidence: factor - 1,
+          reasoning: useCurrentBoxPlan
+            ? `Baseline: ${baselineBoxSales} (plan actuel) → ajustement ${(factor * 100 - 100).toFixed(0)}% basé sur déchets ${wastePercent.toFixed(0)}% de la semaine dernière`
+            : `Baseline: ${baselineBoxSales} (ventes semaine dernière) → ajustement ${(factor * 100 - 100).toFixed(0)}% basé sur déchets ${wastePercent.toFixed(0)}%`
+        });
+      }
+
+      if (varietyPredictions.length === 0 && boxPredictions.length === 0) {
         continue;
       }
 
       storesWithData++;
       
-      // Analyze patterns for varieties
-      const varietyPredictions = await this.predictVarieties(
-        store, 
-        varieties, 
-        storeHistoricalData, 
-        salesMapping.salesDay, 
-        targetDayOfWeek
-      );
-
-      // Analyze patterns for boxes  
-      const boxPredictions = await this.predictBoxes(
-        store, 
-        boxes, 
-        storeHistoricalData, 
-        salesMapping.salesDay, 
-        targetDayOfWeek
-      );
-
-      if (varietyPredictions.length > 0 || boxPredictions.length > 0) {
         const totalPredictedSales = varietyPredictions.reduce((sum, v) => sum + v.predictedSales, 0) +
                                    boxPredictions.reduce((sum, b) => sum + b.predictedSales * this.getBoxSize(b.boxId, boxes), 0);
 
@@ -280,35 +248,27 @@ export class AIForecastService {
         const estimatedWastePercent = totalRecommendedProduction > 0 ? 
           ((totalRecommendedProduction - totalPredictedSales) / totalRecommendedProduction) * 100 : 0;
 
-        const avgSafetyStock = varietyPredictions.length > 0 ? 
-          varietyPredictions.reduce((sum, v) => sum + v.confidence, 0) / varietyPredictions.length : 0.20;
-
         results.push({
           storeId: store.id,
           storeName: store.name,
           predictions: varietyPredictions,
-          boxPredictions: boxPredictions,
+        boxPredictions,
           totalPredictedSales,
           totalRecommendedProduction,
           estimatedWastePercent,
-          safetyStockPercent: avgSafetyStock * 100
+        safetyStockPercent: (results.length > 0 ? 0 : 0) // informational only in simple mode
         });
-
-        console.log(`✅ AI Forecast: ${store.name} - Predicted sales: ${totalPredictedSales}, Recommended production: ${totalRecommendedProduction}, Estimated waste: ${estimatedWastePercent.toFixed(1)}%`);
-      }
     }
 
-    // Ensure deterministic ordering of outputs
+    // Sort for determinism
     results.forEach(r => {
       r.predictions.sort((a, b) => a.varietyName.localeCompare(b.varietyName));
       r.boxPredictions.sort((a, b) => a.boxName.localeCompare(b.boxName));
     });
     results.sort((a, b) => a.storeName.localeCompare(b.storeName));
 
-    console.log(`🤖 AI Forecast: Completed analysis for ${results.length} stores (${storesWithData} with historical data, ${results.length - storesWithData} with conservative estimates)`);
-    
-    if (results.length === 0) {
-      throw new Error("No production forecasts could be generated. Please ensure stores are properly configured with available varieties and boxes.");
+    if (results.length === 0 || storesWithData === 0) {
+      throw new Error('Not enough historical data – at least last week\'s same weekday with confirmed received and waste is required.');
     }
 
     return results;
@@ -933,6 +893,42 @@ export class AIForecastService {
   private getDayName(dayOfWeek: number): string {
     const days = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
     return days[dayOfWeek];
+  }
+
+  /**
+   * Compute adjustment factor from waste percent
+   * - Low waste → mild up-adjustment
+   * - Moderate waste → neutral
+   * - High waste → down-adjustment
+   */
+  private getAdjustmentFactorFromWaste(wastePercent: number): number {
+    if (!isFinite(wastePercent) || wastePercent < 0) {
+      return 1.0;
+    }
+
+    // Piecewise mapping for clarity and stability
+    // 0-5%: +10% buffer (likely under-produced)
+    // 5-10%: +5%
+    // 10-20%: 0%
+    // 20-30%: -10%
+    // >30%: -20%
+    let factor: number;
+    if (wastePercent < 5) {
+      factor = 1.10;
+    } else if (wastePercent < 10) {
+      factor = 1.05;
+    } else if (wastePercent < 20) {
+      factor = 1.00;
+    } else if (wastePercent < 30) {
+      factor = 0.90;
+    } else {
+      factor = 0.80;
+    }
+
+    // Clamp to guard against accidental extremes
+    if (factor < 0.7) factor = 0.7;
+    if (factor > 1.25) factor = 1.25;
+    return factor;
   }
 
   /**

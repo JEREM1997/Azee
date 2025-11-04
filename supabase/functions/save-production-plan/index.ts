@@ -149,9 +149,114 @@ Deno.serve(async (req) => {
 
     const planId = planData.existingPlanId || existingPlan?.id;
 
-    if (planId) {
-      // Update existing plan and delete related data in a transaction
-      const { data: updatedPlan, error: updateError } = await supabaseClient
+    // Get box configurations to calculate proper totals (do this BEFORE any deletes)
+    const { data: boxConfigs, error: boxConfigError } = await supabaseClient
+      .from('box_configurations')
+      .select('id, size');
+
+    if (boxConfigError) {
+      console.warn('Could not fetch box configurations, using fallback calculation:', boxConfigError.message);
+    }
+
+    const boxSizeMap = new Map();
+    if (boxConfigs) {
+      boxConfigs.forEach(box => {
+        boxSizeMap.set(box.id, box.size);
+      });
+    }
+
+    // PREPARE ALL DATA FIRST (before any deletes) - this validates the data structure
+    const preparedStoreProductions: Array<{
+      store_id: string;
+      store_name: string;
+      delivery_date?: string;
+      total_quantity: number;
+      items: Array<any>;
+      boxes: Array<any>;
+    }> = [];
+
+    for (const store of planData.stores) {
+      // Validate before processing
+      if (!store.store_id) {
+        throw new Error(`Missing store ID for store: ${store.store_name || 'Unknown'}`);
+      }
+
+      if (!store.store_name) {
+        throw new Error(`Missing store name for store ID: ${store.store_id}`);
+      }
+
+      // Calculate total_quantity from items and boxes
+      let totalQuantity = 0;
+      
+      // Calculate from items (individual doughnuts)
+      const itemsTotal = store.items?.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0) || 0;
+      totalQuantity += itemsTotal;
+      
+      // Calculate from boxes using actual box sizes
+      let boxesTotal = 0;
+      if (store.boxes && store.boxes.length > 0) {
+        boxesTotal = store.boxes.reduce((sum: number, box: any) => {
+          const boxSize = boxSizeMap.get(box.boxId) || 12; // fallback to 12 if not found
+          return sum + (box.quantity || 0) * boxSize;
+        }, 0);
+        totalQuantity += boxesTotal;
+      }
+
+      preparedStoreProductions.push({
+        store_id: store.store_id,
+        store_name: store.store_name,
+        delivery_date: store.delivery_date,
+        total_quantity: totalQuantity,
+        items: store.items || [],
+        boxes: store.boxes || []
+      });
+    }
+
+    // Use PostgreSQL function for atomic transaction (prevents data loss)
+    // This wraps delete+create in a single transaction that rolls back on error
+    try {
+      const { data: resultPlanId, error: functionError } = await supabaseClient
+        .rpc('save_production_plan_safe', {
+          p_plan_id: planId || null,
+          p_date: planData.date,
+          p_total_production: resolvedTotalProduction,
+          p_status: planData.status,
+          p_created_by: user.id,
+          p_store_productions: JSON.stringify(preparedStoreProductions.map(store => ({
+            store_id: store.store_id,
+            store_name: store.store_name,
+            delivery_date: store.delivery_date,
+            total_quantity: store.total_quantity,
+            items: store.items,
+            boxes: store.boxes
+          })))
+        });
+
+      if (functionError) {
+        throw new Error(`Transaction error: ${functionError.message}`);
+      }
+
+      // Get the plan with all relations for response
+      const { data: resultPlan, error: fetchError } = await supabaseClient
+        .from('production_plans')
+        .select('id')
+        .eq('id', resultPlanId)
+        .single();
+
+      if (fetchError) {
+        throw new Error(`Error fetching saved plan: ${fetchError.message}`);
+      }
+
+      plan = resultPlan;
+      console.log(`✅ Successfully saved production plan ${plan.id} in transaction`);
+    } catch (rpcError) {
+      // Fallback to manual approach if RPC function fails or doesn't exist
+      console.warn('⚠️ RPC function not available, using manual approach:', rpcError);
+      
+      // NOW handle plan creation/update
+      if (planId) {
+        // Update existing plan
+        const { data: updatedPlan, error: updateError } = await supabaseClient
         .from('production_plans')
         .update({
           total_production: resolvedTotalProduction,
@@ -167,7 +272,8 @@ Deno.serve(async (req) => {
 
       plan = updatedPlan;
 
-      // Delete existing store productions (cascade will handle items and boxes)
+        // Delete existing store productions ONLY after data is validated
+        // (cascade will handle items and boxes)
       const { error: deleteError } = await supabaseClient
         .from('store_productions')
         .delete()
@@ -198,51 +304,10 @@ Deno.serve(async (req) => {
       plan = newPlan;
     }
 
-    // Get box configurations to calculate proper totals
-    const { data: boxConfigs, error: boxConfigError } = await supabaseClient
-      .from('box_configurations')
-      .select('id, size');
-
-    if (boxConfigError) {
-      console.warn('Could not fetch box configurations, using fallback calculation:', boxConfigError.message);
-    }
-
-    const boxSizeMap = new Map();
-    if (boxConfigs) {
-      boxConfigs.forEach(box => {
-        boxSizeMap.set(box.id, box.size);
-      });
-    }
-
-    // Create store productions and their items/boxes
-    for (const store of planData.stores) {
-      // Add validation to prevent null constraint violations
-      if (!store.store_id) {
-        throw new Error(`Missing store ID for store: ${store.store_name || 'Unknown'}. Received storeId: ${store.store_id}`);
-      }
-
-      if (!store.store_name) {
-        throw new Error(`Missing store name for store ID: ${store.store_id}`);
-      }
-
-      // Calculate total_quantity from items and boxes
-      let totalQuantity = 0;
-      
-      // Calculate from items (individual doughnuts)
-      const itemsTotal = store.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-      totalQuantity += itemsTotal;
-      
-      // Calculate from boxes using actual box sizes
-      let boxesTotal = 0;
-      if (store.boxes && store.boxes.length > 0) {
-        boxesTotal = store.boxes.reduce((sum, box) => {
-          const boxSize = boxSizeMap.get(box.boxId) || 12; // fallback to 12 if not found
-          return sum + (box.quantity || 0) * boxSize;
-        }, 0);
-        totalQuantity += boxesTotal;
-      }
-      
-      console.log(`Store ${store.store_name}: items=${itemsTotal}, boxes=${boxesTotal} (${store.boxes?.length || 0} box types), total=${totalQuantity}`);
+      // NOW create all store productions and their items/boxes
+      // Since we validated everything above, these should all succeed
+      for (const store of preparedStoreProductions) {
+        console.log(`Store ${store.store_name}: items=${store.items.length}, boxes=${store.boxes.length}, total=${store.total_quantity}`);
 
       const { data: storeProduction, error: storeError } = await supabaseClient
         .from('store_productions')
@@ -250,7 +315,7 @@ Deno.serve(async (req) => {
           plan_id: plan.id,
           store_id: store.store_id,
           store_name: store.store_name,
-          total_quantity: totalQuantity,
+            total_quantity: store.total_quantity,
           deliverydate: store.delivery_date
         })
         .select()
@@ -268,7 +333,7 @@ Deno.serve(async (req) => {
         const { error: itemsError } = await supabaseClient
           .from('production_items')
           .insert(
-            store.items.map(item => ({
+              store.items.map((item: any) => ({
               store_production_id: storeProduction.id,
               variety_id: item.varietyId,
               variety_name: item.varietyName,
@@ -290,7 +355,7 @@ Deno.serve(async (req) => {
         const { error: boxesError } = await supabaseClient
           .from('box_productions')
           .insert(
-            store.boxes.map(box => ({
+              store.boxes.map((box: any) => ({
               store_production_id: storeProduction.id,
               box_id: box.boxId,
               box_name: box.boxName,
@@ -303,6 +368,7 @@ Deno.serve(async (req) => {
           throw new Error(`Error creating box productions for store ${store.store_name}: ${boxesError.message}`);
         }
         console.log(`✅ Created ${store.boxes.length} box productions for ${store.store_name}`);
+        }
       }
     }
 
