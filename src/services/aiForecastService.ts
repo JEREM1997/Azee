@@ -169,19 +169,17 @@ export class AIForecastService {
           useCurrentPlan = false;
         }
 
-        // Adjust baseline with percentage factor based on waste level
-        const factor = this.getAdjustmentFactorFromWaste(wastePercent);
-        const recommended = Math.max(this.MIN_VAR_PRODUCTION, Math.ceil(baselineSales * factor));
+        // Requirement: last week's sales + 30% security (ignore dynamic factor)
+        const securityMultiplier = 1.30;
+        const recommended = Math.max(this.MIN_VAR_PRODUCTION, Math.ceil(lastWeekSales * securityMultiplier));
 
         varietyPredictions.push({
           varietyId,
           varietyName: variety.name,
-          predictedSales: Math.round(useCurrentPlan ? baselineSales : lastWeekSales),
+          predictedSales: Math.round(lastWeekSales),
           recommendedProduction: recommended,
-          confidence: factor - 1,
-          reasoning: useCurrentPlan 
-            ? `Baseline: ${baselineSales} (plan actuel) → ajustement ${(factor * 100 - 100).toFixed(0)}% basé sur déchets ${wastePercent.toFixed(0)}% de la semaine dernière`
-            : `Baseline: ${baselineSales} (ventes semaine dernière) → ajustement ${(factor * 100 - 100).toFixed(0)}% basé sur déchets ${wastePercent.toFixed(0)}%`
+          confidence: 0.30,
+          reasoning: `Ventes semaine dernière: ${lastWeekSales} → +30% sécurité`
         });
       }
 
@@ -217,19 +215,17 @@ export class AIForecastService {
           useCurrentBoxPlan = false;
         }
 
-        // Adjust baseline with percentage factor based on waste level
-        const factor = this.getAdjustmentFactorFromWaste(wastePercent);
-        const recommendedBoxes = Math.max(this.MIN_BOX_PRODUCTION, Math.ceil(baselineBoxSales * factor));
+        // Requirement: last week's sales + 30% security (ignore dynamic factor)
+        const securityMultiplier = 1.30;
+        const recommendedBoxes = Math.max(this.MIN_BOX_PRODUCTION, Math.ceil(lastWeekBoxSales * securityMultiplier));
 
         boxPredictions.push({
           boxId,
           boxName: box.name,
-          predictedSales: Math.round(useCurrentBoxPlan ? baselineBoxSales : lastWeekBoxSales),
+          predictedSales: Math.round(lastWeekBoxSales),
           recommendedProduction: recommendedBoxes,
-          confidence: factor - 1,
-          reasoning: useCurrentBoxPlan
-            ? `Baseline: ${baselineBoxSales} (plan actuel) → ajustement ${(factor * 100 - 100).toFixed(0)}% basé sur déchets ${wastePercent.toFixed(0)}% de la semaine dernière`
-            : `Baseline: ${baselineBoxSales} (ventes semaine dernière) → ajustement ${(factor * 100 - 100).toFixed(0)}% basé sur déchets ${wastePercent.toFixed(0)}%`
+          confidence: 0.30,
+          reasoning: `Ventes semaine dernière: ${lastWeekBoxSales} → +30% sécurité`
         });
       }
 
