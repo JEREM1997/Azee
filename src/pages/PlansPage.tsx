@@ -42,8 +42,8 @@ const PlansPage: React.FC = () => {
 
       if (filterMode === 'all') {
         // Broad range to effectively fetch all
-        const start = '2000-01-01';
-        const end = '2100-12-31';
+        const start = '2025-10-20';
+        const end = '2025-11-06';
         plansData = await productionService.getProductionPlans(start, end);
       } else if (filterMode === 'last7') {
         // Last 7 days up to today (rolling window)

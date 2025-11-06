@@ -30,9 +30,16 @@ Deno.serve(async (req)=>{
     // Get startDate and endDate from request body
     const requestBody = await req.json();
     const { startDate, endDate, allStores } = requestBody;
-    console.log('startDate', startDate);
-    console.log('endDate', endDate);
-    console.log('allStores', allStores);
+    console.log('[get-production-plans] Request received', {
+      method: req.method,
+      url: req.url,
+      startDate,
+      endDate,
+      allStores,
+      userAgent: req.headers.get('user-agent') || undefined,
+      referer: req.headers.get('referer') || undefined,
+      xClientInfo: req.headers.get('x-client-info') || undefined
+    });
     if (!startDate || !endDate) {
       throw new Error('Missing required startDate or endDate in request body');
     }
@@ -53,8 +60,10 @@ Deno.serve(async (req)=>{
     }
     const role = user.user_metadata?.role;
     const storeIds = user.user_metadata?.store_ids || [];
-    console.log(`Date range: ${start.toISOString().split('T')[0]} to ${end.toISOString().split('T')[0]}`);
-    console.log(`User role: ${role}, Store IDs: ${JSON.stringify(storeIds)}`);
+    const startIso = start.toISOString().split('T')[0];
+    const endIso = end.toISOString().split('T')[0];
+    console.log(`[get-production-plans] Authenticated user`, { role, storeIds });
+    console.log(`[get-production-plans] Effective date range`, { startIso, endIso });
     
     // Build the query - get ALL plans first, then filter by role in post-processing
     const query = supabaseClient.from('production_plans').select(`
@@ -91,23 +100,33 @@ Deno.serve(async (req)=>{
             waste
           )
         )
-      `).gte('date', start.toISOString().split('T')[0]).lte('date', end.toISOString().split('T')[0]).order('date', {
+      `).gte('date', startIso).lte('date', endIso).order('date', {
         //greater than or equal to (gte) and less than or equal to (lte)
         //order by date in descending order (false)
         //order by date in ascending order (true)
         //order by date in descending order (false)
       ascending: false
     });
-    //console the query
-    console.log('query', query);
-    console.time();
+    // Log basic query info and measure execution time
+    console.log('[get-production-plans] Executing query', {
+      table: 'production_plans',
+      gte: startIso,
+      lte: endIso,
+      order: { column: 'date', ascending: false }
+    });
+    console.time('[get-production-plans] queryTime');
     const { data: plans, error: dbError } = await query;
+    console.timeEnd('[get-production-plans] queryTime');
     if (dbError) {
       console.error('Database error:', dbError);
       throw new Error(`Database error: ${dbError.message}`);
     }
-    
-    console.log(`Found ${plans?.length || 0} plans before filtering for user role: ${role}`);
+    console.log('[get-production-plans] Query result', {
+      count: plans?.length || 0,
+      role,
+      startIso,
+      endIso
+    });
     
     // For store-role users, always filter to only their stores (ignore allStores flag)
     if (plans && role === 'store' && storeIds.length > 0) {
@@ -121,7 +140,9 @@ Deno.serve(async (req)=>{
       
       // Remove plans that have no stores after filtering
       const filteredPlans = plans.filter(plan => plan.stores && plan.stores.length > 0);
-      console.log(`After store filtering: ${filteredPlans.length} plans with user's stores`);
+      console.log('[get-production-plans] After store filtering', {
+        count: filteredPlans.length
+      });
       
       return new Response(JSON.stringify(filteredPlans), {
         headers: {
@@ -131,7 +152,9 @@ Deno.serve(async (req)=>{
       });
     }
     
-    console.log(`Returning ${plans?.length || 0} plans for admin/production user`);
+    console.log('[get-production-plans] Returning plans for admin/production user', {
+      count: plans?.length || 0
+    });
     return new Response(JSON.stringify(plans || []), {
       headers: {
         'Content-Type': 'application/json',

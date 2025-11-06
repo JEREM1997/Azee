@@ -145,7 +145,18 @@ export const apiService = {
     // Fetch all production plans between two dates.
     // When `allStores` is true, store users will receive *all* stores instead of only their assigned ones.
     async getProductionPlans(startDate: string, endDate: string, allStores: boolean = false) {
-      return apiService.invoke<ProductionPlan[]>('get-production-plans', { startDate, endDate, allStores });
+      const label = `[invoke:get-production-plans] ${startDate}→${endDate} allStores=${allStores}`;
+      console.log(label, 'request body');
+      console.time(label);
+      const res = await apiService.invoke<ProductionPlan[]>('get-production-plans', { startDate, endDate, allStores });
+      console.timeEnd(label);
+      if (res?.data) {
+        console.log('[invoke:get-production-plans] result', { count: res.data.length });
+      }
+      if (res?.error) {
+        console.error('[invoke:get-production-plans] error', res.error);
+      }
+      return res;
     },
 
     async saveProductionPlan(planData: Partial<ProductionPlan>) {
