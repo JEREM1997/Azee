@@ -707,6 +707,11 @@ const ProductionPage: React.FC = () => {
                 setDate(e.target.value);
                 console.log('📅 DATE INPUT DEBUG - State should now be:', e.target.value);
               }}
+              max={(() => {
+                const maxDate = new Date();
+                maxDate.setFullYear(maxDate.getFullYear() + 10);
+                return maxDate.toISOString().split('T')[0];
+              })()}
               className="shadow-sm focus:ring-krispy-green focus:border-krispy-green block w-full sm:text-sm border-gray-300 rounded-md"
             />
           </div>
@@ -934,6 +939,11 @@ const ProductionPage: React.FC = () => {
                               [store.id]: e.target.value
                             }));
                           }}
+                          max={(() => {
+                            const maxDate = new Date();
+                            maxDate.setFullYear(maxDate.getFullYear() + 10);
+                            return maxDate.toISOString().split('T')[0];
+                          })()}
                           className={`shadow-sm focus:ring-krispy-green focus:border-krispy-green block w-full sm:text-sm border-gray-300 rounded-md ${needsDeliveryDate ? 'border-red-300 bg-red-50' : ''}`}
                           required={storeTotal > 0}
                         />

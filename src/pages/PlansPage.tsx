@@ -964,6 +964,11 @@ const PlansPage: React.FC = () => {
               type="date"
               value={newPlanDate}
               onChange={e => setNewPlanDate(e.target.value)}
+              max={(() => {
+                const maxDate = new Date();
+                maxDate.setFullYear(maxDate.getFullYear() + 10);
+                return maxDate.toISOString().split('T')[0];
+              })()}
               className="border border-gray-300 rounded-md p-2 w-full mb-4"
             />
             {createError && (

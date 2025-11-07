@@ -137,17 +137,23 @@ Deno.serve(async (req) => {
     let plan;
 
     // Check if a plan already exists for this date
+    console.log(`[DB DEBUG] Checking existing plan for date: ${planData.date}`);
     const { data: existingPlan, error: existingPlanError } = await supabaseClient
       .from('production_plans')
       .select('id')
       .eq('date', planData.date)
       .maybeSingle();
 
+    console.log(`[DB DEBUG] Existing plan query result:`, existingPlan ? JSON.stringify(existingPlan) : 'null');
+    console.log(`[DB DEBUG] Existing plan error:`, existingPlanError ? existingPlanError.message : 'null');
+
     if (existingPlanError) {
+      console.error(`[DB DEBUG] Error checking existing plan:`, existingPlanError);
       throw new Error(`Error checking existing plan: ${existingPlanError.message}`);
     }
 
     const planId = planData.existingPlanId || existingPlan?.id;
+    console.log(`[DB DEBUG] Resolved planId:`, planId || 'null (will create new plan)');
 
     // Get box configurations to calculate proper totals (do this BEFORE any deletes)
     const { data: boxConfigs, error: boxConfigError } = await supabaseClient
@@ -175,7 +181,14 @@ Deno.serve(async (req) => {
       boxes: Array<any>;
     }> = [];
 
-    for (const store of planData.stores) {
+    console.log(`[DB DEBUG] Processing ${planData.stores?.length || 0} stores from request`);
+    
+    // Allow empty stores array - user might be creating a draft plan
+    if (!planData.stores || planData.stores.length === 0) {
+      console.log(`[DB DEBUG] No stores in request - creating empty plan`);
+    }
+
+    for (const store of planData.stores || []) {
       // Validate before processing
       if (!store.store_id) {
         throw new Error(`Missing store ID for store: ${store.store_name || 'Unknown'}`);
@@ -215,6 +228,22 @@ Deno.serve(async (req) => {
     // Use PostgreSQL function for atomic transaction (prevents data loss)
     // This wraps delete+create in a single transaction that rolls back on error
     try {
+      console.log(`[DB DEBUG] Calling RPC with planId:`, planId || 'null (creating new plan)');
+      console.log(`[DB DEBUG] Date:`, planData.date);
+      console.log(`[DB DEBUG] Store productions count:`, preparedStoreProductions.length);
+      console.log(`[DB DEBUG] Total production:`, resolvedTotalProduction);
+      
+      const storeProductionsJson = JSON.stringify(preparedStoreProductions.map(store => ({
+        store_id: store.store_id,
+        store_name: store.store_name,
+        delivery_date: store.delivery_date,
+        total_quantity: store.total_quantity,
+        items: store.items,
+        boxes: store.boxes
+      })));
+      
+      console.log(`[DB DEBUG] Store productions JSON length:`, storeProductionsJson.length);
+      
       const { data: resultPlanId, error: functionError } = await supabaseClient
         .rpc('save_production_plan_safe', {
           p_plan_id: planId || null,
@@ -222,17 +251,14 @@ Deno.serve(async (req) => {
           p_total_production: resolvedTotalProduction,
           p_status: planData.status,
           p_created_by: user.id,
-          p_store_productions: JSON.stringify(preparedStoreProductions.map(store => ({
-            store_id: store.store_id,
-            store_name: store.store_name,
-            delivery_date: store.delivery_date,
-            total_quantity: store.total_quantity,
-            items: store.items,
-            boxes: store.boxes
-          })))
+          p_store_productions: storeProductionsJson
         });
 
+      console.log(`[DB DEBUG] RPC result planId:`, resultPlanId || 'null');
+      console.log(`[DB DEBUG] RPC error:`, functionError ? functionError.message : 'null');
+
       if (functionError) {
+        console.error(`[DB DEBUG] RPC function error details:`, JSON.stringify(functionError, null, 2));
         throw new Error(`Transaction error: ${functionError.message}`);
       }
 
