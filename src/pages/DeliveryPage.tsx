@@ -144,8 +144,8 @@ const DeliveryPage: React.FC = () => {
       setError(null);
       
       // Always load from a very early date to ensure we get all relevant data
-      const startDate = '2025-10-20';  // Very early date to ensure we get all data
-      const endDate = '2025-11-06';    // Very far future date
+      const startDate = '2015-10-20';  // Very early date to ensure we get all data
+      const endDate = '2035-11-06';    // Very far future date
       
       console.log('📅 Fetching ALL plans from', startDate, 'to', endDate);
       
