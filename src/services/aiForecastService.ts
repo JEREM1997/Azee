@@ -171,7 +171,7 @@ export class AIForecastService {
 
         // Requirement: last week's sales + 30% security (ignore dynamic factor)
         const securityMultiplier = 1.30;
-        const recommended = Math.max(this.MIN_VAR_PRODUCTION, Math.ceil(lastWeekSales * securityMultiplier));
+        const recommended = Math.max(this.MIN_VAR_PRODUCTION, Math.round(lastWeekSales * securityMultiplier));
 
         varietyPredictions.push({
           varietyId,
@@ -217,7 +217,7 @@ export class AIForecastService {
 
         // Requirement: last week's sales + 30% security (ignore dynamic factor)
         const securityMultiplier = 1.30;
-        const recommendedBoxes = Math.max(this.MIN_BOX_PRODUCTION, Math.ceil(lastWeekBoxSales * securityMultiplier));
+        const recommendedBoxes = Math.max(this.MIN_BOX_PRODUCTION, Math.round(lastWeekBoxSales * securityMultiplier));
 
         boxPredictions.push({
           boxId,
