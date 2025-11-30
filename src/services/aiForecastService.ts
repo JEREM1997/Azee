@@ -151,7 +151,9 @@ export class AIForecastService {
         const currentQuantity = currentStoreData?.production_items?.find((item: any) => item.variety_id === varietyId)?.quantity || null;
 
         // Calculate sales from last week: received - waste = sales
+        // Handle stockout detection: if waste = 0, it indicates stockout (everything sold)
         const lastWeekSales = Math.max(0, vItem.received - vItem.waste);
+        const isStockout = vItem.received > 0 && vItem.waste === 0;
         const wastePercent = vItem.received > 0 ? (vItem.waste / vItem.received) * 100 : 0;
 
         // If current plan has a quantity, use it as baseline and adjust based on waste
@@ -170,7 +172,8 @@ export class AIForecastService {
         }
 
         // Requirement: last week's sales + 30% security (ignore dynamic factor)
-        const securityMultiplier = 1.30;
+        // Apply higher security multiplier for stockout scenarios (when waste = 0)
+        const securityMultiplier = isStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
         const recommended = Math.max(this.MIN_VAR_PRODUCTION, Math.round(lastWeekSales * securityMultiplier));
 
         varietyPredictions.push({
@@ -179,7 +182,9 @@ export class AIForecastService {
           predictedSales: Math.round(lastWeekSales),
           recommendedProduction: recommended,
           confidence: 0.30,
-          reasoning: `Ventes semaine dernière: ${lastWeekSales} → +30% sécurité`
+          reasoning: isStockout 
+            ? `Rupture détectée (reçu=${vItem.received}, déchet=0, vendu=${lastWeekSales}) → +50% sécurité`
+            : `Ventes semaine dernière: ${lastWeekSales} → +30% sécurité`
         });
       }
 
@@ -197,7 +202,9 @@ export class AIForecastService {
         const currentBoxQuantity = currentStoreData?.box_productions?.find((bp: any) => bp.box_id === boxId)?.quantity || null;
 
         // Calculate box sales from last week: received - waste = sales
+        // Handle stockout detection: if waste = 0, it indicates stockout (everything sold)
         const lastWeekBoxSales = Math.max(0, bItem.received - bItem.waste);
+        const isBoxStockout = bItem.received > 0 && bItem.waste === 0;
         const wastePercent = bItem.received > 0 ? (bItem.waste / bItem.received) * 100 : 0;
 
         // If current plan has a quantity, use it as baseline and adjust based on waste
@@ -216,7 +223,8 @@ export class AIForecastService {
         }
 
         // Requirement: last week's sales + 30% security (ignore dynamic factor)
-        const securityMultiplier = 1.30;
+        // Apply higher security multiplier for stockout scenarios (when waste = 0)
+        const securityMultiplier = isBoxStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
         const recommendedBoxes = Math.max(this.MIN_BOX_PRODUCTION, Math.round(lastWeekBoxSales * securityMultiplier));
 
         boxPredictions.push({
@@ -225,7 +233,9 @@ export class AIForecastService {
           predictedSales: Math.round(lastWeekBoxSales),
           recommendedProduction: recommendedBoxes,
           confidence: 0.30,
-          reasoning: `Ventes semaine dernière: ${lastWeekBoxSales} → +30% sécurité`
+          reasoning: isBoxStockout 
+            ? `Rupture détectée (reçu=${bItem.received}, déchet=0, vendu=${lastWeekBoxSales}) → +50% sécurité`
+            : `Ventes semaine dernière: ${lastWeekBoxSales} → +30% sécurité`
         });
       }
 
@@ -579,7 +589,8 @@ export class AIForecastService {
           if (item.received == null || item.waste == null) continue;
           const received = item.received;
           const waste = item.waste;
-          const sales = received - waste;
+          // Sales = received - waste (standard calculation)
+          const sales = Math.max(0, received - waste);
 
           dayData.varieties.push({
             varietyId: item.variety_id,
@@ -597,7 +608,8 @@ export class AIForecastService {
           if (boxProd.received == null || boxProd.waste == null) continue;
           const received = boxProd.received;
           const waste = boxProd.waste;
-          const sales = received - waste;
+          // Sales = received - waste (standard calculation)
+          const sales = Math.max(0, received - waste);
 
           dayData.boxes.push({
             boxName: boxProd.box_name,
