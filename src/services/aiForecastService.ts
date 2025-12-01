@@ -114,26 +114,17 @@ export class AIForecastService {
 
     // Fetch exactly the plan from last week's same weekday (for waste data)
     const lastWeekPlan = await productionService.getProductionPlan(lastWeekDate);
+    console.log('📊 Last week plan for', lastWeekDate, ':', lastWeekPlan ? 'Found' : 'Not found');
 
-    if (!lastWeekPlan || !lastWeekPlan.stores || lastWeekPlan.stores.length === 0) {
-      throw new Error('Not enough historical data – need last week\'s same weekday with received and waste filled.');
-    }
-
-    // Build store data from that single plan
-    const weekdayFilteredPlans = [lastWeekPlan];
+    // Build store data from that single plan (if available)
+    const weekdayFilteredPlans = lastWeekPlan ? [lastWeekPlan] : [];
 
     const results: AIForecastResult[] = [];
     let storesWithData = 0;
 
     for (const store of stores.filter((s: any) => s.isActive)) {
       const storeHistoricalData = this.extractStoreHistoricalData(weekdayFilteredPlans as any, store.id);
-      if (storeHistoricalData.length === 0) {
-        continue;
-      }
-
-      // Use the single day
-      const dayData = storeHistoricalData[0];
-
+      
       // Get current plan data for this store (if exists)
       const currentStoreData = currentPlan?.stores?.find((s: any) => s.store_id === store.id);
 
@@ -142,50 +133,86 @@ export class AIForecastService {
         const variety = varieties.find(v => v.id === varietyId && v.isActive);
         if (!variety) continue;
 
-        const vItem = dayData.varieties.find((v: any) => v.varietyId === varietyId);
-        if (!vItem || vItem.received == null || vItem.waste == null) {
-          continue; // require last-week confirmed data
+        let lastWeekSales = 0;
+        let isStockout = false;
+        let hasHistoricalData = false;
+        let historicalReceived = 0;
+        let historicalWaste = 0;
+
+        // Try to get historical data if available
+        if (storeHistoricalData.length > 0) {
+          const dayData = storeHistoricalData[0];
+          const vItem = dayData.varieties.find((v: any) => v.varietyId === varietyId);
+          
+          if (vItem && vItem.received != null && vItem.waste != null) {
+            hasHistoricalData = true;
+            historicalReceived = vItem.received;
+            historicalWaste = vItem.waste;
+            // Calculate sales from last week: received - waste = sales
+            lastWeekSales = Math.max(0, vItem.received - vItem.waste);
+            // Handle stockout detection: if waste = 0, it indicates stockout (everything sold)
+            isStockout = vItem.received > 0 && vItem.waste === 0;
+          }
         }
 
         // Get current plan quantity for this variety (if exists)
         const currentQuantity = currentStoreData?.production_items?.find((item: any) => item.variety_id === varietyId)?.quantity || null;
 
-        // Calculate sales from last week: received - waste = sales
-        // Handle stockout detection: if waste = 0, it indicates stockout (everything sold)
-        const lastWeekSales = Math.max(0, vItem.received - vItem.waste);
-        const isStockout = vItem.received > 0 && vItem.waste === 0;
-        const wastePercent = vItem.received > 0 ? (vItem.waste / vItem.received) * 100 : 0;
-
-        // If current plan has a quantity, use it as baseline and adjust based on waste
-        // Otherwise, use last week's sales as baseline
+        // Determine baseline for prediction
         let baselineSales: number;
-        let useCurrentPlan: boolean;
+        let reasoning: string;
         
-        if (currentQuantity !== null && currentQuantity > 0) {
-          // Use current plan quantity as baseline (this is what user has set)
-          baselineSales = currentQuantity;
-          useCurrentPlan = true;
-        } else {
-          // Use last week's sales as baseline
+        if (hasHistoricalData) {
+          // Use historical data as primary source
           baselineSales = lastWeekSales;
-          useCurrentPlan = false;
+          
+          // Apply higher security multiplier for stockout scenarios (when waste = 0)
+          const securityMultiplier = isStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
+          const recommended = Math.max(this.MIN_VAR_PRODUCTION, Math.round(lastWeekSales * securityMultiplier));
+          
+          reasoning = isStockout 
+            ? `Rupture détectée (reçu=${historicalReceived}, déchet=0, vendu=${lastWeekSales}) → +50% sécurité`
+            : `Ventes semaine dernière: ${lastWeekSales} → +30% sécurité`;
+
+          varietyPredictions.push({
+            varietyId,
+            varietyName: variety.name,
+            predictedSales: Math.round(lastWeekSales),
+            recommendedProduction: recommended,
+            confidence: 0.30,
+            reasoning: reasoning
+          });
+        } else if (currentQuantity !== null && currentQuantity > 0) {
+          // No historical data but current plan exists - use it as baseline with conservative approach
+          baselineSales = Math.round(currentQuantity * 0.8); // Assume 80% sales rate
+          const recommended = Math.max(this.MIN_VAR_PRODUCTION, Math.round(currentQuantity * 1.10)); // 10% increase
+          
+          reasoning = `Pas de données historiques. Basé sur plan actuel (${currentQuantity}) → +10% sécurité`;
+
+          varietyPredictions.push({
+            varietyId,
+            varietyName: variety.name,
+            predictedSales: baselineSales,
+            recommendedProduction: recommended,
+            confidence: 0.15, // Lower confidence without historical data
+            reasoning: reasoning
+          });
+        } else {
+          // No historical data and no current plan - use minimum production as fallback
+          const recommended = this.MIN_VAR_PRODUCTION;
+          baselineSales = Math.round(recommended * 0.7); // Assume 70% will be sold
+          
+          reasoning = `Pas de données disponibles → Production minimale (${recommended})`;
+
+          varietyPredictions.push({
+            varietyId,
+            varietyName: variety.name,
+            predictedSales: baselineSales,
+            recommendedProduction: recommended,
+            confidence: 0.10, // Very low confidence
+            reasoning: reasoning
+          });
         }
-
-        // Requirement: last week's sales + 30% security (ignore dynamic factor)
-        // Apply higher security multiplier for stockout scenarios (when waste = 0)
-        const securityMultiplier = isStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
-        const recommended = Math.max(this.MIN_VAR_PRODUCTION, Math.round(lastWeekSales * securityMultiplier));
-
-        varietyPredictions.push({
-          varietyId,
-          varietyName: variety.name,
-          predictedSales: Math.round(lastWeekSales),
-          recommendedProduction: recommended,
-          confidence: 0.30,
-          reasoning: isStockout 
-            ? `Rupture détectée (reçu=${vItem.received}, déchet=0, vendu=${lastWeekSales}) → +50% sécurité`
-            : `Ventes semaine dernière: ${lastWeekSales} → +30% sécurité`
-        });
       }
 
       const boxPredictions: any[] = [];
@@ -193,77 +220,109 @@ export class AIForecastService {
         const box = boxes.find(b => b.id === boxId && b.isActive);
         if (!box) continue;
 
-        const bItem = dayData.boxes.find((b: any) => b.boxName === box.name);
-        if (!bItem || bItem.received == null || bItem.waste == null) {
-          continue; // require last-week confirmed data
+        let lastWeekBoxSales = 0;
+        let isBoxStockout = false;
+        let hasBoxHistoricalData = false;
+        let boxHistoricalReceived = 0;
+
+        // Try to get historical data if available
+        if (storeHistoricalData.length > 0) {
+          const dayData = storeHistoricalData[0];
+          const bItem = dayData.boxes.find((b: any) => b.boxName === box.name);
+          
+          if (bItem && bItem.received != null && bItem.waste != null) {
+            hasBoxHistoricalData = true;
+            boxHistoricalReceived = bItem.received;
+            // Calculate box sales from last week: received - waste = sales
+            lastWeekBoxSales = Math.max(0, bItem.received - bItem.waste);
+            // Handle stockout detection: if waste = 0, it indicates stockout (everything sold)
+            isBoxStockout = bItem.received > 0 && bItem.waste === 0;
+          }
         }
 
         // Get current plan quantity for this box (if exists)
         const currentBoxQuantity = currentStoreData?.box_productions?.find((bp: any) => bp.box_id === boxId)?.quantity || null;
 
-        // Calculate box sales from last week: received - waste = sales
-        // Handle stockout detection: if waste = 0, it indicates stockout (everything sold)
-        const lastWeekBoxSales = Math.max(0, bItem.received - bItem.waste);
-        const isBoxStockout = bItem.received > 0 && bItem.waste === 0;
-        const wastePercent = bItem.received > 0 ? (bItem.waste / bItem.received) * 100 : 0;
-
-        // If current plan has a quantity, use it as baseline and adjust based on waste
-        // Otherwise, use last week's sales as baseline
+        // Determine baseline for box prediction
         let baselineBoxSales: number;
-        let useCurrentBoxPlan: boolean;
+        let boxReasoning: string;
         
-        if (currentBoxQuantity !== null && currentBoxQuantity > 0) {
-          // Use current plan quantity as baseline (this is what user has set)
-          baselineBoxSales = currentBoxQuantity;
-          useCurrentBoxPlan = true;
-        } else {
-          // Use last week's sales as baseline
+        if (hasBoxHistoricalData) {
+          // Use historical data as primary source
           baselineBoxSales = lastWeekBoxSales;
-          useCurrentBoxPlan = false;
+          
+          // Apply higher security multiplier for stockout scenarios (when waste = 0)
+          const securityMultiplier = isBoxStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
+          const recommendedBoxes = Math.max(this.MIN_BOX_PRODUCTION, Math.round(lastWeekBoxSales * securityMultiplier));
+          
+          boxReasoning = isBoxStockout 
+            ? `Rupture détectée (reçu=${boxHistoricalReceived}, déchet=0, vendu=${lastWeekBoxSales}) → +50% sécurité`
+            : `Ventes semaine dernière: ${lastWeekBoxSales} → +30% sécurité`;
+
+          boxPredictions.push({
+            boxId,
+            boxName: box.name,
+            predictedSales: Math.round(lastWeekBoxSales),
+            recommendedProduction: recommendedBoxes,
+            confidence: 0.30,
+            reasoning: boxReasoning
+          });
+        } else if (currentBoxQuantity !== null && currentBoxQuantity > 0) {
+          // No historical data but current plan exists - use it as baseline with conservative approach
+          baselineBoxSales = Math.round(currentBoxQuantity * 0.8); // Assume 80% sales rate
+          const recommendedBoxes = Math.max(this.MIN_BOX_PRODUCTION, Math.round(currentBoxQuantity * 1.10)); // 10% increase
+          
+          boxReasoning = `Pas de données historiques. Basé sur plan actuel (${currentBoxQuantity}) → +10% sécurité`;
+
+          boxPredictions.push({
+            boxId,
+            boxName: box.name,
+            predictedSales: baselineBoxSales,
+            recommendedProduction: recommendedBoxes,
+            confidence: 0.15, // Lower confidence without historical data
+            reasoning: boxReasoning
+          });
+        } else {
+          // No historical data and no current plan - use minimum production as fallback
+          const recommendedBoxes = this.MIN_BOX_PRODUCTION;
+          baselineBoxSales = Math.round(recommendedBoxes * 0.7); // Assume 70% will be sold
+          
+          boxReasoning = `Pas de données disponibles → Production minimale (${recommendedBoxes})`;
+
+          boxPredictions.push({
+            boxId,
+            boxName: box.name,
+            predictedSales: baselineBoxSales,
+            recommendedProduction: recommendedBoxes,
+            confidence: 0.10, // Very low confidence
+            reasoning: boxReasoning
+          });
         }
-
-        // Requirement: last week's sales + 30% security (ignore dynamic factor)
-        // Apply higher security multiplier for stockout scenarios (when waste = 0)
-        const securityMultiplier = isBoxStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
-        const recommendedBoxes = Math.max(this.MIN_BOX_PRODUCTION, Math.round(lastWeekBoxSales * securityMultiplier));
-
-        boxPredictions.push({
-          boxId,
-          boxName: box.name,
-          predictedSales: Math.round(lastWeekBoxSales),
-          recommendedProduction: recommendedBoxes,
-          confidence: 0.30,
-          reasoning: isBoxStockout 
-            ? `Rupture détectée (reçu=${bItem.received}, déchet=0, vendu=${lastWeekBoxSales}) → +50% sécurité`
-            : `Ventes semaine dernière: ${lastWeekBoxSales} → +30% sécurité`
-        });
       }
 
-      if (varietyPredictions.length === 0 && boxPredictions.length === 0) {
-        continue;
-      }
-
+      // Always include stores in results, even if they have no predictions
+      // This ensures the UI shows something for all active stores
       storesWithData++;
       
-        const totalPredictedSales = varietyPredictions.reduce((sum, v) => sum + v.predictedSales, 0) +
-                                   boxPredictions.reduce((sum, b) => sum + b.predictedSales * this.getBoxSize(b.boxId, boxes), 0);
+      const totalPredictedSales = varietyPredictions.reduce((sum, v) => sum + v.predictedSales, 0) +
+                                 boxPredictions.reduce((sum, b) => sum + b.predictedSales * this.getBoxSize(b.boxId, boxes), 0);
 
-        const totalRecommendedProduction = varietyPredictions.reduce((sum, v) => sum + v.recommendedProduction, 0) +
-                                          boxPredictions.reduce((sum, b) => sum + b.recommendedProduction * this.getBoxSize(b.boxId, boxes), 0);
+      const totalRecommendedProduction = varietyPredictions.reduce((sum, v) => sum + v.recommendedProduction, 0) +
+                                        boxPredictions.reduce((sum, b) => sum + b.recommendedProduction * this.getBoxSize(b.boxId, boxes), 0);
 
-        const estimatedWastePercent = totalRecommendedProduction > 0 ? 
-          ((totalRecommendedProduction - totalPredictedSales) / totalRecommendedProduction) * 100 : 0;
+      const estimatedWastePercent = totalRecommendedProduction > 0 ? 
+        ((totalRecommendedProduction - totalPredictedSales) / totalRecommendedProduction) * 100 : 0;
 
-        results.push({
-          storeId: store.id,
-          storeName: store.name,
-          predictions: varietyPredictions,
+      results.push({
+        storeId: store.id,
+        storeName: store.name,
+        predictions: varietyPredictions,
         boxPredictions,
-          totalPredictedSales,
-          totalRecommendedProduction,
-          estimatedWastePercent,
-        safetyStockPercent: (results.length > 0 ? 0 : 0) // informational only in simple mode
-        });
+        totalPredictedSales,
+        totalRecommendedProduction,
+        estimatedWastePercent,
+        safetyStockPercent: 30 // Fixed 30% safety stock
+      });
     }
 
     // Sort for determinism
@@ -273,10 +332,8 @@ export class AIForecastService {
     });
     results.sort((a, b) => a.storeName.localeCompare(b.storeName));
 
-    if (results.length === 0 || storesWithData === 0) {
-      throw new Error('Not enough historical data – at least last week\'s same weekday with confirmed received and waste is required.');
-    }
-
+    // Always return results, even if empty - let the UI handle the display
+    console.log(`✅ AI forecast completed for ${results.length} stores (${storesWithData} with data)`);
     return results;
   }
 
@@ -934,8 +991,7 @@ export class AIForecastService {
     }
 
     // Clamp to guard against accidental extremes
-    if (factor < 0.7) factor = 0.7;
-    if (factor > 1.25) factor = 1.25;
+    factor = Math.max(0.7, Math.min(1.25, factor));
     return factor;
   }
 
