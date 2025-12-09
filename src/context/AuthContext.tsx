@@ -8,6 +8,14 @@ const FUNCTIONS_URL =
   import.meta.env.VITE_SUPABASE_FUNCTIONS_URL ??
   `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
+const RESTRICTED_EMAILS = [
+  'migrosyverdon@krispykreme.internal',
+  'migrosrenens@krispykreme.internal',
+  'migrosmontreux@krispykreme.internal',
+  'migroscrissier@krispykreme.internal',
+  'migroschablais@krispykreme.internal',
+].map(e => e.toLowerCase());
+
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -115,50 +123,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initializeAuth();
   }, [navigate]);
 
-  const login = async (email: string, password: string) => {
+    const login = async (email: string, password: string) => {
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
 
-      // 1) Appel de la Edge Function
-      const response = await fetch(`${FUNCTIONS_URL}/ip-restricted-login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      const normalizedEmail = email.toLowerCase();
+      const isRestricted = RESTRICTED_EMAILS.includes(normalizedEmail);
 
-      const body = await response.json();
+      // 🔹 CAS 1 : emails Migros → on passe par la Edge Function (filtrage IP)
+      if (isRestricted) {
+        const response = await fetch(`${FUNCTIONS_URL}/ip-restricted-login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+          },
+          body: JSON.stringify({ email, password }),
+        });
 
-      if (!response.ok) {
-        // Erreurs possibles : IP_NOT_ALLOWED, IP_NOT_DETECTED, LOGIN_FAILED, etc.
-        throw new Error(body?.error || 'LOGIN_FAILED');
+        const body = await response.json();
+
+        if (!response.ok) {
+          throw new Error(body?.error || 'LOGIN_FAILED');
+        }
+
+        const { session, user } = body;
+
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        });
+
+        if (sessionError) throw sessionError;
+
+        if (user) {
+          const appUser: User = {
+            id: user.id,
+            email: user.email!,
+            role: user.user_metadata?.role || 'store',
+            storeIds: user.user_metadata?.store_ids || [],
+            fullName: user.user_metadata?.full_name || user.email!,
+          };
+
+          setState({ user: appUser, loading: false, error: null });
+          navigate('/');
+          return;
+        }
+
+        setState({ user: null, loading: false, error: null });
+        return;
       }
 
-      const { session, user } = body;
-
-      // 2) Installer la session dans le client Supabase
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
+      // 🔹 CAS 2 : tous les autres emails → login normal Supabase (comme avant)
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      if (sessionError) {
-        throw sessionError;
-      }
+      if (error) throw error;
 
-      // 3) Mettre à jour le state local
-      if (user) {
-        const appUser: User = {
-          id: user.id,
-          email: user.email!,
-          role: user.user_metadata?.role || 'store',
-          storeIds: user.user_metadata?.store_ids || [],
-          fullName: user.user_metadata?.full_name || user.email!,
+      if (data.user) {
+        const user: User = {
+          id: data.user.id,
+          email: data.user.email!,
+          role: data.user.user_metadata?.role || 'store',
+          storeIds: data.user.user_metadata?.store_ids || [],
+          fullName: data.user.user_metadata?.full_name || data.user.email!,
         };
 
-        setState({ user: appUser, loading: false, error: null });
+        setState({ user, loading: false, error: null });
         navigate('/');
       } else {
         setState({ user: null, loading: false, error: null });
