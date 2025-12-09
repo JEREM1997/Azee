@@ -7,6 +7,7 @@ import { AppErrorHandler, ErrorCodes } from '../utils/errorHandling';
 const FUNCTIONS_URL =
   import.meta.env.VITE_SUPABASE_FUNCTIONS_URL ??
   `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+console.log('FUNCTIONS_URL =', FUNCTIONS_URL);
 
 const RESTRICTED_EMAILS = [
   'migrosyverdon@krispykreme.internal',
