@@ -81,35 +81,144 @@ const StatsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const loadProductionData = async () => {
+    const loadProductionData = async () => {
     try {
       setLoading(true);
       setError(null);
-      
+
+      // 1️⃣ Déterminer combien de jours on charge
       let daysToFetch = 30; // valeur par défaut
+      switch (selectedPeriod) {
+        case 'day':
+          daysToFetch = 8;   // 8 jours pour comparaison jour / semaine d'avant
+          break;
+        case 'week':
+          daysToFetch = 14;  // 2 semaines autour de la semaine choisie
+          break;
+        case 'month':
+          daysToFetch = 62;  // ±2 mois
+          break;
+        case 'year':
+          daysToFetch = 365; // 1 an (l’edge function limitera à 120 jours si besoin)
+          break;
+      }
 
-switch (selectedPeriod) {
-  case 'day':
-    daysToFetch = 8; // 8 jours
-    break;
-  case 'week':
-    daysToFetch = 90; // ~3 mois, pour comparer les semaines
-    break;
-  case 'month':
-    daysToFetch = 365; // 🔴 on charge 1 an pour pouvoir voir tous les mois
-    break;
-  case 'year':
-    daysToFetch = 730; // 2 ans si tu veux comparer plusieurs années
-    break;
-}
+      // 2️⃣ Calculer une "date de référence" cohérente avec la période
+      let referenceDateStr = selectedDate; // fallback
 
-// pour l’instant on se base toujours sur aujourd’hui comme date de référence
-const referenceDate = new Date().toISOString().split('T')[0];
+      if (selectedPeriod === 'day') {
+        // on garde simplement la date choisie
+        referenceDateStr = selectedDate;
+      }
 
-const plans = await productionService.getProductionPlans(
-  daysToFetch.toString(),
-  referenceDate
-);
+      if (selectedPeriod === 'week') {
+        // on prend un jour au milieu de la semaine sélectionnée
+        const jan1 = new Date(selectedYear, 0, 1);
+        const weekOffset = (selectedWeek - 1) * 7;
+        const refDate = new Date(jan1);
+        refDate.setDate(jan1.getDate() + weekOffset + 3); // +3 pour tomber au milieu de la semaine
+        referenceDateStr = refDate.toISOString().split('T')[0];
+      }
+
+      if (selectedPeriod === 'month') {
+        // dernier jour du mois sélectionné
+        const lastDayOfMonth = new Date(selectedYear, selectedMonth, 0);
+        referenceDateStr = lastDayOfMonth.toISOString().split('T')[0];
+      }
+
+      if (selectedPeriod === 'year') {
+        // 31 décembre de l'année sélectionnée
+        const lastDayOfYear = new Date(selectedYear, 11, 31);
+        referenceDateStr = lastDayOfYear.toISOString().split('T')[0];
+      }
+
+      console.log('📊 Stats – period:', selectedPeriod,
+        'daysToFetch:', daysToFetch,
+        'referenceDate:', referenceDateStr
+      );
+
+      // 3️⃣ Appel au service avec fenêtre glissante "daysToFetch" qui se termine à referenceDateStr
+      const plans = await productionService.getProductionPlans(
+        daysToFetch.toString(),
+        referenceDateStr
+      );
+
+      if (!plans || plans.length === 0) {
+        setProductionData([]);
+        setRawProductionPlans([]);
+        return;
+      }
+
+      // On garde le reste de ta fonction tel quel
+      setRawProductionPlans(plans);
+
+      const transformedData: ProductionData[] = plans.map((plan: any) => {
+        let totalProduction = 0;
+        let totalReceived = 0;
+        let totalWaste = 0;
+        let totalBoxes = 0;
+        let totalBoxDoughnuts = 0;
+
+        if (plan.stores && Array.isArray(plan.stores)) {
+          plan.stores.forEach((store: any) => {
+            totalProduction += store.total_quantity || 0;
+
+            // Items individuels
+            if (store.production_items && Array.isArray(store.production_items)) {
+              store.production_items.forEach((item: any) => {
+                if (item.received !== null && item.received !== undefined) {
+                  totalReceived += item.received;
+                }
+                if (item.waste !== null && item.waste !== undefined) {
+                  totalWaste += item.waste;
+                }
+              });
+            }
+
+            // Boxes
+            if (store.box_productions && Array.isArray(store.box_productions)) {
+              store.box_productions.forEach((box: any) => {
+                const boxQuantity = box.quantity || 0;
+                totalBoxes += boxQuantity;
+
+                const boxConfig = boxes.find(b => b.name === box.box_name);
+                const boxSize = boxConfig ? boxConfig.size : 12;
+                const boxDoughnuts = boxQuantity * boxSize;
+                totalBoxDoughnuts += boxDoughnuts;
+
+                if (box.received !== null && box.received !== undefined) {
+                  totalReceived += box.received * boxSize;
+                }
+
+                if (box.waste !== null && box.waste !== undefined) {
+                  totalWaste += box.waste * boxSize;
+                }
+              });
+            }
+          });
+        }
+
+        const wastePercent = totalReceived > 0 ? (totalWaste / totalReceived) * 100 : 0;
+
+        return {
+          date: plan.date,
+          production: totalProduction,
+          received: totalReceived,
+          waste: totalWaste,
+          wastePercent,
+          boxes: totalBoxes,
+          boxDoughnuts: totalBoxDoughnuts,
+        };
+      });
+
+      setProductionData(transformedData);
+    } catch (err) {
+      console.error('Error loading production data:', err);
+      setError(err instanceof Error ? err.message : 'Error loading production data');
+    } finally {
+      setLoading(false);
+    }
+  };
       
       if (!plans || plans.length === 0) {
         setProductionData([]);
