@@ -115,67 +115,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initializeAuth();
   }, [navigate]);
 
-  const login = async (email: string, password: string) => {
-    try {
-      setState(prev => ({ ...prev, loading: true, error: null }));
-
-      // ✅ 1. Si email Migros → check IP via Edge Function
-      if (MIGROS_IP_PROTECTED_EMAILS.includes(email.toLowerCase())) {
-        const { data: fnData, error: fnError } = await supabase.functions.invoke('ip-restricted-login', {
-          body: { email },
-        });
-
-        if (fnError) {
-          console.error('ip-restricted-login error:', fnError);
-          throw fnError;
-        }
-
-        const result = fnData as any;
-
-        if (!result?.allowed) {
-          const msg =
-            result?.message ||
-            "You are not authorized to perform this action (IP not allowed for this account).";
-          // 🔴 ici on enlève AppError → Error classique
-          throw new Error(msg);
-        }
-      }
-
-      // ✅ 2. Login normal Supabase
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      if (data.user) {
-        const user: User = {
-          id: data.user.id,
-          email: data.user.email!,
-          role: data.user.user_metadata?.role || 'store',
-          storeIds: data.user.user_metadata?.store_ids || [],
-          fullName: data.user.user_metadata?.full_name || data.user.email!,
-        };
-        setState({ user, loading: false, error: null });
-        navigate('/');
-      } else {
-        setState(prev => ({
-          ...prev,
-          loading: false,
-          error: AppErrorHandler.handleAuthError('No user returned after signIn'),
-        }));
-      }
-    } catch (error) {
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        error: AppErrorHandler.handleAuthError(error),
-      }));
-      throw error;
-    }
-  };
-
+  
   const logout = async () => {
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
@@ -192,6 +132,99 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }));
     }
   };
+
+  const login = async (email: string, password: string) => {
+  try {
+    setState(prev => ({ ...prev, loading: true, error: null }));
+
+    // 1️⃣ Vérification IP avant de tenter le login
+    try {
+      const response = await fetch(`${FUNCTIONS_URL}/ip-restricted-login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      // Si l'edge function répond allowed === false avec IP_NOT_ALLOWED
+      if (data && data.allowed === false && data.error === 'IP_NOT_ALLOWED') {
+        const ipError: AppError = {
+          code: 'IP_NOT_ALLOWED' as any,
+          message: data.message || 'Vous ne pouvez vous connecter que depuis le réseau Migros.',
+        };
+
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          error: ipError,
+        }));
+
+        // 👉 On NE tente PAS le login Supabase dans ce cas
+        return;
+      }
+
+      // Si l'edge function renvoie une autre erreur bloquante
+      if (!response.ok) {
+        console.error('IP check error', data);
+        const ipError: AppError = {
+          code: 'IP_CHECK_FAILED' as any,
+          message: 'Impossible de vérifier votre connexion. Merci de réessayer.',
+        };
+
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          error: ipError,
+        }));
+        return;
+      }
+
+      // Sinon (allowed === true ou email non restreint) → on continue.
+    } catch (e) {
+      console.error('IP check network error', e);
+      const ipError: AppError = {
+        code: 'NETWORK_ERROR' as any,
+        message: 'Problème de connexion. Merci de réessayer.',
+      };
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: ipError,
+      }));
+      return;
+    }
+
+    // 2️⃣ IP OK → login Supabase normal
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) throw error;
+
+    if (data.user) {
+      const user: User = {
+        id: data.user.id,
+        email: data.user.email!,
+        role: data.user.user_metadata?.role || 'store',
+        storeIds: data.user.user_metadata?.store_ids || [],
+        fullName: data.user.user_metadata?.full_name || data.user.email!,
+      };
+      setState({ user, loading: false, error: null });
+      navigate('/');
+    }
+  } catch (error) {
+    setState(prev => ({
+      ...prev,
+      loading: false,
+      error: AppErrorHandler.handleAuthError(error),
+    }));
+    throw error; // pour que l'UI puisse aussi gérer l'erreur si besoin
+  }
+};
 
   const updateUserRole = async () => {
     try {
