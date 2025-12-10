@@ -563,47 +563,49 @@ const StatsPage: React.FC = () => {
   
   // Performance comparison (current period vs same period last week/month/year)
   const getPerformanceComparison = (): { production: PerformanceComparison; waste: PerformanceComparison } => {
-    const currentData = data;
-    let comparisonData: ProductionData[] = [];
+      const currentData = data;
+      let comparisonData: ProductionData[] = [];
+
+      // Get comparison period data
+      switch (selectedPeriod) {
+        case 'day':
+          // Compare with same day last week (7 days ago)
+          const lastWeekDate = new Date(selectedDate);
+          lastWeekDate.setDate(lastWeekDate.getDate() - 7);
+          comparisonData = productionData.filter(item => item.date === lastWeekDate.toISOString().split('T')[0]);
+          break;
+        case 'month':
+          // Compare with same month last year
+          comparisonData = productionData.filter(item => {
+            const itemDate = new Date(item.date);
+            return itemDate.getMonth() + 1 === selectedMonth && itemDate.getFullYear() === selectedYear - 1;
+          });
+          break;
+        case 'year':
+          // Compare with previous year
+          comparisonData = productionData.filter(item => {
+            const itemDate = new Date(item.date);
+            return itemDate.getFullYear() === selectedYear - 1;
+          });
+          break;
+        case 'range': {
+          const rangeStart = new Date(selectedStartDate);
+          const rangeEnd = new Date(selectedEndDate);
+          const periodLength = Math.floor((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+          const prevRangeStart = new Date(rangeStart);
+          prevRangeStart.setDate(rangeStart.getDate() - periodLength);
     
-    // Get comparison period data
-    switch (selectedPeriod) {
-      case 'day':
-        // Compare with same day last week (7 days ago)
-        const lastWeekDate = new Date(selectedDate);
-        lastWeekDate.setDate(lastWeekDate.getDate() - 7);
-        comparisonData = productionData.filter(item => item.date === lastWeekDate.toISOString().split('T')[0]);
-        break;
-      
+         const prevRangeEnd = new Date(rangeEnd);
+         prevRangeEnd.setDate(rangeEnd.getDate() - periodLength);
+
         comparisonData = productionData.filter(item => {
           const itemDate = new Date(item.date);
           return itemDate >= prevRangeStart && itemDate <= prevRangeEnd;
-        });
-        break;
-      case 'month':
-        // Compare with same month last year
-        comparisonData = productionData.filter(item => {
-          const itemDate = new Date(item.date);
-          return itemDate.getMonth() + 1 === selectedMonth && itemDate.getFullYear() === selectedYear - 1;
-        });
-        break;
-      case 'year':
-        // Compare with previous year
-        comparisonData = productionData.filter(item => {
-          const itemDate = new Date(item.date);
-          return itemDate.getFullYear() === selectedYear - 1;
-        });
-        break;
-      case 'range': {
-        const rangeStart = new Date(selectedStartDate);
-        const rangeEnd = new Date(selectedEndDate);
-        const periodLength = Math.floor((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-        const prevRangeStart = new Date(rangeStart);
-        prevRangeStart.setDate(rangeStart.getDate() - periodLength);
-
-        const prevRangeEnd = new Date(rangeEnd);
-        prevRangeEnd.setDate(rangeEnd.getDate() - periodLength);
+          });
+          break;
+        }
+      }
     
     const currentProduction = currentData.reduce((sum, day) => sum + day.production, 0);
     const currentWaste = currentData.reduce((sum, day) => sum + day.waste, 0);
