@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { User, AuthState, AppError } from '../types';
-import { AppErrorHandler, ErrorCodes } from '../utils/errorHandling';
+import { User, AuthState } from '../types';
+import { AppErrorHandler } from '../utils/errorHandling';
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>;
@@ -25,7 +25,7 @@ export const useAuth = () => {
   return context;
 };
 
-// ✅ Liste des emails soumis au filtrage IP
+// ✅ Emails soumis au filtrage IP
 const MIGROS_IP_PROTECTED_EMAILS = [
   'migrosyverdon@krispykreme.internal',
   'migrosrenens@krispykreme.internal',
@@ -50,7 +50,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (sessionError) throw sessionError;
 
         if (session?.user) {
-          // Récupère le rôle depuis user_roles (fallback metadata)
           let dbRole = session.user.user_metadata?.role || 'store';
           let dbStoreIds: string[] = session.user.user_metadata?.store_ids || [];
 
@@ -81,7 +80,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setState({ user: null, loading: false, error: null });
         }
 
-        // écoute les changements d’auth
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, session) => {
             if (event === 'SIGNED_IN' && session?.user) {
@@ -121,7 +119,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
 
-      // ✅ 1. Si email Migros → demander d’abord à la Edge Function si l’IP est autorisée
+      // ✅ 1. Si email Migros → check IP via Edge Function
       if (MIGROS_IP_PROTECTED_EMAILS.includes(email.toLowerCase())) {
         const { data: fnData, error: fnError } = await supabase.functions.invoke('ip-restricted-login', {
           body: { email },
@@ -135,15 +133,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const result = fnData as any;
 
         if (!result?.allowed) {
-          // On remonte un message propre à l’utilisateur
           const msg =
             result?.message ||
             "You are not authorized to perform this action (IP not allowed for this account).";
-          throw new AppError(ErrorCodes.UNAUTHORIZED, msg);
+          // 🔴 ici on enlève AppError → Error classique
+          throw new Error(msg);
         }
       }
 
-      // ✅ 2. Si IP OK (ou email non Migros) → login normal Supabase
+      // ✅ 2. Login normal Supabase
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -162,7 +160,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setState({ user, loading: false, error: null });
         navigate('/');
       } else {
-        // sécurité, au cas où
         setState(prev => ({
           ...prev,
           loading: false,
@@ -249,4 +246,3 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
-
