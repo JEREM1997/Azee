@@ -5,10 +5,10 @@
 body {
   background-color: #f8fafc;
   background-image:
-    linear-gradient(rgba(248, 250, 252, 0.78), rgba(248, 250, 252, 0.78)),
-    url('/Dots%20(1)%20(2).png');
-  background-repeat: no-repeat, repeat;
-  background-size: cover, 260px 260px;
+    linear-gradient(rgba(248, 250, 252, 0.65), rgba(248, 250, 252, 0.65)),
+    url('/FONDAPP.png');
+  background-repeat: no-repeat, no-repeat;
+  background-size: cover, cover;
   background-position: center, center;
   background-attachment: fixed, fixed;
 }
