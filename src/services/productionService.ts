@@ -1,3 +1,4 @@
+import { supabase } from '../lib/supabase';
 import { dateUtils } from '../utils/dateUtils';
 import { validationUtils } from '../utils/validationUtils';
 import { apiService } from './apiService';
@@ -84,13 +85,14 @@ export const productionService = {
     return data?.isValid || false;
   },
 
-  async getProductionPlans(startOrDays: string, endDate: string, allStores: boolean = false): Promise<ProductionPlan[]> {
+   async getProductionPlans(startOrDays: string, endDate: string, allStores: boolean = false): Promise<ProductionPlan[]> {
     // Detect if the first argument is a numeric string (e.g. "7", "30") meaning "days"
     const isDaysParam = /^\d+$/.test(startOrDays);
 
-    // If numeric, treat as a rolling window ending at endDate
     let startDate: string;
+
     if (isDaysParam) {
+      // Mode "fenêtre glissante" : start = endDate - days
       if (!dateUtils.isValidDateString(endDate)) {
         throw new Error('Invalid date format');
       }
@@ -103,7 +105,7 @@ export const productionService = {
       const calculatedStart = dateUtils.addDays(endDate, -days);
       startDate = dateUtils.formatApiDate(calculatedStart);
     } else {
-      // First argument is expected to be an explicit start date
+      // Mode "start/end" explicite
       if (!dateUtils.isValidDateString(startOrDays) || !dateUtils.isValidDateString(endDate)) {
         throw new Error('Invalid date format');
       }
@@ -112,14 +114,21 @@ export const productionService = {
 
     const formattedEndDate = dateUtils.formatApiDate(endDate);
 
-    const { data, error } = await apiService.production.getProductionPlans(
-      startDate,
-      formattedEndDate,
-      allStores
-    );
+    // 🔹 Appel direct de l'Edge Function get-production-plans
+    const { data, error } = await supabase.functions.invoke('get-production-plans', {
+      body: {
+        startDate,
+        endDate: formattedEndDate,
+        allStores,
+      },
+    });
 
-    if (error) throw error;
-    return data || [];
+    if (error) {
+      console.error('[productionService] Error calling get-production-plans:', error);
+      throw error;
+    }
+
+    return (data as ProductionPlan[]) || [];
   },
 
   async deleteProductionPlan(planId: string): Promise<void> {
