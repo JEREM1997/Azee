@@ -43,9 +43,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     loading: true,
     error: null,
   });
+
   const navigate = useNavigate();
 
-  // Initialisation de l'état d'auth
+  // Initialisation de l'auth au chargement
   useEffect(() => {
     const initializeAuth = async () => {
       try {
@@ -74,7 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
               dbStoreIds = (roleRow as any).store_ids || dbStoreIds;
             }
           } catch {
-            // si ça fail on garde les metadata
+            // si ça échoue on garde les metadata
           }
 
           const user: User = {
@@ -92,29 +93,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           setState({ user: null, loading: false, error: null });
         }
 
-        // Écoute des changements d'auth
+        // Écoute des changements d'état d'auth Supabase
         const {
           data: { subscription },
-        } = supabase.auth.onAuthStateChange(async (event, session) => {
-          if (event === 'SIGNED_IN' && session?.user) {
-            const user: User = {
-              id: session.user.id,
-              email: session.user.email!,
-              role: session.user.user_metadata?.role || 'store',
-              storeIds:
-                session.user.user_metadata?.store_ids || [],
-              fullName:
-                session.user.user_metadata?.full_name ||
-                session.user.email!,
-            };
-            setState({ user, loading: false, error: null });
-          } else if (event === 'SIGNED_OUT') {
-            setState({ user: null, loading: false, error: null });
-            navigate('/login');
-          } else if (event === 'TOKEN_REFRESHED') {
-            console.log('Token refreshed');
+        } = supabase.auth.onAuthStateChange(
+          async (event, session) => {
+            if (event === 'SIGNED_IN' && session?.user) {
+              const user: User = {
+                id: session.user.id,
+                email: session.user.email!,
+                role: session.user.user_metadata?.role || 'store',
+                storeIds:
+                  session.user.user_metadata?.store_ids || [],
+                fullName:
+                  session.user.user_metadata?.full_name ||
+                  session.user.email!,
+              };
+              setState({ user, loading: false, error: null });
+            } else if (event === 'SIGNED_OUT') {
+              setState({ user: null, loading: false, error: null });
+              navigate('/login');
+            } else if (event === 'TOKEN_REFRESHED') {
+              console.log('Token refreshed');
+            }
           }
-        });
+        );
 
         return () => {
           subscription.unsubscribe();
@@ -132,13 +135,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [navigate]);
 
   /**
-   * LOGIN avec filtrage IP
+   * LOGIN avec filtrage IP via l’Edge Function ip-restricted-login
    */
   const login = async (email: string, password: string) => {
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
 
-      // 1️⃣ Vérification IP via l'Edge Function
+      // 1️⃣ Vérification IP AVANT le login Supabase
       try {
         const response = await fetch(
           `${FUNCTIONS_URL}/ip-restricted-login`,
@@ -153,17 +156,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
         const data = await response.json().catch(() => null);
 
-        // Cas spécial : IP bloquée pour un email Migros
+        // Cas : l’Edge Function décide que cet email n’a pas le droit
+        // depuis cette IP → on bloque le login ici.
         if (
+          response.ok &&
           data &&
-          data.allowed === false &&
-          data.error === 'IP_NOT_ALLOWED'
+          data.allowed === false
         ) {
           const ipError: AppError = {
             code: 'IP_NOT_ALLOWED' as any,
+            // message générique comme à l’origine
             message:
               data.message ||
-              'Vous ne pouvez vous connecter que depuis le réseau Migros.',
+              'You are not authorized to perform this action',
           };
 
           setState(prev => ({
@@ -171,45 +176,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             loading: false,
             error: ipError,
           }));
-
-          // On ne tente pas le login Supabase
-          return;
+          return; // on NE tente PAS le signInWithPassword
         }
 
-        // Si l'Edge Function renvoie une erreur non prévue
+        // Si la réponse n’est pas ok mais que ce n’est pas explicitement
+        // un refus d’IP, on log l’erreur et on continue quand même
         if (!response.ok) {
-          console.error('IP check error', data);
-          const ipError: AppError = {
-            code: 'IP_CHECK_FAILED' as any,
-            message:
-              'Impossible de vérifier votre connexion. Merci de réessayer.',
-          };
-
-          setState(prev => ({
-            ...prev,
-            loading: false,
-            error: ipError,
-          }));
-          return;
+          console.warn(
+            'IP check returned non-ok status, continuing login',
+            await response.text()
+          );
         }
-
-        // Sinon : allowed === true ou email non restreint → on continue
       } catch (e) {
-        console.error('IP check network error', e);
-        const ipError: AppError = {
-          code: 'NETWORK_ERROR' as any,
-          message:
-            'Problème de connexion. Merci de réessayer.',
-        };
-        setState(prev => ({
-          ...prev,
-          loading: false,
-          error: ipError,
-        }));
-        return;
+        // Si la vérification IP plante (réseau, etc.), on ne bloque pas le login
+        console.error('IP check failed, continuing login', e);
       }
 
-      // 2️⃣ IP OK → login Supabase classique
+      // 2️⃣ IP OK (ou check en erreur) → login Supabase classique
       const { data, error } = await supabase.auth.signInWithPassword(
         {
           email,
@@ -238,7 +221,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         loading: false,
         error: AppErrorHandler.handleAuthError(error),
       }));
-      throw error; // pour l'UI si besoin
+      throw error; // pour que le composant Login puisse réagir
     }
   };
 
@@ -283,10 +266,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       if (error) throw error as any;
 
-      // Forcer le refresh de session pour récupérer le nouveau rôle
+      // Refresh de session pour récupérer le nouveau rôle
       await supabase.auth.refreshSession();
 
-      // Met à jour l'état local
+      // Mise à jour de l’état local
       if (state.user) {
         setState({
           user: {
