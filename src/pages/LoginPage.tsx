@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { AppErrorHandler, ErrorCodes } from '../utils/errorHandling';
+import { AppErrorHandler } from '../utils/errorHandling';
 import krispyKremeOpsLogo from '../assets/krispy-kreme-ops-logo.png';
 import doughnutsBackground from '../assets/doughnuts-background.jpg.jpg';
 
@@ -11,8 +11,9 @@ const LoginPage: React.FC = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  const { login } = useAuth();
+
+  // 🔹 On récupère aussi l'erreur gérée par AuthContext (pour IP Migros)
+  const { login, error: authError } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -24,6 +25,7 @@ const LoginPage: React.FC = () => {
       await login(email, password);
       // Login successful - navigation is handled in AuthContext
     } catch (error) {
+      // Erreurs classiques (mauvais mot de passe, etc.)
       const appError = AppErrorHandler.handleAuthError(error);
       setError(appError.message);
     } finally {
@@ -32,32 +34,32 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div 
+    <div
       className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative"
       style={{
         backgroundImage: `url(${doughnutsBackground})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
+        backgroundRepeat: 'no-repeat',
       }}
     >
       {/* Background overlay for better readability */}
       <div className="absolute inset-0 bg-black bg-opacity-40"></div>
-      
+
       {/* Content container */}
       <div className="max-w-md w-full space-y-8 relative z-10">
         {/* White card background for the form */}
         <div className="bg-white rounded-xl shadow-2xl p-8 backdrop-blur-sm">
           <div className="-mt-20">
             <div className="flex justify-center">
-              <img 
+              <img
                 src={krispyKremeOpsLogo}
                 alt="Krispy Kreme OPS"
                 className="h-72 w-auto"
               />
             </div>
           </div>
-          
+
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
             <div className="rounded-md shadow-sm -space-y-px">
               <div>
@@ -96,7 +98,8 @@ const LoginPage: React.FC = () => {
               </div>
             </div>
 
-            {error && (
+            {/* 🔴 Bloc d’erreur : combine l’erreur locale + l’erreur du AuthContext */}
+            {(error || authError) && (
               <div className="rounded-md bg-red-50 p-4">
                 <div className="flex">
                   <div className="flex-shrink-0">
@@ -115,11 +118,16 @@ const LoginPage: React.FC = () => {
                     </svg>
                   </div>
                   <div className="ml-3">
-                    <h3 className="text-sm font-medium text-red-800">{error}</h3>
+                    <h3 className="text-sm font-medium text-red-800">
+                      {authError?.code === 'IP_NOT_ALLOWED'
+                        ? 'Veuillez vous connecter depuis le réseau Migros.'
+                        : error || authError?.message}
+                    </h3>
                   </div>
                 </div>
               </div>
             )}
+
             <div>
               <button
                 type="submit"
