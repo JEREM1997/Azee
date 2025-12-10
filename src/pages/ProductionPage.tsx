@@ -675,46 +675,47 @@ const ProductionPage: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Plan de Production</h1>
-          <p className="text-gray-600 mt-1">
-            {existingPlanId ? 'Modifier le plan de production existant' : 'Créer et gérer le plan de production'}
-          </p>
-          {existingPlanId && (
-            <div className="mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              <Edit className="h-3 w-3 mr-1" />
-              Plan existant en cours de modification
+      <div className="app-background">
+        <div className="container mx-auto px-4 py-8">
+          <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Plan de Production</h1>
+              <p className="text-gray-600 mt-1">
+                {existingPlanId ? 'Modifier le plan de production existant' : 'Créer et gérer le plan de production'}
+              </p>
+              {existingPlanId && (
+                <div className="mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  <Edit className="h-3 w-3 mr-1" />
+                  Plan existant en cours de modification
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        
-        <div className="mt-4 md:mt-0 flex items-center space-x-4">
-          <div className="w-full md:w-auto">
-            <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
-              Date de Production
-            </label>
-            <input
-              type="date"
-              id="date"
-              name="date"
-              value={date}
-              onChange={(e) => {
-                console.log('📅 DATE INPUT DEBUG - Date changed from:', date, 'to:', e.target.value);
-                console.log('📅 DATE INPUT DEBUG - Event target value type:', typeof e.target.value);
-                console.log('📅 DATE INPUT DEBUG - Event target value length:', e.target.value?.length);
-                setDate(e.target.value);
-                console.log('📅 DATE INPUT DEBUG - State should now be:', e.target.value);
-              }}
-              max={(() => {
-                const maxDate = new Date();
-                maxDate.setFullYear(maxDate.getFullYear() + 10);
-                return maxDate.toISOString().split('T')[0];
-              })()}
-              className="shadow-sm focus:ring-krispy-green focus:border-krispy-green block w-full sm:text-sm border-gray-300 rounded-md"
-            />
-          </div>
+
+            <div className="mt-4 md:mt-0 flex items-center space-x-4">
+              <div className="w-full md:w-auto">
+                <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+                  Date de Production
+                </label>
+                <input
+                  type="date"
+                  id="date"
+                  name="date"
+                  value={date}
+                  onChange={(e) => {
+                    console.log('📅 DATE INPUT DEBUG - Date changed from:', date, 'to:', e.target.value);
+                    console.log('📅 DATE INPUT DEBUG - Event target value type:', typeof e.target.value);
+                    console.log('📅 DATE INPUT DEBUG - Event target value length:', e.target.value?.length);
+                    setDate(e.target.value);
+                    console.log('📅 DATE INPUT DEBUG - State should now be:', e.target.value);
+                  }}
+                  max={(() => {
+                    const maxDate = new Date();
+                    maxDate.setFullYear(maxDate.getFullYear() + 10);
+                    return maxDate.toISOString().split('T')[0];
+                  })()}
+                  className="shadow-sm focus:ring-krispy-green focus:border-krispy-green block w-full sm:text-sm border-gray-300 rounded-md"
+                />
+              </div>
           
           {canEdit && (
           <div className="flex space-x-4 items-end">
@@ -1376,6 +1377,7 @@ const ProductionPage: React.FC = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
