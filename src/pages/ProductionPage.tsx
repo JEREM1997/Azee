@@ -675,11 +675,17 @@ const ProductionPage: React.FC = () => {
   }
 
   return (
-      <div className="app-background">
-        <div className="container mx-auto px-4 py-8">
-          <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Plan de Production</h1>
+      <div
+      className="min-h-screen bg-no-repeat bg-center bg-[length:auto,cover]"
+      style={{
+        backgroundImage:
+          "linear-gradient(rgba(248, 250, 252, 0.65), rgba(248, 250, 252, 0.65)), url('/FONDAPP-min.png')",
+      }}
+    >
+      <div className="container mx-auto px-4 py-8">
+        <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Plan de Production</h1>
               <p className="text-gray-600 mt-1">
                 {existingPlanId ? 'Modifier le plan de production existant' : 'Créer et gérer le plan de production'}
               </p>
