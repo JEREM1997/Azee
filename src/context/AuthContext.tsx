@@ -135,7 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!result?.allowed) {
           const msg =
             result?.message ||
-            "You are not authorized to perform this action (IP not allowed for this account).";
+            "Cet utilisateur ne peut se connecter qu'à partir du réseau Migros (IP not allowed for this account).";
           // 🔴 ici on enlève AppError → Error classique
           throw new Error(msg);
         }
