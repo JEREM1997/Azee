@@ -1,7 +1,12 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { User, AuthState } from '../types';
+import { User, AuthState, AppError } from '../types';
 import { AppErrorHandler } from '../utils/errorHandling';
 
 interface AuthContextType extends AuthState {
@@ -25,14 +30,14 @@ export const useAuth = () => {
   return context;
 };
 
-// ✅ Emails soumis au filtrage IP
+// ✅ Emails Migros soumis au filtrage IP
 const MIGROS_IP_PROTECTED_EMAILS = [
   'migrosyverdon@krispykreme.internal',
   'migrosrenens@krispykreme.internal',
   'migrosmontreux@krispykreme.internal',
   'migroscrissier@krispykreme.internal',
   'migroschablais@krispykreme.internal',
-];
+].map(e => e.toLowerCase());
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AuthState>({
@@ -40,55 +45,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loading: true,
     error: null,
   });
+
   const navigate = useNavigate();
 
-  // Initialise l’état d’auth
+  // 🔹 Initialisation de la session au chargement
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
 
         if (session?.user) {
-          let dbRole = session.user.user_metadata?.role || 'store';
-          let dbStoreIds: string[] = session.user.user_metadata?.store_ids || [];
-
-          try {
-            const { data: roleRow, error: roleErr } = await supabase
-              .from('user_roles')
-              .select('role, store_ids')
-              .eq('user_id', session.user.id)
-              .maybeSingle();
-
-            if (!roleErr && roleRow) {
-              dbRole = roleRow.role || dbRole;
-              dbStoreIds = roleRow.store_ids || dbStoreIds;
-            }
-          } catch {
-            // ignore, fallback metadata
-          }
-
+          // ➜ On prend le rôle & les stores depuis les metadata
           const user: User = {
             id: session.user.id,
             email: session.user.email!,
-            role: dbRole,
-            storeIds: dbStoreIds,
-            fullName: session.user.user_metadata?.full_name || session.user.email!,
+            role: session.user.user_metadata?.role || 'store',
+            storeIds: session.user.user_metadata?.store_ids || [],
+            fullName:
+              session.user.user_metadata?.full_name ||
+              session.user.email!,
           };
+
           setState({ user, loading: false, error: null });
         } else {
           setState({ user: null, loading: false, error: null });
         }
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        // 🔹 Abonnement aux changements d’auth
+        const {
+          data: { subscription },
+        } = supabase.auth.onAuthStateChange(
           async (event, session) => {
             if (event === 'SIGNED_IN' && session?.user) {
               const user: User = {
                 id: session.user.id,
                 email: session.user.email!,
                 role: session.user.user_metadata?.role || 'store',
-                storeIds: session.user.user_metadata?.store_ids || [],
-                fullName: session.user.user_metadata?.full_name || session.user.email!,
+                storeIds:
+                  session.user.user_metadata?.store_ids || [],
+                fullName:
+                  session.user.user_metadata?.full_name ||
+                  session.user.email!,
               };
               setState({ user, loading: false, error: null });
             } else if (event === 'SIGNED_OUT') {
@@ -115,33 +116,71 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initializeAuth();
   }, [navigate]);
 
+  /**
+   * LOGIN avec filtrage IP pour les emails Migros
+   */
   const login = async (email: string, password: string) => {
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
 
-      // ✅ 1. Si email Migros → check IP via Edge Function
-      if (MIGROS_IP_PROTECTED_EMAILS.includes(email.toLowerCase())) {
-        const { data: fnData, error: fnError } = await supabase.functions.invoke('ip-restricted-login', {
-          body: { email },
-        });
+      const normalizedEmail = email.toLowerCase().trim();
+      const isMigros = MIGROS_IP_PROTECTED_EMAILS.includes(normalizedEmail);
 
-        if (fnError) {
-          console.error('ip-restricted-login error:', fnError);
-          throw fnError;
-        }
+      // 1️⃣ Si email Migros → on DOIT passer par l'edge function
+      if (isMigros) {
+        try {
+          const { data: fnData, error: fnError } =
+            await supabase.functions.invoke('ip-restricted-login', {
+              body: { email: normalizedEmail },
+            });
 
-        const result = fnData as any;
+          if (fnError) {
+            console.error('ip-restricted-login error:', fnError);
+            const ipError: AppError = {
+              code: 'IP_NOT_ALLOWED' as any,
+              message: 'You are not authorized to perform this action',
+            };
+            setState(prev => ({
+              ...prev,
+              loading: false,
+              error: ipError,
+            }));
+            return;
+          }
 
-        if (!result?.allowed) {
-          const msg =
-            result?.message ||
-            "Cet utilisateur ne peut se connecter qu'à partir du réseau Migros (IP not allowed for this account).";
-          // 🔴 ici on enlève AppError → Error classique
-          throw new Error(msg);
+          const result = fnData as any;
+
+          // Si la fonction ne renvoie pas allowed === true → on bloque
+          if (!result || result.allowed !== true) {
+            const ipError: AppError = {
+              code: 'IP_NOT_ALLOWED' as any,
+              message: 'You are not authorized to perform this action',
+            };
+            setState(prev => ({
+              ...prev,
+              loading: false,
+              error: ipError,
+            }));
+            return;
+          }
+
+          // Sinon (allowed === true) → on continue vers le login Supabase
+        } catch (e) {
+          console.error('ip-restricted-login invoke failed:', e);
+          const ipError: AppError = {
+            code: 'IP_NOT_ALLOWED' as any,
+            message: 'You are not authorized to perform this action',
+          };
+          setState(prev => ({
+            ...prev,
+            loading: false,
+            error: ipError,
+          }));
+          return;
         }
       }
 
-      // ✅ 2. Login normal Supabase
+      // 2️⃣ Login Supabase classique
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -155,16 +194,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: data.user.email!,
           role: data.user.user_metadata?.role || 'store',
           storeIds: data.user.user_metadata?.store_ids || [],
-          fullName: data.user.user_metadata?.full_name || data.user.email!,
+          fullName:
+            data.user.user_metadata?.full_name ||
+            data.user.email!,
         };
         setState({ user, loading: false, error: null });
         navigate('/');
-      } else {
-        setState(prev => ({
-          ...prev,
-          loading: false,
-          error: AppErrorHandler.handleAuthError('No user returned after signIn'),
-        }));
       }
     } catch (error) {
       setState(prev => ({
@@ -197,7 +232,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
 
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
       if (!session) throw new Error('No active session');
 
@@ -208,8 +246,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       });
 
-      if (error) throw error;
+      if (error) throw error as any;
 
+      // ➜ la fonction met à jour les metadata, on rafraîchit la session
       await supabase.auth.refreshSession();
 
       if (state.user) {
@@ -244,5 +283,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isStore: state.user?.role === 'store',
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
+
