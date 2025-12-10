@@ -656,13 +656,18 @@ export class AIForecastService {
       if (store.production_items) {
         for (const item of store.production_items) {
          let received = item.received; 
-          const waste = item.waste;
+         let waste = item.waste; 
 
           // If everything was sold (waste = 0) but the team forgot to log "received",
           // fall back to the planned quantity so we don't under-produce next time.
           if (received == null && waste === 0 && item.quantity != null) {
             received = item.quantity;
           }
+
+          // If waste wasn't filled in, assume 0 when we have a received or planned quantity.
+          if (waste == null && (received != null || item.quantity != null)) {
+            waste = 0;
+          } 
 
           if (received == null || waste == null) continue;
           
@@ -683,12 +688,17 @@ export class AIForecastService {
       if (store.box_productions) {
         for (const boxProd of store.box_productions) {
           let received = boxProd.received;
-          const waste = boxProd.waste;
+          let waste = boxProd.waste;
 
           // Same safeguard as varieties: when everything was sold and "received" is missing,
           // use the planned quantity to avoid falling back to the minimum production.
           if (received == null && waste === 0 && boxProd.quantity != null) {
             received = boxProd.quantity;
+          }
+
+          // Assume 0 waste when it's missing but we know how many were produced/received.
+          if (waste == null && (received != null || boxProd.quantity != null)) {
+            waste = 0;
           }
 
           if (received == null || waste == null) continue;
