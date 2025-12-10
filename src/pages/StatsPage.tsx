@@ -217,13 +217,17 @@ const StatsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-      
-      if (!plans || plans.length === 0) {
-        setProductionData([]);
-        setRawProductionPlans([]);
-        return;
-      }
+  };       
+  useEffect(() => {
+    loadProductionData();
+  }, [
+    selectedPeriod,
+    selectedDate,
+    selectedWeek,
+    selectedMonth,
+    selectedYear,
+    selectedStores
+  ]);
       
       // Store the raw production plans data for real data extraction
       setRawProductionPlans(plans);
