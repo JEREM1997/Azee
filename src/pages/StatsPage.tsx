@@ -81,63 +81,57 @@ const StatsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-    const loadProductionData = async () => {
+      const loadProductionData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // 1️⃣ Déterminer combien de jours on charge
-      let daysToFetch = 30; // valeur par défaut
+      // 1) Nombre de jours à charger selon la période
+      let daysToFetch = 30;
       switch (selectedPeriod) {
         case 'day':
-          daysToFetch = 8;   // 8 jours pour comparaison jour / semaine d'avant
+          daysToFetch = 8;
           break;
         case 'week':
-          daysToFetch = 14;  // 2 semaines autour de la semaine choisie
+          daysToFetch = 14;
           break;
         case 'month':
-          daysToFetch = 62;  // ±2 mois
+          daysToFetch = 62;
           break;
         case 'year':
-          daysToFetch = 365; // 1 an (l’edge function limitera à 120 jours si besoin)
+          daysToFetch = 365;
           break;
       }
 
-      // 2️⃣ Calculer une "date de référence" cohérente avec la période
-      let referenceDateStr = selectedDate; // fallback
+      // 2) Calculer une date de référence cohérente
+      let referenceDateStr = selectedDate;
 
       if (selectedPeriod === 'day') {
-        // on garde simplement la date choisie
         referenceDateStr = selectedDate;
-      }
-
-      if (selectedPeriod === 'week') {
-        // on prend un jour au milieu de la semaine sélectionnée
+      } else if (selectedPeriod === 'week') {
         const jan1 = new Date(selectedYear, 0, 1);
         const weekOffset = (selectedWeek - 1) * 7;
         const refDate = new Date(jan1);
-        refDate.setDate(jan1.getDate() + weekOffset + 3); // +3 pour tomber au milieu de la semaine
+        refDate.setDate(jan1.getDate() + weekOffset + 3);
         referenceDateStr = refDate.toISOString().split('T')[0];
-      }
-
-      if (selectedPeriod === 'month') {
-        // dernier jour du mois sélectionné
+      } else if (selectedPeriod === 'month') {
         const lastDayOfMonth = new Date(selectedYear, selectedMonth, 0);
         referenceDateStr = lastDayOfMonth.toISOString().split('T')[0];
-      }
-
-      if (selectedPeriod === 'year') {
-        // 31 décembre de l'année sélectionnée
+      } else if (selectedPeriod === 'year') {
         const lastDayOfYear = new Date(selectedYear, 11, 31);
         referenceDateStr = lastDayOfYear.toISOString().split('T')[0];
       }
 
-      console.log('📊 Stats – period:', selectedPeriod,
-        'daysToFetch:', daysToFetch,
-        'referenceDate:', referenceDateStr
+      console.log(
+        '📊 Stats – period:',
+        selectedPeriod,
+        'daysToFetch:',
+        daysToFetch,
+        'referenceDate:',
+        referenceDateStr
       );
 
-      // 3️⃣ Appel au service avec fenêtre glissante "daysToFetch" qui se termine à referenceDateStr
+      // 3) Appel au service
       const plans = await productionService.getProductionPlans(
         daysToFetch.toString(),
         referenceDateStr
@@ -149,9 +143,9 @@ const StatsPage: React.FC = () => {
         return;
       }
 
-      // On garde le reste de ta fonction tel quel
       setRawProductionPlans(plans);
 
+      // 4) Transformer les données
       const transformedData: ProductionData[] = plans.map((plan: any) => {
         let totalProduction = 0;
         let totalReceived = 0;
@@ -198,7 +192,8 @@ const StatsPage: React.FC = () => {
           });
         }
 
-        const wastePercent = totalReceived > 0 ? (totalWaste / totalReceived) * 100 : 0;
+        const wastePercent =
+          totalReceived > 0 ? (totalWaste / totalReceived) * 100 : 0;
 
         return {
           date: plan.date,
@@ -214,7 +209,11 @@ const StatsPage: React.FC = () => {
       setProductionData(transformedData);
     } catch (err) {
       console.error('Error loading production data:', err);
-      setError(err instanceof Error ? err.message : 'Error loading production data');
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Error loading production data'
+      );
     } finally {
       setLoading(false);
     }
