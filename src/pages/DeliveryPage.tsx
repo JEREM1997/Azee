@@ -143,17 +143,33 @@ const DeliveryPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Always load from a very early date to ensure we get all relevant data
-      const startDate = '2015-10-20';  // Very early date to ensure we get all data
-      const endDate = '2035-11-06';    // Very far future date
-      
-      console.log('📅 Fetching ALL plans from', startDate, 'to', endDate);
-      
-      const { data: plans, error } = await apiService.production.getProductionPlans(
-        startDate,
-        endDate,
-        showAllStores
-      );
+      // Charger uniquement une fenêtre autour de la date de livraison sélectionnée (±15 jours)
+const rangeDays = 15;
+
+const selected = new Date(deliveryDate);
+
+// Sécurité au cas où deliveryDate serait vide ou invalide
+if (isNaN(selected.getTime())) {
+  throw new Error(`Invalid deliveryDate: ${deliveryDate}`);
+}
+
+const start = new Date(selected);
+start.setDate(start.getDate() - rangeDays);
+
+const end = new Date(selected);
+end.setDate(end.getDate() + rangeDays);
+
+// On envoie des dates au format YYYY-MM-DD
+const startDate = start.toISOString().split('T')[0];
+const endDate = end.toISOString().split('T')[0];
+
+console.log('📅 Fetching plans from', startDate, 'to', endDate, 'for deliveryDate', deliveryDate);
+
+const { data: plans, error } = await apiService.production.getProductionPlans(
+  startDate,
+  endDate,
+  showAllStores
+);
       
       if (error) {
         console.error('❌ Error fetching plans:', error);
