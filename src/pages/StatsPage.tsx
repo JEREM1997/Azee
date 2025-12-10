@@ -81,7 +81,9 @@ const StatsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-      const loadProductionData = async () => {
+       // Single source of truth for production data fetching/transformations
+  // (previous duplicate block removed to prevent double renders & undefined refs)
+  const loadProductionData = async () => { 
     try {
       setLoading(true);
       setError(null);
@@ -228,84 +230,6 @@ const StatsPage: React.FC = () => {
     selectedYear,
     selectedStores
   ]);
-      
-      // Store the raw production plans data for real data extraction
-      setRawProductionPlans(plans);
-      
-      // Transform production plans into detailed statistics data
-      const transformedData: ProductionData[] = plans.map((plan: any) => {
-        let totalProduction = 0;
-        let totalReceived = 0;
-        let totalWaste = 0;
-        let totalBoxes = 0;
-        let totalBoxDoughnuts = 0;
-        
-        if (plan.stores && Array.isArray(plan.stores)) {
-          plan.stores.forEach((store: any) => {
-            totalProduction += store.total_quantity || 0;
-            
-            // Calculate received quantities from individual items
-            if (store.production_items && Array.isArray(store.production_items)) {
-              store.production_items.forEach((item: any) => {
-                if (item.received !== null && item.received !== undefined) {
-                  totalReceived += item.received;
-                } // else do not add planned quantity – received not yet reported
-                
-                if (item.waste !== null && item.waste !== undefined) {
-                  totalWaste += item.waste;
-                }
-              });
-            }
-            
-            // Calculate box quantities and their doughnut equivalents
-            if (store.box_productions && Array.isArray(store.box_productions)) {
-              store.box_productions.forEach((box: any) => {
-                const boxQuantity = box.quantity || 0;
-                totalBoxes += boxQuantity;
-                
-                // Find box configuration to get size
-                const boxConfig = boxes.find(b => b.name === box.box_name);
-                const boxSize = boxConfig ? boxConfig.size : 12; // Default to 12 if not found
-                const boxDoughnuts = boxQuantity * boxSize;
-                totalBoxDoughnuts += boxDoughnuts;
-                
-                if (box.received !== null && box.received !== undefined) {
-                  totalReceived += box.received * boxSize;
-                }
-                
-                if (box.waste !== null && box.waste !== undefined) {
-                  totalWaste += box.waste * boxSize;
-                }
-              });
-            }
-          });
-        }
-        
-        const wastePercent = totalReceived > 0 ? (totalWaste / totalReceived) * 100 : 0;
-        
-        return {
-          date: plan.date,
-          production: totalProduction,
-          received: totalReceived,
-          waste: totalWaste,
-          wastePercent,
-          boxes: totalBoxes,
-          boxDoughnuts: totalBoxDoughnuts
-        };
-      });
-      
-      setProductionData(transformedData);
-    } catch (err) {
-      console.error('Error loading production data:', err);
-      setError(err instanceof Error ? err.message : 'Error loading production data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadProductionData();
-  }, [selectedPeriod, selectedDate, selectedWeek, selectedMonth, selectedYear, selectedStores]);
   
   const getFilteredData = (): ProductionData[] => {
     if (!productionData || productionData.length === 0) return [];
