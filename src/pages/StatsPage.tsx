@@ -94,10 +94,12 @@ const StatsPage: React.FC = () => {
         endDateStr = selectedDate;
       } else if (selectedPeriod === 'range') {
         startDateStr = selectedStartDate;
-        endDateStr = selectedEndDate; 
+        endDateStr = selectedEndDate;
       } else if (selectedPeriod === 'month') {
         const firstDayOfMonth = new Date(selectedYear, selectedMonth - 1, 1);
         const lastDayOfMonth = new Date(selectedYear, selectedMonth, 0);
+        startDateStr = firstDayOfMonth.toISOString().split('T')[0];
+        endDateStr = lastDayOfMonth.toISOString().split('T')[0];
       } else if (selectedPeriod === 'year') {
         const firstDayOfYear = new Date(selectedYear, 0, 1);
         const lastDayOfYear = new Date(selectedYear, 11, 31);
