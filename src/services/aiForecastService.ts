@@ -122,14 +122,22 @@ export class AIForecastService {
     const results: AIForecastResult[] = [];
     let storesWithData = 0;
 
-    for (const store of stores.filter((s: any) => s.isActive)) {
+    for (const store of stores.filter((s: any) => s.isActive !== false)) {
       const storeHistoricalData = this.extractStoreHistoricalData(weekdayFilteredPlans as any, store.id);
+
+      // Defensive defaults to prevent crashes if legacy data lacks availability arrays
+      const storeVarieties = Array.isArray(store.availableVarieties) ? store.availableVarieties : [];
+      const storeBoxes = Array.isArray(store.availableBoxes) ? store.availableBoxes : [];
+
+      if (!Array.isArray(store.availableVarieties) || !Array.isArray(store.availableBoxes)) {
+        console.warn(`⚠️ AI forecast: missing availability lists for store ${store.name || store.id}; using empty arrays`);
+      }
       
       // Get current plan data for this store (if exists)
       const currentStoreData = currentPlan?.stores?.find((s: any) => s.store_id === store.id);
 
       const varietyPredictions: any[] = [];
-      for (const varietyId of store.availableVarieties) {
+      for (const varietyId of storeVarieties) {
         const variety = varieties.find(v => v.id === varietyId && v.isActive);
         if (!variety) continue;
 
@@ -164,20 +172,20 @@ export class AIForecastService {
         
         if (hasHistoricalData) {
           // Use historical data as primary source
-          baselineSales = lastWeekSales;
+          baselineSales = isStockout ? Math.max(lastWeekSales, historicalReceived) : lastWeekSales;
           
           // Apply higher security multiplier for stockout scenarios (when waste = 0)
           const securityMultiplier = isStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
-          const recommended = Math.max(this.MIN_VAR_PRODUCTION, Math.round(lastWeekSales * securityMultiplier));
-          
-          reasoning = isStockout 
+          const recommended = Math.max(this.MIN_VAR_PRODUCTION, Math.round(baselineSales * securityMultiplier));
+
+          reasoning = isStockout
             ? `Rupture détectée (reçu=${historicalReceived}, déchet=0, vendu=${lastWeekSales}) → +50% sécurité`
             : `Ventes semaine dernière: ${lastWeekSales} → +30% sécurité`;
 
           varietyPredictions.push({
             varietyId,
             varietyName: variety.name,
-            predictedSales: Math.round(lastWeekSales),
+            predictedSales: Math.round(baselineSales),
             recommendedProduction: recommended,
             confidence: 0.30,
             reasoning: reasoning
@@ -216,7 +224,7 @@ export class AIForecastService {
       }
 
       const boxPredictions: any[] = [];
-      for (const boxId of store.availableBoxes) {
+      for (const boxId of storeBoxes) {
         const box = boxes.find(b => b.id === boxId && b.isActive);
         if (!box) continue;
 
@@ -249,20 +257,20 @@ export class AIForecastService {
         
         if (hasBoxHistoricalData) {
           // Use historical data as primary source
-          baselineBoxSales = lastWeekBoxSales;
+          baselineBoxSales = isBoxStockout ? Math.max(lastWeekBoxSales, boxHistoricalReceived) : lastWeekBoxSales;
           
           // Apply higher security multiplier for stockout scenarios (when waste = 0)
           const securityMultiplier = isBoxStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
-          const recommendedBoxes = Math.max(this.MIN_BOX_PRODUCTION, Math.round(lastWeekBoxSales * securityMultiplier));
-          
-          boxReasoning = isBoxStockout 
+          const recommendedBoxes = Math.max(this.MIN_BOX_PRODUCTION, Math.round(baselineBoxSales * securityMultiplier));
+
+          boxReasoning = isBoxStockout
             ? `Rupture détectée (reçu=${boxHistoricalReceived}, déchet=0, vendu=${lastWeekBoxSales}) → +50% sécurité`
             : `Ventes semaine dernière: ${lastWeekBoxSales} → +30% sécurité`;
 
           boxPredictions.push({
             boxId,
             boxName: box.name,
-            predictedSales: Math.round(lastWeekBoxSales),
+            predictedSales: Math.round(baselineBoxSales),
             recommendedProduction: recommendedBoxes,
             confidence: 0.30,
             reasoning: boxReasoning
@@ -432,18 +440,20 @@ export class AIForecastService {
    * Predict variety quantities for a store
    */
   private async predictVarieties(
-    store: any, 
-    varieties: any[], 
-    historicalData: any[], 
-    targetDayOfWeek: number, 
+    store: any,
+    varieties: any[],
+    historicalData: any[],
+    targetDayOfWeek: number,
     productionDayOfWeek: number
   ) {
     const predictions = [];
+
+    const storeVarieties = Array.isArray(store.availableVarieties) ? store.availableVarieties : [];
     
     // Weekend production covers Friday and Saturday production days
     const isWeekendProduction = productionDayOfWeek === 5 || productionDayOfWeek === 6;
 
-    for (const varietyId of store.availableVarieties) {
+    for (const varietyId of storeVarieties) {
       const variety = varieties.find(v => v.id === varietyId && v.isActive);
       if (!variety) continue;
 
@@ -516,18 +526,20 @@ export class AIForecastService {
    * Predict box quantities for a store
    */
   private async predictBoxes(
-    store: any, 
-    boxes: any[], 
-    historicalData: any[], 
-    targetDayOfWeek: number, 
+    store: any,
+    boxes: any[],
+    historicalData: any[],
+    targetDayOfWeek: number,
     productionDayOfWeek: number
   ) {
     const predictions = [];
+
+    const storeBoxes = Array.isArray(store.availableBoxes) ? store.availableBoxes : [];
     
     // Weekend production covers Friday and Saturday production days
     const isWeekendProduction = productionDayOfWeek === 5 || productionDayOfWeek === 6;
 
-    for (const boxId of store.availableBoxes) {
+    for (const boxId of storeBoxes) {
       const box = boxes.find(b => b.id === boxId && b.isActive);
       if (!box) continue;
 
@@ -643,9 +655,17 @@ export class AIForecastService {
       // Extract variety sales data (received - waste) — only when confirmed
       if (store.production_items) {
         for (const item of store.production_items) {
-          if (item.received == null || item.waste == null) continue;
-          const received = item.received;
+         let received = item.received; 
           const waste = item.waste;
+
+          // If everything was sold (waste = 0) but the team forgot to log "received",
+          // fall back to the planned quantity so we don't under-produce next time.
+          if (received == null && waste === 0 && item.quantity != null) {
+            received = item.quantity;
+          }
+
+          if (received == null || waste == null) continue;
+          
           // Sales = received - waste (standard calculation)
           const sales = Math.max(0, received - waste);
 
@@ -662,9 +682,17 @@ export class AIForecastService {
       // Extract box sales data — only when confirmed
       if (store.box_productions) {
         for (const boxProd of store.box_productions) {
-          if (boxProd.received == null || boxProd.waste == null) continue;
-          const received = boxProd.received;
+          let received = boxProd.received;
           const waste = boxProd.waste;
+
+          // Same safeguard as varieties: when everything was sold and "received" is missing,
+          // use the planned quantity to avoid falling back to the minimum production.
+          if (received == null && waste === 0 && boxProd.quantity != null) {
+            received = boxProd.quantity;
+          }
+
+          if (received == null || waste == null) continue;
+          
           // Sales = received - waste (standard calculation)
           const sales = Math.max(0, received - waste);
 
@@ -1000,10 +1028,10 @@ export class AIForecastService {
    */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private generateConservativeEstimate(
-    store: any, 
-    varieties: any[], 
-    boxes: any[], 
-    targetDayOfWeek: number, 
+    store: any,
+    varieties: any[],
+    boxes: any[],
+    targetDayOfWeek: number,
     _salesDayOfWeek: number
   ): AIForecastResult | null {
     const predictions = [];
@@ -1012,8 +1040,11 @@ export class AIForecastService {
     // Weekend production covers Friday and Saturday production days
     const isWeekendProduction = targetDayOfWeek === 5 || targetDayOfWeek === 6;
 
+   const storeVarieties = Array.isArray(store.availableVarieties) ? store.availableVarieties : [];
+  const storeBoxes = Array.isArray(store.availableBoxes) ? store.availableBoxes : [];
+    
     // Conservative variety estimates
-    for (const varietyId of store.availableVarieties) {
+    for (const varietyId of storeVarieties) {
       const variety = varieties.find(v => v.id === varietyId && v.isActive);
       if (!variety) continue;
 
@@ -1040,7 +1071,7 @@ export class AIForecastService {
     }
 
     // Conservative box estimates
-    for (const boxId of store.availableBoxes) {
+    for (const boxId of storeBoxes) {
       const box = boxes.find(b => b.id === boxId && b.isActive);
       if (!box) continue;
 
