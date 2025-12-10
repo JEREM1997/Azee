@@ -9,14 +9,6 @@ import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area
 // Helper: consistent number format for PDF (comma as thousands separator)
 const formatNum = (n: number) => n.toLocaleString('en-US');
 
-const getWeek = (date: Date) => {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
-  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
-};
-
 interface ProductionData {
   date: string;
   production: number;
@@ -71,8 +63,14 @@ interface PerformanceComparison {
 const StatsPage: React.FC = () => {
   const { stores, varieties, boxes, forms } = useAdmin();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month' | 'year'>('day');
-  const [selectedWeek, setSelectedWeek] = useState<number>(getWeek(new Date()));
+  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'range' | 'month' | 'year'>('day');
+  const [selectedStartDate, setSelectedStartDate] = useState<string>(() => {
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(today.getDate() - 6);
+    return start.toISOString().split('T')[0];
+  });
+  const [selectedEndDate, setSelectedEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [productionData, setProductionData] = useState<ProductionData[]>([]);
@@ -88,55 +86,54 @@ const StatsPage: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      // 1) Nombre de jours à charger selon la période
-      let daysToFetch = 30;
-      switch (selectedPeriod) {
-        case 'day':
-          daysToFetch = 8;
-          break;
-        case 'week':
-          daysToFetch = 14;
-          break;
-        case 'month':
-          daysToFetch = 62;
-          break;
-        case 'year':
-          daysToFetch = 365;
-          break;
-      }
-
-      // 2) Calculer une date de référence cohérente
-      let referenceDateStr = selectedDate;
+      let startDateStr = selectedDate;
+      let endDateStr = selectedDate;
 
       if (selectedPeriod === 'day') {
-        referenceDateStr = selectedDate;
-      } else if (selectedPeriod === 'week') {
-        const jan1 = new Date(selectedYear, 0, 1);
-        const weekOffset = (selectedWeek - 1) * 7;
-        const refDate = new Date(jan1);
-        refDate.setDate(jan1.getDate() + weekOffset + 3);
-        referenceDateStr = refDate.toISOString().split('T')[0];
+        startDateStr = selectedDate;
+        endDateStr = selectedDate;
+      } else if (selectedPeriod === 'range') {
+        startDateStr = selectedStartDate;
+        endDateStr = selectedEndDate; 
       } else if (selectedPeriod === 'month') {
+        const firstDayOfMonth = new Date(selectedYear, selectedMonth - 1, 1);
         const lastDayOfMonth = new Date(selectedYear, selectedMonth, 0);
-        referenceDateStr = lastDayOfMonth.toISOString().split('T')[0];
       } else if (selectedPeriod === 'year') {
+        const firstDayOfYear = new Date(selectedYear, 0, 1);
         const lastDayOfYear = new Date(selectedYear, 11, 31);
-        referenceDateStr = lastDayOfYear.toISOString().split('T')[0];
+        startDateStr = firstDayOfYear.toISOString().split('T')[0];
+        endDateStr = lastDayOfYear.toISOString().split('T')[0];
       }
 
+      const startDate = new Date(startDateStr);
+      const endDate = new Date(endDateStr);
+
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        setError('Veuillez sélectionner une période valide.');
+        setProductionData([]);
+        setRawProductionPlans([]);
+        return;
+      }
+
+      if (startDate > endDate) {
+        setError('La date de début doit être antérieure ou égale à la date de fin.');
+        setProductionData([]);
+        setRawProductionPlans([]);
+        return;
+       }
+        
       console.log(
         '📊 Stats – period:',
         selectedPeriod,
-        'daysToFetch:',
-        daysToFetch,
-        'referenceDate:',
-        referenceDateStr
+        'start:',
+        startDateStr,
+        'end:',
+        endDateStr
       );
 
-      // 3) Appel au service
       const plans = await productionService.getProductionPlans(
-        daysToFetch.toString(),
-        referenceDateStr
+        startDateStr,
+        endDateStr
       );
 
       if (!plans || plans.length === 0) {
@@ -225,9 +222,10 @@ const StatsPage: React.FC = () => {
   }, [
     selectedPeriod,
     selectedDate,
-    selectedWeek,
     selectedMonth,
     selectedYear,
+    selectedStartDate,
+    selectedEndDate,
     selectedStores
   ]);
   
@@ -240,11 +238,12 @@ const StatsPage: React.FC = () => {
           return item.date === selectedDate;
         });
         
-      case 'week':
+      case 'range':
         return productionData.filter(item => {
           const itemDate = new Date(item.date);
-          return getWeek(itemDate) === selectedWeek && 
-                 itemDate.getFullYear() === selectedYear;
+          const startDate = new Date(selectedStartDate);
+          const endDate = new Date(selectedEndDate);
+          return itemDate >= startDate && itemDate <= endDate;
         });
         
       case 'month':
@@ -573,11 +572,10 @@ const StatsPage: React.FC = () => {
         lastWeekDate.setDate(lastWeekDate.getDate() - 7);
         comparisonData = productionData.filter(item => item.date === lastWeekDate.toISOString().split('T')[0]);
         break;
-      case 'week':
-        // Compare with same week last year or previous week
+      
         comparisonData = productionData.filter(item => {
           const itemDate = new Date(item.date);
-          return getWeek(itemDate) === selectedWeek - 1 && itemDate.getFullYear() === selectedYear;
+          return itemDate >= prevRangeStart && itemDate <= prevRangeEnd;
         });
         break;
       case 'month':
@@ -594,7 +592,16 @@ const StatsPage: React.FC = () => {
           return itemDate.getFullYear() === selectedYear - 1;
         });
         break;
-    }
+      case 'range': {
+        const rangeStart = new Date(selectedStartDate);
+        const rangeEnd = new Date(selectedEndDate);
+        const periodLength = Math.floor((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+        const prevRangeStart = new Date(rangeStart);
+        prevRangeStart.setDate(rangeStart.getDate() - periodLength);
+
+        const prevRangeEnd = new Date(rangeEnd);
+        prevRangeEnd.setDate(rangeEnd.getDate() - periodLength);
     
     const currentProduction = currentData.reduce((sum, day) => sum + day.production, 0);
     const currentWaste = currentData.reduce((sum, day) => sum + day.waste, 0);
@@ -831,16 +838,19 @@ const StatsPage: React.FC = () => {
       
       switch (selectedPeriod) {
         case 'day':
-          formattedDate = date.toLocaleDateString('fr-FR', { 
-            day: '2-digit', 
-            month: '2-digit' 
+          formattedDate = date.toLocaleDateString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit'
           });
           break;
-        case 'week':
-          formattedDate = `S${getWeek(date)}`;
+         case 'range':
+          formattedDate = date.toLocaleDateString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit'
+           });   
           break;
         case 'month':
-          formattedDate = date.toLocaleDateString('fr-FR', { 
+          formattedDate = date.toLocaleDateString('fr-FR', {
             day: '2-digit', 
             month: 'short' 
           });
@@ -885,17 +895,6 @@ const StatsPage: React.FC = () => {
 
   const varietyPopularity = getRealVarietyPopularity();
   const boxPopularity = getRealBoxPopularity();
-
-  // Générer les options pour les semaines
-  const getWeekOptions = () => {
-    const options = [];
-    for (let i = 1; i <= 53; i++) {
-      options.push(
-        <option key={i} value={i}>Semaine {i}</option>
-      );
-    }
-    return options;
-  };
 
   // Générer les options pour les mois
   const getMonthOptions = () => {
@@ -977,8 +976,8 @@ const StatsPage: React.FC = () => {
       case 'day':
         periodText = `Jour: ${new Date(selectedDate).toLocaleDateString('fr-FR')}`;
         break;
-      case 'week':
-        periodText = `Semaine ${selectedWeek}, ${selectedYear}`;
+      case 'range':
+        periodText = `Du ${new Date(selectedStartDate).toLocaleDateString('fr-FR')} au ${new Date(selectedEndDate).toLocaleDateString('fr-FR')}`;
         break;
       case 'month':
         const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -1222,8 +1221,8 @@ const StatsPage: React.FC = () => {
       case 'day':
         periodText = `Jour: ${new Date(selectedDate).toLocaleDateString('fr-FR')}`;
         break;
-      case 'week':
-        periodText = `Semaine ${selectedWeek}, ${selectedYear}`;
+      case 'range':
+        periodText = `Du ${new Date(selectedStartDate).toLocaleDateString('fr-FR')} au ${new Date(selectedEndDate).toLocaleDateString('fr-FR')}`;
         break;
       case 'month':
         const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -1444,7 +1443,7 @@ const StatsPage: React.FC = () => {
               className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
             >
               <option value="day">Par Jour</option>
-              <option value="week">Par Semaine</option>
+              <option value="range">Par Semaine</option>
               <option value="month">Par Mois</option>
               <option value="year">Par Année</option>
             </select>
@@ -1458,22 +1457,20 @@ const StatsPage: React.FC = () => {
               />
             )}
 
-            {selectedPeriod === 'week' && (
+            {selectedPeriod === 'range' && (
               <div className="flex space-x-2">
-                <select
-                  value={selectedWeek}
-                  onChange={(e) => setSelectedWeek(parseInt(e.target.value))}
+                <input
+                  type="date"
+                  value={selectedStartDate}
+                  onChange={(e) => setSelectedStartDate(e.target.value)}
                   className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
-                >
-                  {getWeekOptions()}
-                </select>
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+               />
+                <input
+                  type="date"
+                  value={selectedEndDate}
+                  onChange={(e) => setSelectedEndDate(e.target.value)}
                   className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
-                >
-                  {getYearOptions()}
-                </select>
+                />
               </div>
             )}
 
