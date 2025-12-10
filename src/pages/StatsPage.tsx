@@ -86,24 +86,30 @@ const StatsPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Calculate the number of days to fetch based on selected period
-      let daysToFetch = 30; // Default
-      switch (selectedPeriod) {
-        case 'day':
-          daysToFetch = 8; // Get 8 days to compare with last week
-          break;
-        case 'week':
-          daysToFetch = 14; // Get 2 weeks for comparison
-          break;
-        case 'month':
-          daysToFetch = 62; // Get 2 months for comparison
-          break;
-        case 'year':
-          daysToFetch = 730; // Get 2 years for comparison
-          break;
-      }
-      
-      const plans = await productionService.getProductionPlans(daysToFetch.toString(), selectedDate);
+      let daysToFetch = 30; // valeur par défaut
+
+switch (selectedPeriod) {
+  case 'day':
+    daysToFetch = 8; // 8 jours
+    break;
+  case 'week':
+    daysToFetch = 90; // ~3 mois, pour comparer les semaines
+    break;
+  case 'month':
+    daysToFetch = 365; // 🔴 on charge 1 an pour pouvoir voir tous les mois
+    break;
+  case 'year':
+    daysToFetch = 730; // 2 ans si tu veux comparer plusieurs années
+    break;
+}
+
+// pour l’instant on se base toujours sur aujourd’hui comme date de référence
+const referenceDate = new Date().toISOString().split('T')[0];
+
+const plans = await productionService.getProductionPlans(
+  daysToFetch.toString(),
+  referenceDate
+);
       
       if (!plans || plans.length === 0) {
         setProductionData([]);
