@@ -138,7 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.error('ip-restricted-login error:', fnError);
             const ipError: AppError = {
               code: 'IP_NOT_ALLOWED' as any,
-              message: 'You are not authorized to perform this action',
+              message: 'Veuillez vous connecter depuis le réseau Migros.',
             };
             setState(prev => ({
               ...prev,
@@ -154,7 +154,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (!result || result.allowed !== true) {
             const ipError: AppError = {
               code: 'IP_NOT_ALLOWED' as any,
-              message: 'You are not authorized to perform this action',
+              message: 'Veuillez vous connecter depuis le réseau Migros.',
             };
             setState(prev => ({
               ...prev,
@@ -169,7 +169,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.error('ip-restricted-login invoke failed:', e);
           const ipError: AppError = {
             code: 'IP_NOT_ALLOWED' as any,
-            message: 'You are not authorized to perform this action',
+            message: 'Veuillez vous connecter depuis le réseau Migros.',
           };
           setState(prev => ({
             ...prev,
