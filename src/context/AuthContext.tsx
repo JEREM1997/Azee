@@ -4,19 +4,6 @@ import { supabase } from '../lib/supabase';
 import { User, AuthState, AppError } from '../types';
 import { AppErrorHandler, ErrorCodes } from '../utils/errorHandling';
 
-const FUNCTIONS_URL =
-  import.meta.env.VITE_SUPABASE_FUNCTIONS_URL ??
-  `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-console.log('FUNCTIONS_URL =', FUNCTIONS_URL);
-
-const RESTRICTED_EMAILS = [
-  'migrosyverdon@krispykreme.internal',
-  'migrosrenens@krispykreme.internal',
-  'migrosmontreux@krispykreme.internal',
-  'migroscrissier@krispykreme.internal',
-  'migroschablais@krispykreme.internal',
-].map(e => e.toLowerCase());
-
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -38,6 +25,15 @@ export const useAuth = () => {
   return context;
 };
 
+// ✅ Liste des emails soumis au filtrage IP
+const MIGROS_IP_PROTECTED_EMAILS = [
+  'migrosyverdon@krispykreme.internal',
+  'migrosrenens@krispykreme.internal',
+  'migrosmontreux@krispykreme.internal',
+  'migroscrissier@krispykreme.internal',
+  'migroschablais@krispykreme.internal',
+];
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -46,16 +42,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
   const navigate = useNavigate();
 
-  // Initialize auth state
+  // Initialise l’état d’auth
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // Check for existing session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
 
         if (session?.user) {
-          // Fetch authoritative role & store ids from user_roles (fallback to metadata)
+          // Récupère le rôle depuis user_roles (fallback metadata)
           let dbRole = session.user.user_metadata?.role || 'store';
           let dbStoreIds: string[] = session.user.user_metadata?.store_ids || [];
 
@@ -70,8 +65,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               dbRole = roleRow.role || dbRole;
               dbStoreIds = roleRow.store_ids || dbStoreIds;
             }
-          } catch (_) {
-            /* ignore – default to metadata */
+          } catch {
+            // ignore, fallback metadata
           }
 
           const user: User = {
@@ -86,7 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setState({ user: null, loading: false, error: null });
         }
 
-        // Listen for auth changes
+        // écoute les changements d’auth
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, session) => {
             if (event === 'SIGNED_IN' && session?.user) {
@@ -102,13 +97,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setState({ user: null, loading: false, error: null });
               navigate('/login');
             } else if (event === 'TOKEN_REFRESHED') {
-              // Handle token refresh
               console.log('Token refreshed');
             }
           }
         );
 
-        // Cleanup subscription
         return () => {
           subscription.unsubscribe();
         };
@@ -124,58 +117,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initializeAuth();
   }, [navigate]);
 
-    const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string) => {
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
 
-      const normalizedEmail = email.toLowerCase();
-      const isRestricted = RESTRICTED_EMAILS.includes(normalizedEmail);
-
-      // 🔹 CAS 1 : emails Migros → on passe par la Edge Function (filtrage IP)
-      if (isRestricted) {
-        const response = await fetch(`${FUNCTIONS_URL}/ip-restricted-login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
-          },
-          body: JSON.stringify({ email, password }),
+      // ✅ 1. Si email Migros → demander d’abord à la Edge Function si l’IP est autorisée
+      if (MIGROS_IP_PROTECTED_EMAILS.includes(email.toLowerCase())) {
+        const { data: fnData, error: fnError } = await supabase.functions.invoke('ip-restricted-login', {
+          body: { email },
         });
 
-        const body = await response.json();
-
-        if (!response.ok) {
-          throw new Error(body?.error || 'LOGIN_FAILED');
+        if (fnError) {
+          console.error('ip-restricted-login error:', fnError);
+          throw fnError;
         }
 
-        const { session, user } = body;
+        const result = fnData as any;
 
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-        });
-
-        if (sessionError) throw sessionError;
-
-        if (user) {
-          const appUser: User = {
-            id: user.id,
-            email: user.email!,
-            role: user.user_metadata?.role || 'store',
-            storeIds: user.user_metadata?.store_ids || [],
-            fullName: user.user_metadata?.full_name || user.email!,
-          };
-
-          setState({ user: appUser, loading: false, error: null });
-          navigate('/');
-          return;
+        if (!result?.allowed) {
+          // On remonte un message propre à l’utilisateur
+          const msg =
+            result?.message ||
+            "You are not authorized to perform this action (IP not allowed for this account).";
+          throw new AppError(ErrorCodes.UNAUTHORIZED, msg);
         }
-
-        setState({ user: null, loading: false, error: null });
-        return;
       }
 
-      // 🔹 CAS 2 : tous les autres emails → login normal Supabase (comme avant)
+      // ✅ 2. Si IP OK (ou email non Migros) → login normal Supabase
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -191,11 +159,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           storeIds: data.user.user_metadata?.store_ids || [],
           fullName: data.user.user_metadata?.full_name || data.user.email!,
         };
-
         setState({ user, loading: false, error: null });
         navigate('/');
       } else {
-        setState({ user: null, loading: false, error: null });
+        // sécurité, au cas où
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          error: AppErrorHandler.handleAuthError('No user returned after signIn'),
+        }));
       }
     } catch (error) {
       setState(prev => ({
@@ -212,7 +184,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setState(prev => ({ ...prev, loading: true, error: null }));
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      
+
       setState({ user: null, loading: false, error: null });
       navigate('/login');
     } catch (error) {
@@ -232,7 +204,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (sessionError) throw sessionError;
       if (!session) throw new Error('No active session');
 
-      // Call the auth-role Edge Function
       const { data, error } = await supabase.functions.invoke('auth-role', {
         method: 'POST',
         headers: {
@@ -242,16 +213,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) throw error;
 
-      // Force session refresh to get new role
       await supabase.auth.refreshSession();
 
-      // Update local state with new role
       if (state.user) {
         setState({
           user: {
             ...state.user,
-            role: data.role,
-            storeIds: data.store_ids || [],
+            role: (data as any).role,
+            storeIds: (data as any).store_ids || [],
           },
           loading: false,
           error: null,
@@ -280,3 +249,4 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
