@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AppErrorHandler } from '../utils/errorHandling';
 import krispyKremeOpsLogo from '../assets/krispy-kreme-ops-logo.png';
-import doughnutsBackground from '../assets/doughnuts-background.jpg';
+import doughnutsBackground from '../assets/doughnuts-background.jpg.jpg';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
