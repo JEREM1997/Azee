@@ -29,6 +29,7 @@ export interface DonutVariety {
   isActive: boolean;
   formId: string; // Associate each variety with a specific form
   productionCost: number; // Production cost per unit in CHF
+  orderOnly?: boolean; // True when only available through pre-order, not retail shelves
   createdAt?: string;
   updatedAt?: string;
 }
@@ -166,4 +167,36 @@ export interface ValidationResult {
 export interface ApiResponse<T> {
   data?: T;
   error?: AppError;
+}
+
+// Orders
+export type OrderPaymentStatus = 'deja_paye' | 'a_facturer' | 'a_la_livraison';
+export type OrderType = 'retail' | 'b2b';
+
+export interface OrderLineItem {
+  varietyId: string;
+  quantity: number;
+  conditioning: string;
+}
+
+export interface Order {
+  id: string;
+  storeId: string;
+  storeName?: string;
+  customerName: string;
+  customerPhone: string;
+  companyName?: string;
+  deliveryAddress?: string;
+  billingAddress?: string;
+  deliveryDate: string;
+  productionDate: string;
+  productionApproved: boolean;
+  orderType: OrderType;
+  paymentStatus: OrderPaymentStatus;
+  handledBy: string;
+  deliveredBy?: string;
+  conditioning: string;
+  comments?: string;
+  items: OrderLineItem[];
+  createdAt: string;
 }
