@@ -11,6 +11,7 @@ interface FormValues {
   description?: string;
   location?: string;
   isActive: boolean;
+  isOrderable?: boolean;
   formId?: string;
   size?: number;
   productionCost?: number;
@@ -31,6 +32,7 @@ const AdminPage: React.FC = () => {
     description: '',
     location: '',
     isActive: true,
+    isOrderable: true,
     formId: '',
     size: 6,
     productionCost: 0,
@@ -77,6 +79,7 @@ const AdminPage: React.FC = () => {
       varieties: item.varieties || [],
       size: item.size || 6,
       productionCost: item.productionCost || 0,
+      isOrderable: item.isOrderable ?? true,
       availableVarieties: item.availableVarieties || [],
       availableBoxes: item.availableBoxes || []
     });
@@ -172,6 +175,7 @@ const AdminPage: React.FC = () => {
       description: '',
       location: '',
       isActive: true,
+      isOrderable: true,
       formId: '',
       size: 6,
       productionCost: 0,
@@ -357,6 +361,18 @@ const AdminPage: React.FC = () => {
         return (
           <div className="space-y-4">
             {commonFields}
+            <div className="flex items-center">
+              <input
+                id="isOrderable"
+                type="checkbox"
+                checked={formValues.isOrderable ?? true}
+                onChange={(e) => setFormValues({ ...formValues, isOrderable: e.target.checked })}
+                className="h-4 w-4 text-krispy-green focus:ring-krispy-green border-gray-300 rounded"
+              />
+              <label htmlFor="isOrderable" className="ml-2 block text-sm text-gray-900">
+                Afficher dans la page Commandes
+              </label>
+            </div>
             <div>
               <label htmlFor="formId" className="block text-sm font-medium text-gray-700">
                 Forme du Doughnut
@@ -498,6 +514,7 @@ const AdminPage: React.FC = () => {
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Forme</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Coût de Production</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Commandable</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
             <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
           </tr>
@@ -560,6 +577,15 @@ const AdminPage: React.FC = () => {
               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                 CHF {item.productionCost?.toFixed(2) || '0.00'}
               </td>
+              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                <span
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    item.isOrderable === false ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+                  }`}
+                >
+                  {item.isOrderable === false ? 'Masqué' : 'Visible'}
+                </span>
+              </td> 
             </>
           );
           break;
