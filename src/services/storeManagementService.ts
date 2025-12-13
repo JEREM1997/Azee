@@ -276,7 +276,8 @@ export const createDonutVariety = async (variety: DonutVariety) => {
         description: variety.description,
         form_id: variety.formId,
         production_cost: variety.productionCost,
-        is_active: variety.isActive
+        is_active: variety.isActive,
+        is_orderable: variety.isOrderable ?? true
       })
     });
 
