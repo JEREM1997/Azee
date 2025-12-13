@@ -27,6 +27,11 @@ export interface DonutVariety {
   name: string;
   description?: string;
   isActive: boolean;
+   /**
+   * Toggle to control if the variety can be selected on the Orders page
+   * without removing it from stats/reporting.
+   */
+  isOrderable?: boolean;
   formId: string; // Associate each variety with a specific form
   productionCost: number; // Production cost per unit in CHF
   orderOnly?: boolean; // True when only available through pre-order, not retail shelves
