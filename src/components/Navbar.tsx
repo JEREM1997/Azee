@@ -13,6 +13,7 @@ const Navbar: React.FC = () => {
     { name: 'Tableau de bord', href: '/dashboard', visible: true },
     { name: 'Production', href: '/production', visible: isProduction || isAdmin },
     { name: 'Plans', href: '/plans', visible: isProduction || isAdmin },
+    { name: 'Commandes', href: '/orders', visible: true },
     { name: 'Livraison', href: '/delivery', visible: true },
     { name: 'Statistiques', href: '/stats', visible: isAdmin },
     { name: 'Utilisateurs', href: '/users', visible: isAdmin },
