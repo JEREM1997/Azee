@@ -40,13 +40,22 @@ const orderTypeLabels: Record<OrderType, string> = {
   b2b: 'B2B',
 };
 
-const conditioningOptions = ['Boîte 6', 'Boîte 12', 'Vrac'];
+const conditioningOptions = ['Boîte 6', 'Boîte 12'];
+
+const getProductionDateForDelivery = (deliveryDate: string) => {
+  if (!deliveryDate) return '';
+  const production = new Date(deliveryDate);
+  production.setDate(production.getDate() - 1);
+  return production.toISOString().split('T')[0];
+};
 
 const buildInitialForm = (storeId: string, catalogue: DonutVariety[]): OrderFormState => {
   const firstVariety = catalogue[0];
   const defaultDate = new Date();
   const defaultDelivery = new Date(defaultDate);
   defaultDelivery.setDate(defaultDelivery.getDate() + 1);
+  const defaultProduction = new Date(defaultDelivery);
+  defaultProduction.setDate(defaultProduction.getDate() - 1);
 
   return {
     customerName: '',
@@ -55,7 +64,7 @@ const buildInitialForm = (storeId: string, catalogue: DonutVariety[]): OrderForm
     deliveryAddress: '',
     billingAddress: '',
     deliveryDate: defaultDelivery.toISOString().split('T')[0],
-    productionDate: defaultDate.toISOString().split('T')[0],
+    productionDate: defaultProduction.toISOString().split('T')[0],
     storeId,
     orderType: 'retail',
     paymentStatus: 'a_facturer',
@@ -93,16 +102,7 @@ const OrdersPage: React.FC = () => {
     return activeStores;
   }, [stores, user?.storeIds]);
 
-  const catalogueForStore = useCallback(
-    (storeId: string) => {
-      const store = storeOptions.find(s => s.id === storeId);
-      if (!store || !store.availableVarieties?.length) return catalogue;
-      const availableIds = new Set(store.availableVarieties);
-      const filtered = catalogue.filter(item => availableIds.has(item.id));
-      return filtered.length ? filtered : catalogue;
-    },
-    [catalogue, storeOptions]
-  );
+  const catalogueForStore = useCallback(() => catalogue, [catalogue]);
 
   const preferredStoreId = useMemo(() => {
     if (user?.storeIds?.length) {
@@ -123,7 +123,7 @@ const OrdersPage: React.FC = () => {
       setForm(null);
       return;
     }
-    setForm(buildInitialForm(preferredStoreId, catalogueForStore(preferredStoreId)));
+    setForm(buildInitialForm(preferredStoreId, catalogueForStore()));
   }, [adminLoading, catalogueForStore, preferredStoreId, storeOptions]);
 
   const handleFormChange = (field: keyof OrderFormState, value: string) => {
@@ -131,7 +131,7 @@ const OrdersPage: React.FC = () => {
     setForm(prev => {
       if (!prev) return prev;
       if (field === 'storeId') {
-        const allowedCatalogue = catalogueForStore(value);
+        const allowedCatalogue = catalogueForStore();
         const fallbackVarietyId = allowedCatalogue[0]?.id;
         const sanitizedItems = prev.items.map(item => {
           const isAllowed = allowedCatalogue.some(variety => variety.id === item.varietyId);
@@ -140,6 +140,10 @@ const OrdersPage: React.FC = () => {
         });
 
         return { ...prev, storeId: value, items: sanitizedItems };
+      }
+
+      if (field === 'deliveryDate') {
+        return { ...prev, deliveryDate: value, productionDate: getProductionDateForDelivery(value) };
       }
 
       return { ...prev, [field]: value };
@@ -158,7 +162,7 @@ const OrdersPage: React.FC = () => {
 
   const handleAddItem = () => {
     if (!form) return;
-    const availableCatalogue = catalogueForStore(form.storeId);
+    const availableCatalogue = catalogueForStore();
     const fallbackVariety = availableCatalogue[0];
     if (!fallbackVariety) return;
 
@@ -233,7 +237,7 @@ const OrdersPage: React.FC = () => {
 
     setOrders(prev => [newOrder, ...prev]);
     setSuccessMessage('Commande ajoutée au plan de production (brouillon en attente de validation).');
-    setForm(buildInitialForm(form.storeId, catalogueForStore(form.storeId)));
+    setForm(buildInitialForm(form.storeId, catalogueForStore()));
   };
 
   const toggleApproval = (orderId: string) => {
@@ -261,16 +265,11 @@ const OrdersPage: React.FC = () => {
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Commandes magasin</h1>
             <p className="text-gray-600">
-              Saisie catalogue-only pour tous les magasins demandeurs avec intégration au plan de production.
+              Catalogue global paramétré dans l'Admin (y compris les articles uniquement à la commande), avec intégration au plan de production.
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3 text-sm text-gray-600">
-            <div className="px-3 py-2 bg-krispy-green-light text-krispy-green rounded-lg border border-krispy-green/30">
-              Statut paiement indicatif : Déjà payé / À facturer / À la livraison
-            </div>
-            <div className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-100">
-              Validation production par Admin avant injection dans les plans
-            </div>
+          <div className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 text-sm">
+            Validation production par Admin avant injection dans les plans
           </div>
         </div>
 
@@ -433,7 +432,7 @@ const OrdersPage: React.FC = () => {
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
                   />
                   <p className="mt-1 text-xs text-gray-500">
-                    Cette date doit être validée par l'Admin avant injection dans le plan.
+                    Pré-remplie automatiquement la veille de la livraison, à valider par l'Admin avant injection dans le plan.
                   </p>
                 </div>
               </div>
@@ -495,7 +494,7 @@ const OrdersPage: React.FC = () => {
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Variétés du catalogue</h2>
                 <p className="text-sm text-gray-600">
-                  Seules les variétés autorisées pour le magasin sélectionné peuvent être ajoutées.
+                  Sélection issues du catalogue de commande paramétré dans l'Admin (assortiment + items uniquement à la commande).
                 </p>
               </div>
               <button
@@ -509,7 +508,7 @@ const OrdersPage: React.FC = () => {
 
             <div className="space-y-4">
               {form.items.map((item, index) => {
-                const availableVarieties = catalogueForStore(form.storeId);
+                const availableVarieties = catalogueForStore();
                 return (
                   <div
                     key={`${item.varietyId}-${index}`}
