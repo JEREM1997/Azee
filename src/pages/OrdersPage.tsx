@@ -227,7 +227,7 @@ const OrdersPage: React.FC = () => {
     return errors;
   };
 
-  const handleSubmit = async (event: React.FormEvent) => 
+   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!form || submitting) return;
     const errors = validateForm();
