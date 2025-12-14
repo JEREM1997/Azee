@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { createOrder, fetchOrders, updateOrderProduction } from '../services/ordersService';
 import {
   DonutVariety,
   Order,
@@ -85,7 +86,7 @@ const buildInitialForm = (storeId: string, catalogue: DonutVariety[]): OrderForm
 };
 
 const OrdersPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { stores, varieties, loading: adminLoading, error: adminError, refresh } = useAdmin();
 
   const catalogue = useMemo<DonutVariety[]>(
@@ -114,6 +115,10 @@ const OrdersPage: React.FC = () => {
 
   const [form, setForm] = useState<OrderFormState | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState<boolean>(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [savingOrderId, setSavingOrderId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState<boolean>(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [successMessage, setSuccessMessage] = useState<string>('');
 
@@ -126,6 +131,26 @@ const OrdersPage: React.FC = () => {
     setForm(buildInitialForm(preferredStoreId, catalogueForStore()));
   }, [adminLoading, catalogueForStore, preferredStoreId, storeOptions]);
 
+   const loadOrders = useCallback(async () => {
+    try {
+      setOrdersLoading(true);
+      setOrdersError(null);
+      const data = await fetchOrders();
+      setOrders(data);
+    } catch (err) {
+      console.error('Erreur lors du chargement des commandes :', err);
+      setOrdersError("Impossible de charger les commandes depuis Supabase.");
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!adminLoading) {
+      loadOrders();
+    }
+  }, [adminLoading, loadOrders]);
+  
   const handleFormChange = (field: keyof OrderFormState, value: string) => {
     if (!form) return;
     setForm(prev => {
@@ -202,9 +227,9 @@ const OrdersPage: React.FC = () => {
     return errors;
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => 
     event.preventDefault();
-    if (!form) return;
+    if (!form || submitting) return;
     const errors = validateForm();
     setFormErrors(errors);
     setSuccessMessage('');
@@ -213,39 +238,81 @@ const OrdersPage: React.FC = () => {
 
     const store = storeOptions.find(s => s.id === form.storeId);
 
-    const newOrder: Order = {
-      id: `order-${Date.now()}`,
-      storeId: form.storeId,
-      storeName: store?.name,
-      customerName: form.customerName,
-      customerPhone: form.customerPhone,
-      companyName: form.companyName || undefined,
-      deliveryAddress: form.deliveryAddress || undefined,
-      billingAddress: form.billingAddress || undefined,
-      deliveryDate: form.deliveryDate,
-      productionDate: form.productionDate,
-      productionApproved: false,
-      orderType: form.orderType,
-      paymentStatus: form.paymentStatus,
-      handledBy: form.handledBy || (user?.fullName ?? ''),
-      deliveredBy: form.deliveredBy || undefined,
-      conditioning: form.conditioning,
-      comments: form.comments || undefined,
-      items: form.items,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      setSubmitting(true);
+      const savedOrder = await createOrder({
+        storeId: form.storeId,
+        storeName: store?.name,
+        customerName: form.customerName,
+        customerPhone: form.customerPhone,
+        companyName: form.companyName || undefined,
+        deliveryAddress: form.deliveryAddress || undefined,
+        billingAddress: form.billingAddress || undefined,
+        deliveryDate: form.deliveryDate,
+        productionDate: form.productionDate,
+        productionApproved: false,
+        orderType: form.orderType,
+        paymentStatus: form.paymentStatus,
+        handledBy: form.handledBy || (user?.fullName ?? ''),
+        deliveredBy: form.deliveredBy || undefined,
+        conditioning: form.conditioning,
+        comments: form.comments || undefined,
+        items: form.items,
+      });
 
-    setOrders(prev => [newOrder, ...prev]);
-    setSuccessMessage('Commande ajoutée au plan de production (brouillon en attente de validation).');
-    setForm(buildInitialForm(form.storeId, catalogueForStore()));
+      setOrders(prev => [savedOrder, ...prev]);
+      setSuccessMessage('Commande enregistrée dans Supabase et ajoutée au plan (brouillon).');
+      setForm(buildInitialForm(form.storeId, catalogueForStore()));
+    } catch (err) {
+      console.error('Erreur lors de la création de la commande :', err);
+      setFormErrors(['Impossible d\'enregistrer la commande dans Supabase.']);
+    } finally {
+      setSubmitting(false);
+    }   
+  };
+
+   const handleProductionFieldChange = (
+    orderId: string,
+    field: 'productionDate' | 'productionApproved',
+    value: string | boolean
+  ) => {
+    setOrders(prev =>
+      prev.map(order =>
+      order.id === orderId ? { ...order, [field]: value } as Order : order  
+      )
+    );
+  };
+
+const saveProductionSettings = async (
+    orderId: string,
+    productionDate?: string,
+    productionApproved?: boolean
+  ) => {
+    const order = orders.find(o => o.id === orderId);
+    const nextProductionDate = productionDate ?? order?.productionDate;
+    const nextProductionApproved = productionApproved ?? order?.productionApproved;
+
+    if (!nextProductionDate || nextProductionApproved === undefined) return;
+    try {
+      setSavingOrderId(orderId);
+      const updated = await updateOrderProduction(orderId, nextProductionDate, nextProductionApproved);
+      setOrders(prev => prev.map(o => (o.id === orderId ? updated : o)));
+      setSuccessMessage('Mise à jour de la production enregistrée.');
+    } catch (err) {
+      console.error('Erreur lors de la mise à jour de la production :', err);
+      setOrdersError("Impossible d'enregistrer la mise à jour production.");
+    } finally {
+      setSavingOrderId(null);
+    }
   };
 
   const toggleApproval = (orderId: string) => {
-    setOrders(prev =>
-      prev.map(order =>
-        order.id === orderId ? { ...order, productionApproved: !order.productionApproved } : order
-      )
-    );
+    if (!isAdmin) return;
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    const nextValue = !order.productionApproved;
+    handleProductionFieldChange(orderId, 'productionApproved', nextValue);
+    saveProductionSettings(orderId, order.productionDate, nextValue);
   };
 
   if (adminLoading) {
@@ -593,9 +660,10 @@ const OrdersPage: React.FC = () => {
           <div className="flex justify-end">
             <button
               type="submit"
+              disabled={submitting}
               className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-semibold rounded-md shadow-sm text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
             >
-              Ajouter au plan
+             {submitting ? 'Enregistrement...' : 'Ajouter au plan'} 
             </button>
           </div>
         </form>
@@ -612,7 +680,23 @@ const OrdersPage: React.FC = () => {
           </div>
         </div>
 
-        {orders.length === 0 ? (
+        {ordersError && (
+          <div className="rounded-md bg-red-50 p-4 mb-4 text-sm text-red-700 flex items-start gap-2">
+            <span className="font-semibold">Erreur :</span>
+            <span>{ordersError}</span>
+            <button
+              type="button"
+              onClick={loadOrders}
+              className="ml-auto inline-flex items-center px-3 py-1 text-xs font-medium rounded-md border border-red-200 text-red-700 hover:bg-red-100"
+            >
+              Réessayer
+            </button>
+          </div>
+        )}
+
+        {ordersLoading ? (
+          <LoadingSpinner message="Chargement des commandes depuis Supabase..." />
+        ) : orders.length === 0 ? (
           <div className="text-sm text-gray-600">Aucune commande saisie pour le moment.</div>
         ) : (
           <div className="overflow-x-auto">
@@ -641,7 +725,33 @@ const OrdersPage: React.FC = () => {
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-900">
                       <div>Livraison : {order.deliveryDate}</div>
-                      <div>Production : {order.productionDate}</div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span>Production :</span>
+                        {isAdmin ? (
+                          <input
+                            type="date"
+                            value={order.productionDate}
+                            onChange={e =>
+                              handleProductionFieldChange(order.id, 'productionDate', e.target.value)
+                            }
+                            className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
+                          />
+                        ) : (
+                          <span>{order.productionDate}</span>
+                        )}
+                      </div>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            saveProductionSettings(order.id, order.productionDate, order.productionApproved)
+                          }
+                          disabled={savingOrderId === order.id}
+                          className="mt-2 inline-flex items-center px-3 py-1 text-xs font-medium rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                        >
+                          {savingOrderId === order.id ? 'Enregistrement...' : 'Enregistrer la date'}
+                        </button>
+                      )}
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-900">
                       <span className="inline-flex rounded-full px-3 py-1 text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
@@ -675,12 +785,17 @@ const OrdersPage: React.FC = () => {
                       </ul>
                     </td>
                     <td className="px-4 py-4 text-right text-sm">
-                      <button
-                        onClick={() => toggleApproval(order.id)}
-                        className="inline-flex items-center px-3 py-2 text-xs font-medium rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-                      >
-                        {order.productionApproved ? 'Marquer en attente' : 'Valider la production'}
-                      </button>
+                    {isAdmin ? (
+                        <button
+                          onClick={() => toggleApproval(order.id)}
+                          disabled={savingOrderId === order.id}
+                          className="inline-flex items-center px-3 py-2 text-xs font-medium rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                        >
+                          {order.productionApproved ? 'Marquer en attente' : 'Valider la production'}
+                        </button>
+                      ) : (
+                        <span className="text-gray-500 text-xs">Validation réservée à l'Admin</span>
+                      )}  
                     </td>
                   </tr>
                 ))}
