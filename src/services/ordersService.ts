@@ -44,34 +44,48 @@ const mapOrderRowToOrder = (row: any, itemsByOrder: Record<string, OrderLineItem
 });
 
 export const fetchOrders = async (): Promise<Order[]> => {
-  const { data: ordersData, error: ordersError } = await supabase
-    .from('orders')
-    .select('*')
-    .order('created_at', { ascending: false });
+try {
+    const { data: ordersData, error: ordersError } = await supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-  if (ordersError) throw ordersError;
-  if (!ordersData?.length) return [];
+    if (ordersError) throw ordersError;
+    if (!ordersData?.length) return [];
 
-  const orderIds = ordersData.map(order => order.id);
+    const orderIds = ordersData.map(order => order.id);
 
-  const { data: itemsData, error: itemsError } = await supabase
-    .from('order_items')
-    .select('*')
-    .in('order_id', orderIds);
+    const { data: itemsData, error: itemsError } = await supabase
+      .from('order_items')
+      .select('*')
+      .in('order_id', orderIds);
 
-  if (itemsError) throw itemsError;
+    if (itemsError) throw itemsError;
 
-  const itemsByOrder = (itemsData || []).reduce<Record<string, OrderLineItem[]>>((acc, item) => {
-    if (!acc[item.order_id]) acc[item.order_id] = [];
-    acc[item.order_id].push({
-      varietyId: item.variety_id,
-      quantity: item.quantity,
-      conditioning: item.conditioning,
-    });
-    return acc;
-  }, {});
+    const itemsByOrder = (itemsData || []).reduce<Record<string, OrderLineItem[]>>((acc, item) => {
+      if (!acc[item.order_id]) acc[item.order_id] = [];
+      acc[item.order_id].push({
+        varietyId: item.variety_id,
+        quantity: item.quantity,
+        conditioning: item.conditioning,
+      });
+      return acc;
+    }, {});
 
-  return ordersData.map(order => mapOrderRowToOrder(order, itemsByOrder));
+    return ordersData.map(order => mapOrderRowToOrder(order, itemsByOrder));
+  } catch (error: any) {
+    // When Supabase tables aren't provisioned locally, avoid blocking the UI with
+    // a hard failure and return an empty list instead. This keeps the Orders page
+    // usable for development/demo environments without Supabase seed data.
+    const missingTable = error?.code === '42P01' || error?.message?.includes('relation') || error?.message?.includes('does not exist');
+    if (missingTable) {
+      console.warn('[fetchOrders] Supabase tables missing, returning empty order list');
+      return [];
+    }
+
+    console.error('[fetchOrders] Error while loading orders', error);
+    throw error;
+  }  
 };
 
 export const createOrder = async (payload: CreateOrderPayload): Promise<Order> => {
