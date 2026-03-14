@@ -12,6 +12,7 @@ const LoginPage = React.lazy(() => import('./pages/LoginPage'));
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage'));
 const ProductionPage = React.lazy(() => import('./pages/ProductionPage'));
 const DeliveryPage = React.lazy(() => import('./pages/DeliveryPage'));
+const OrdersPage = React.lazy(() => import('./pages/OrdersPage'));
 const AdminPage = React.lazy(() => import('./pages/AdminPage'));
 const UsersPage = React.lazy(() => import('./pages/UsersPage'));
 const CreateUserPage = React.lazy(() => import('./pages/CreateUserPage'));
