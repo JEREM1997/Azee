@@ -78,6 +78,18 @@ const StatsPage: React.FC = () => {
   const [selectedStores, setSelectedStores] = useState<string[]>([]); // Add store filter
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const getPlanEntries = (plan: any): any[] => {
+    if (Array.isArray(plan?.delivery_entries) && plan.delivery_entries.length > 0) {
+      return plan.delivery_entries;
+    }
+
+    if (Array.isArray(plan?.stores)) {
+      return plan.stores;
+    }
+
+    return [];
+  };
   
        // Single source of truth for production data fetching/transformations
   // (previous duplicate block removed to prevent double renders & undefined refs)
@@ -154,8 +166,9 @@ const StatsPage: React.FC = () => {
         let totalBoxes = 0;
         let totalBoxDoughnuts = 0;
 
-        if (plan.stores && Array.isArray(plan.stores)) {
-          plan.stores.forEach((store: any) => {
+        const planEntries = getPlanEntries(plan);
+        if (planEntries.length > 0) {
+          planEntries.forEach((store: any) => {
             totalProduction += store.total_quantity || 0;
 
             // Items individuels
@@ -302,8 +315,9 @@ const StatsPage: React.FC = () => {
       // Only process plans that match our filtered date range
       if (!filteredDates.includes(plan.date)) return;
       
-      if (plan.stores && Array.isArray(plan.stores)) {
-        plan.stores.forEach((store: any) => {
+      const planEntries = getPlanEntries(plan);
+        if (planEntries.length > 0) {
+          planEntries.forEach((store: any) => {
           // Skip if store not in our filtered list
           if (!storeStats[store.store_id]) return;
           
@@ -443,8 +457,9 @@ const StatsPage: React.FC = () => {
     rawProductionPlans.forEach(plan => {
       if (!filteredDates.includes(plan.date)) return;
       
-      if (plan.stores && Array.isArray(plan.stores)) {
-        plan.stores.forEach((store: any) => {
+      const planEntries = getPlanEntries(plan);
+      if (planEntries.length > 0) {
+        planEntries.forEach((store: any) => {
           // Skip if store not in our filtered list (respect store filtering)
           if (selectedStores.length > 0 && !selectedStores.includes(store.store_id)) {
             return;
@@ -528,8 +543,9 @@ const StatsPage: React.FC = () => {
     rawProductionPlans.forEach(plan => {
       if (!filteredDates.includes(plan.date)) return;
       
-      if (plan.stores && Array.isArray(plan.stores)) {
-        plan.stores.forEach((store: any) => {
+      const planEntries = getPlanEntries(plan);
+      if (planEntries.length > 0) {
+        planEntries.forEach((store: any) => {
           // Skip if store not in our filtered list (respect store filtering)
           if (selectedStores.length > 0 && !selectedStores.includes(store.store_id)) {
             return;
@@ -652,8 +668,9 @@ const StatsPage: React.FC = () => {
       // Only process plans that match our filtered date range
       if (!filteredDates.includes(plan.date)) return;
       
-      if (plan.stores && Array.isArray(plan.stores)) {
-        plan.stores.forEach((store: any) => {
+      const planEntries = getPlanEntries(plan);
+      if (planEntries.length > 0) {
+        planEntries.forEach((store: any) => {
           // Filter by selected stores if any are selected
           if (selectedStores.length > 0 && !selectedStores.includes(store.store_id)) {
             return;
@@ -750,8 +767,9 @@ const StatsPage: React.FC = () => {
       // Only process plans that match our filtered date range
       if (!filteredDates.includes(plan.date)) return;
       
-      if (plan.stores && Array.isArray(plan.stores)) {
-        plan.stores.forEach((store: any) => {
+      const planEntries = getPlanEntries(plan);
+      if (planEntries.length > 0) {
+        planEntries.forEach((store: any) => {
           // Filter by selected stores if any are selected
           if (selectedStores.length > 0 && !selectedStores.includes(store.store_id)) {
             return;
@@ -932,8 +950,9 @@ const StatsPage: React.FC = () => {
     rawProductionPlans.forEach(plan => {
       if (!filteredDates.includes(plan.date)) return;
       
-      if (plan.stores && Array.isArray(plan.stores)) {
-        plan.stores.forEach((store: any) => {
+      const planEntries = getPlanEntries(plan);
+      if (planEntries.length > 0) {
+        planEntries.forEach((store: any) => {
           if (store.production_items && Array.isArray(store.production_items)) {
             totalVarietiesFromPlans += store.production_items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
           }
@@ -1021,8 +1040,9 @@ const StatsPage: React.FC = () => {
       // Only process plans that match our filtered date range
       if (!filteredDates.includes(plan.date)) return;
       
-      if (plan.stores && Array.isArray(plan.stores)) {
-        plan.stores.forEach((store: any) => {
+      const planEntries = getPlanEntries(plan);
+      if (planEntries.length > 0) {
+        planEntries.forEach((store: any) => {
           // Filter by selected stores if any are selected
           if (selectedStores.length > 0 && !selectedStores.includes(store.store_id)) {
             return;
@@ -1277,8 +1297,9 @@ const StatsPage: React.FC = () => {
     rawProductionPlans.forEach(plan => {
       if (!filteredDates.includes(plan.date)) return;
       
-      if (plan.stores && Array.isArray(plan.stores)) {
-        plan.stores.forEach((planStore: any) => {
+      const planEntries = getPlanEntries(plan);
+      if (planEntries.length > 0) {
+        planEntries.forEach((planStore: any) => {
           if (planStore.store_id !== storeId) return;
           
           // Process individual production items
@@ -2170,6 +2191,3 @@ const StatsPage: React.FC = () => {
 };
 
 export default StatsPage;
-
-
-
