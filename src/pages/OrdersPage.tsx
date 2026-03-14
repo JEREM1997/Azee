@@ -124,7 +124,7 @@ const OrdersPage: React.FC = () => {
       setOrders(data);
     } catch (error) {
       console.error('Error while loading orders:', error);
-      setOrdersError('Impossible de charger les commandes depuis Supabase.');
+      setOrdersError(error instanceof Error ? error.message : 'Impossible de charger les commandes depuis Supabase.'); 
     } finally {
       setOrdersLoading(false);
     }
@@ -245,7 +245,7 @@ const OrdersPage: React.FC = () => {
       setSuccessMessage('Date de production enregistree.');
     } catch (error) {
       console.error('Error while saving order date:', error);
-      setOrdersError("Impossible d'enregistrer la date de production.");
+      setOrdersError(error instanceof Error ? error.message : "Impossible d'enregistrer la date de production."); 
     } finally {
       setSavingOrderId(null);
     }
@@ -266,7 +266,7 @@ const OrdersPage: React.FC = () => {
       setSuccessMessage('Commande validee. Elle doit maintenant apparaitre dans le plan du bon magasin.');
     } catch (error) {
       console.error('Error while approving order:', error);
-      setOrdersError("Impossible de valider la commande.");
+      setOrdersError(error instanceof Error ? error.message : "Impossible de valider la commande.");
     } finally {
       setSavingOrderId(null);
     }
