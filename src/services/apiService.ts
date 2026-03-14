@@ -33,6 +33,62 @@ interface StoreData {
   availableBoxes: string[];
 }
 
+const extractErrorMessage = (value: unknown): string | null => {
+  if (!value) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    if ('error' in value && typeof value.error === 'string') return value.error;
+    if ('message' in value && typeof value.message === 'string') return value.message;
+  }
+  return null;
+};
+
+const toReadableApiError = async (error: unknown): Promise<Error> => {
+  const errorWithContext = error as Error & {
+    context?: {
+      json?: () => Promise<unknown>;
+      text?: () => Promise<string>;
+    };
+  };
+
+  const context = errorWithContext?.context;
+  if (context) {
+    try {
+      if (typeof context.json === 'function') {
+        const payload = await context.json();
+        const message = extractErrorMessage(payload);
+        if (message) {
+          return new Error(message);
+        }
+      }
+    } catch (_) {}
+
+    try {
+      if (typeof context.text === 'function') {
+        const text = await context.text();
+        if (text) {
+          try {
+            const parsed = JSON.parse(text) as unknown;
+            const message = extractErrorMessage(parsed);
+            if (message) {
+              return new Error(message);
+            }
+          } catch (_) {
+            return new Error(text);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (error instanceof Error && error.message) {
+    return error;
+  }
+
+  const handled = AppErrorHandler.handleApiError(error);
+  return new Error(handled.message);
+};
+
 export const apiService = {
   /**
    * Generic function to invoke Supabase Edge Functions
@@ -59,7 +115,7 @@ export const apiService = {
           return { data: null, error } as ApiResponse<T>;
         }
 
-        throw error;
+        throw await toReadableApiError(error);
       }
 
       return { data, error: error as Error | null };
@@ -67,7 +123,7 @@ export const apiService = {
       if (options.throwError) {
         throw AppErrorHandler.handleApiError(error);
       }
-      return { data: null, error: error as Error };
+      return { data: null, error: await toReadableApiError(error) };
     }
   },
 
