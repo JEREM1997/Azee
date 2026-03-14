@@ -4,6 +4,7 @@
 // This is a Deno edge function - TypeScript errors are expected in Node.js environment
 
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
+import { writeAuditLog } from '../_shared/audit.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -41,8 +42,13 @@ Deno.serve(async (req) => {
       throw new Error('Invalid token');
     }
 
+    const { data: roleRow } = await supabaseClient
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .maybeSingle();
     // Check user role
-    let userRole = user.user_metadata?.role;
+    let userRole = roleRow?.role || user.user_metadata?.role;
 
     // Fallback: check profiles table if role not in metadata
     if (!userRole) {
@@ -120,6 +126,25 @@ Deno.serve(async (req) => {
     if (deleteError) {
       throw new Error(`Error deleting plan: ${deleteError.message}`);
     }
+
+  await writeAuditLog(
+      supabaseClient,
+      {
+        userId: user.id,
+        email: user.email ?? null,
+        role: userRole,
+      },
+      {
+        action: 'plan.delete',
+        entityType: 'production_plan',
+        entityId: plan.id,
+        planId: plan.id,
+        details: {
+          plan_date: plan.date,
+          status: plan.status,
+        },
+      }
+    );  
 
     return new Response(
       JSON.stringify({ 
