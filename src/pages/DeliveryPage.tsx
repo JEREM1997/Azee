@@ -59,6 +59,16 @@ interface DeliveryProductionPlan {
   delivery_entries?: DeliveryStoreProduction[];
 }
 
+const deliveryCopy = {
+  detailsTitle: 'D\u00E9tails de la Livraison',
+  subtitle: 'G\u00E9rer les livraisons et suivre les d\u00E9chets',
+  downloadBulletin: 'T\u00E9l\u00E9charger le Bulletin',
+  plannedSuffix: 'pr\u00E9vus',
+  wastePending: 'D\u00E9chets en attente',
+  confirmed: 'Confirm\u00E9',
+  dedicatedBulletin: 'Bulletin de livraison d\u00E9di\u00E9 \u00E0 la commande',
+};
+
 const DeliveryPage: React.FC = () => {
   const { currentUser, isAdmin, isProduction, isStore } = useAuth();
   const { forms } = useAdmin();
@@ -806,7 +816,7 @@ const DeliveryPage: React.FC = () => {
           </button>
         )}
         </div>
-        <p className="text-gray-600 mt-1">GÃ©rer les livraisons et suivre les dÃ©chets</p>
+        <p className="text-gray-600 mt-1">Gérer les livraisons et suivre les déchets</p>
 
         <div className="mt-4 md:mt-0">
           <div className="w-full md:w-auto">
@@ -875,12 +885,12 @@ const DeliveryPage: React.FC = () => {
                       ) : store.delivery_confirmed && store.waste_reported ? (
                         <>
                           <Check className="h-3 w-3 mr-1" />
-                          ConfirmÃ©
+                          Confirmé
                         </>
                       ) : store.delivery_confirmed && !store.waste_reported ? (
                         <>
                           <AlertTriangle className="h-3 w-3 mr-1" />
-                          DÃ©chets en attente
+                          Déchets en attente
                         </>
                       ) : (
                         <>
@@ -891,7 +901,7 @@ const DeliveryPage: React.FC = () => {
                     </span>
                   </div>
                   <div className="mt-1 text-sm text-gray-500">
-                    {store.total_quantity} doughnuts prÃ©vus
+                    {store.total_quantity} doughnuts prévus
                     {store.source_type === 'order' && (
                       <div className="text-xs text-blue-500 mt-1">
                         Bulletin de livraison dedié à la commande
@@ -925,7 +935,7 @@ const DeliveryPage: React.FC = () => {
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-800 flex items-center">
               <FileText className="h-5 w-5 mr-2 text-krispy-green" />
-              DÃ©tails de la Livraison
+              Détails de la Livraison
             </h2>
           </div>
           
@@ -983,7 +993,7 @@ const DeliveryPage: React.FC = () => {
                       className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
                     >
                       <Printer className="h-4 w-4 mr-1" />
-                      TÃ©lÃ©charger le Bulletin
+                      Télécharger le Bulletin
                     </button>
                   )}
                 </div>
