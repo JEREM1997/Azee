@@ -72,8 +72,8 @@ async function fetchApprovedOrdersForRange(
 
   const orderIds = ordersData.map((order: any) => order.id);
 
-  const { data: itemsData, error: itemsError } = await supabaseClient
-    .from('order_items')
+  const orderItemsQuery = supabaseClient.from('order_items');
+  const { data: itemsData, error: itemsError } = await orderItemsQuery
     .select('order_id, variety_id, quantity, conditioning')
     .in('order_id', orderIds);
 
