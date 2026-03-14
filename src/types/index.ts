@@ -122,6 +122,28 @@ export interface BoxProduction {
   waste?: number;
 }
 
+export interface AuditLog {
+  id: string;
+  created_at: string;
+  actor_user_id?: string | null;
+  actor_email?: string | null;
+  actor_role?: string | null;
+  action: string;
+  entity_type: string;
+  entity_id?: string | null;
+  plan_id?: string | null;
+  store_production_id?: string | null;
+  details: Record<string, unknown>;
+}
+
+export interface AuditLogFilters {
+  actorEmail?: string;
+  action?: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+}
+
 export interface ProductionStats {
   totalProduction: number;
   wastagePercentage: number;
