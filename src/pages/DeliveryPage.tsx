@@ -60,12 +60,12 @@ interface DeliveryProductionPlan {
 }
 
 const deliveryCopy = {
-  detailsTitle: 'D\u00E9tails de la Livraison',
-  subtitle: 'G\u00E9rer les livraisons et suivre les d\u00E9chets',
-  downloadBulletin: 'T\u00E9l\u00E9charger le Bulletin',
-  plannedSuffix: 'pr\u00E9vus',
-  wastePending: 'D\u00E9chets en attente',
-  confirmed: 'Confirm\u00E9',
+  detailsTitle: 'Détails de la Livraison',
+  subtitle: 'Gérer les livraisons et suivre les déchets',
+  downloadBulletin: 'Télécharger le Bulletin',
+  plannedSuffix: 'prévus',
+  wastePending: 'Déchets en attente',
+  confirmed: 'Confirmé',
   dedicatedBulletin: 'Bulletin de livraison d\u00E9di\u00E9 \u00E0 la commande',
 };
 
@@ -525,7 +525,7 @@ const DeliveryPage: React.FC = () => {
     // Add boxes table if there are any boxes
     if (storeDetails.box_productions && storeDetails.box_productions.length > 0) {
       const boxesTableHeaders = [
-        ['BoÃ®te', 'QuantitÃ© PrÃ©vue (unitÃ©)', 'QuantitÃ© ReÃ§ue (unitÃ©)', 'DÃ©chets (unitÃ©)']
+        ['Boîte', 'Quantité Prévue (unitÃ©)', 'Quantités Reçue (unité)', 'Déchets (unité)']
       ];
 
       const boxesTableData = storeDetails.box_productions.slice().sort((a,b)=>a.box_name.localeCompare(b.box_name)).map(box => [
