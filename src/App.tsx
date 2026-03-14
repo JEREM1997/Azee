@@ -12,7 +12,6 @@ const LoginPage = React.lazy(() => import('./pages/LoginPage'));
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage'));
 const ProductionPage = React.lazy(() => import('./pages/ProductionPage'));
 const DeliveryPage = React.lazy(() => import('./pages/DeliveryPage'));
-const OrdersPage = React.lazy(() => import('./pages/OrdersPage'));
 const AdminPage = React.lazy(() => import('./pages/AdminPage'));
 const UsersPage = React.lazy(() => import('./pages/UsersPage'));
 const CreateUserPage = React.lazy(() => import('./pages/CreateUserPage'));
@@ -20,13 +19,13 @@ const StatsPage = React.lazy(() => import('./pages/StatsPage'));
 const PlansPage = React.lazy(() => import('./pages/PlansPage'));
 const AuditPage = React.lazy(() => import('./pages/AuditPage'));
 
-const App: React.FC = () => {
+export default function App() {
   return (
     <ErrorBoundary>
       <Router>
         <AuthProvider>
           <AdminProvider>
-            <div className="min-h-screen">
+            <div className="min-h-screen bg-gray-50">
               <Suspense fallback={<LoadingSpinner fullScreen message="Loading application..." />}>
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
@@ -37,7 +36,6 @@ const App: React.FC = () => {
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/production" element={<ProductionPage />} />
-                      <Route path="/orders" element={<OrdersPage />} />
                       <Route path="/delivery" element={<DeliveryPage />} />
                       <Route path="/admin" element={<AdminPage />} />
                       <Route path="/users" element={<UsersPage />} />
@@ -50,7 +48,7 @@ const App: React.FC = () => {
 
                   {/* 404 route */}
                   <Route path="*" element={
-                    <div className="min-h-screen flex items-center justify-center">
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50">
                       <div className="text-center">
                         <h1 className="text-4xl font-bold text-gray-900">404</h1>
                         <p className="mt-2 text-lg text-gray-600">Page not found</p>
@@ -73,6 +71,4 @@ const App: React.FC = () => {
       </Router>
     </ErrorBoundary>
   );
-};
-
-App;
+}
