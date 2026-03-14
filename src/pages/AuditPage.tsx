@@ -34,6 +34,24 @@ const formatAction = (action: string) => {
   return ACTION_OPTIONS.find((option) => option.value === action)?.label || action;
 };
 
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    if ('message' in error && typeof error.message === 'string') {
+      return error.message;
+    }
+
+    if ('error' in error && typeof error.error === 'string') {
+      return error.error;
+    }
+  }
+
+  return "Erreur lors du chargement de l'audit";
+};
+
 const formatDetails = (log: AuditLog) => {
   const details = log.details || {};
 
@@ -107,7 +125,7 @@ const AuditPage: React.FC = () => {
 
       setLogs(data || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur lors du chargement de l'audit");
+      setError(getErrorMessage(err)); 
     } finally {
       setLoading(false);
     }
