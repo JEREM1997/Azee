@@ -14,6 +14,7 @@ interface DeliveryProductionItem {
   form_id: string;
   form_name: string;
   quantity: number;
+  conditioning?: string | null;
   received?: number;
   waste?: number;
 }
@@ -426,6 +427,9 @@ const DeliveryPage: React.FC = () => {
   const storeDetails = selectedStore 
     ? currentPlan?.store_productions?.find(store => store.id === selectedStore)
     : null;
+  const selectedConditionings = storeDetails
+    ? [...new Set((storeDetails.production_items || []).map(item => item.conditioning).filter(Boolean))]
+    : [];
   const isOrderDelivery = storeDetails?.source_type === 'order';
   const canManageSelectedDelivery = !!storeDetails && !isOrderDelivery && !!(
     currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction
@@ -459,7 +463,7 @@ const DeliveryPage: React.FC = () => {
       headers.push(['Commande', storeDetails.source_order_id]);
     }
     if (storeDetails.company_name) {
-      headers.push(['Societe', storeDetails.company_name]);
+      headers.push(['Société', storeDetails.company_name]); 
     }
     if (storeDetails.customer_name) {
       headers.push(['Client', storeDetails.customer_name]);
@@ -471,9 +475,11 @@ const DeliveryPage: React.FC = () => {
       headers.push(['Traitee par', storeDetails.handledBy]);
     }
     if (storeDetails.deliveredBy) {
-      headers.push(['Livree par', storeDetails.deliveredBy]);
+      headers.push(['Livrée par', storeDetails.deliveredBy]); 
     }
-
+    if (selectedConditionings.length > 0) {
+      headers.push(['Conditionnement', selectedConditionings.join(', ')]);
+    }
      let currentY = 20;
     headers.forEach(([label, value]) => {
       const wrappedValue = doc.splitTextToSize(String(value), 105);
@@ -484,11 +490,12 @@ const DeliveryPage: React.FC = () => {
 
     // Add individual items table
     const itemsTableHeaders = [
-      ['VariÃ©tÃ©', 'QuantitÃ© PrÃ©vue (unitÃ©)', 'QuantitÃ© ReÃ§ue (unitÃ©)', 'DÃ©chets (unitÃ©)']
+     ['Variété', 'Conditionnement', 'Quantité Prévue (unité)', 'Quantité Reçue (unité)', 'Déchets (unité)'] 
     ];
 
     const itemsTableData = storeDetails.production_items?.slice().sort((a,b)=>a.variety_name.localeCompare(b.variety_name)).map(item => [
       item.variety_name,
+      item.conditioning || '-',
       item.quantity.toString(),
       receivedQuantities[item.id]?.toString() || item.received?.toString() || '',
       wasteQuantities[item.id]?.toString() || item.waste?.toString() || ''
@@ -546,7 +553,7 @@ const DeliveryPage: React.FC = () => {
   const handleConfirmDelivery = async () => {
     if (!storeDetails) return;
     if (isOrderDelivery) {
-      setError('La reception d une commande validee reste en lecture seule pour le moment. Le bulletin dedie est disponible.');
+      setError('La réception d’une commande validée reste en lecture seule pour le moment. Le bulletin dédié est disponible.');
       return;
     }
 
@@ -656,7 +663,8 @@ const DeliveryPage: React.FC = () => {
   const handleReportWaste = async () => {
     if (!storeDetails) return;
     if (isOrderDelivery) {
-      setError('Les dechets des commandes validees ne sont pas encore saisis separement. Utilisez le bulletin dedie.');
+    setError('Les déchets des commandes validées ne sont pas encore saisis séparément. Utilisez le bulletin dédié.');
+      return;  
       return;
     }
 
@@ -886,7 +894,7 @@ const DeliveryPage: React.FC = () => {
                     {store.total_quantity} doughnuts prÃ©vus
                     {store.source_type === 'order' && (
                       <div className="text-xs text-blue-500 mt-1">
-                        Bulletin de livraison dedie a la commande
+                        Bulletin de livraison dedié à la commande
                       </div>
                     )}
                     {store.deliverydate && (
@@ -938,7 +946,7 @@ const DeliveryPage: React.FC = () => {
                     )}
                     {storeDetails.company_name && (
                       <p className="text-sm text-gray-600">
-                        <span className="font-medium">Societe:</span> {storeDetails.company_name}
+                       <span className="font-medium">Société:</span> {storeDetails.company_name} 
                       </p>
                     )}
                     {storeDetails.customer_name && (
@@ -948,12 +956,17 @@ const DeliveryPage: React.FC = () => {
                     )}
                     {storeDetails.handledBy && (
                       <p className="text-sm text-gray-600">
-                        <span className="font-medium">Traitee par:</span> {storeDetails.handledBy}
+                      <span className="font-medium">Traitée par:</span> {storeDetails.handledBy}  
                       </p>
                     )}
                     {storeDetails.deliveredBy && (
                       <p className="text-sm text-gray-600">
-                        <span className="font-medium">Livree par:</span> {storeDetails.deliveredBy}
+                       <span className="font-medium">Livrée par:</span> {storeDetails.deliveredBy}
+                      </p>
+                    )}
+                    {selectedConditionings.length > 0 && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Conditionnement:</span> {selectedConditionings.join(', ')} 
                       </p>
                     )}
                     <p className="text-sm text-gray-600">
@@ -985,7 +998,7 @@ const DeliveryPage: React.FC = () => {
                       </div>
                       <div className="ml-3">
                         <p className="text-sm text-blue-700">
-                        Cette ligne provient d une commande validee. Elle garde sa propre date de livraison, son propre bulletin, et elle est consideree comme recue a 100% avec 0 dechet.  
+                         Cette ligne provient d’une commande validée. Elle garde sa propre date de livraison, son propre bulletin, et elle est considérée comme reçue à 100% avec 0 déchet. 
                         </p>
                       </div>
                     </div>
