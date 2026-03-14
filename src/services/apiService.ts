@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { AppErrorHandler } from '../utils/errorHandling';
-import { ProductionPlan, User, Store, DonutForm, DonutVariety, BoxConfiguration } from '../types';
+import { ProductionPlan, User, Store, DonutForm, DonutVariety, BoxConfiguration, AuditLog, AuditLogFilters } from '../types';
 
 interface ApiResponse<T> {
   data: T | null;
@@ -226,6 +226,14 @@ export const apiService = {
       return apiService.invoke('delete-box-configuration', { configId });
     }
   },
+
+  /**
+   * Audit Functions
+   */
+  audit: {
+    async getLogs(filters: AuditLogFilters = {}) {
+      return apiService.invoke<AuditLog[]>('get-audit-logs', filters as unknown as Record<string, unknown>);
+    }
 
   /**
    * Authentication Functions
