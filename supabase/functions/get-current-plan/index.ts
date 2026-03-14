@@ -185,7 +185,7 @@ function mergeApprovedOrdersIntoPlan(plan: any, approvedOrders: any[]) {
 }
 
 // @ts-ignore - Deno global
- Deno.serve(async req => {
+Deno.serve(async req => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -312,7 +312,7 @@ function mergeApprovedOrdersIntoPlan(plan: any, approvedOrders: any[]) {
         0
       );
 
-    if (!mergedPlan.stores.length) {
+      if (!mergedPlan.stores.length) {
         return new Response(JSON.stringify(null), {
           headers: {
             'Content-Type': 'application/json',
@@ -331,11 +331,11 @@ function mergeApprovedOrdersIntoPlan(plan: any, approvedOrders: any[]) {
   } catch (error: any) {
     console.error('[get-current-plan] Edge function error:', error);
     return new Response(
-     JSON.stringify({
+      JSON.stringify({
         error: error?.message || 'Unknown error',
-        details: error?.stack,  
+        details: error?.stack,
       }),
-      { 
+      {
         status: 500,
         headers: {
           'Content-Type': 'application/json',
@@ -344,3 +344,5 @@ function mergeApprovedOrdersIntoPlan(plan: any, approvedOrders: any[]) {
       }
     );
   }
+});
+
