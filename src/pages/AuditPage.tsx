@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+mport React, { useEffect, useState } from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { AuditLog } from '../types';
@@ -107,7 +107,7 @@ const AuditPage: React.FC = () => {
 
       setLogs(data || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur lors du chargement de l’audit');
+      setError(err instanceof Error ? err.message : "Erreur lors du chargement de l'audit");
     } finally {
       setLoading(false);
     }
@@ -220,7 +220,7 @@ const AuditPage: React.FC = () => {
               {!loading && logs.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">
-                    Aucun evenement d’audit pour ces filtres.
+                    Aucun evenement d'audit pour ces filtres.
                   </td>
                 </tr>
               )}
