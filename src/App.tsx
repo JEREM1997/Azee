@@ -18,6 +18,7 @@ const UsersPage = React.lazy(() => import('./pages/UsersPage'));
 const CreateUserPage = React.lazy(() => import('./pages/CreateUserPage'));
 const StatsPage = React.lazy(() => import('./pages/StatsPage'));
 const PlansPage = React.lazy(() => import('./pages/PlansPage'));
+const AuditPage = React.lazy(() => import('./pages/AuditPage'));
 
 const App: React.FC = () => {
   return (
@@ -43,6 +44,7 @@ const App: React.FC = () => {
                       <Route path="/users/create" element={<CreateUserPage />} />
                       <Route path="/stats" element={<StatsPage />} />
                       <Route path="/plans" element={<PlansPage />} />
+                      <Route path="/audit" element={<AuditPage />} />
                     </Route>
                   </Route>
 
@@ -73,4 +75,4 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+App;
