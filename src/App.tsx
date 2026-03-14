@@ -35,6 +35,7 @@ export default function App() {
                   <Route element={<AuthGuard />}>
                     <Route element={<Navbar />}>
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                      <Route path="/order" element={<Navigate to="/orders" replace />} />
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/production" element={<ProductionPage />} />
                       <Route path="/delivery" element={<DeliveryPage />} />
