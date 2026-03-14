@@ -16,6 +16,7 @@ const Navbar: React.FC = () => {
     { name: 'Commandes', href: '/orders', visible: true },
     { name: 'Livraison', href: '/delivery', visible: true },
     { name: 'Statistiques', href: '/stats', visible: isAdmin },
+    { name: 'Audit', href: '/audit', visible: isAdmin },
     { name: 'Utilisateurs', href: '/users', visible: isAdmin },
     { name: 'Admin', href: '/admin', visible: isAdmin },
   ];
