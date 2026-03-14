@@ -96,3 +96,9 @@ export const updateOrderProduction = async (
   });
 };
 
+export const deleteOrder = async (orderId: string): Promise<void> => {
+  await invokeManageOrders<{ id: string; deleted: boolean }>({
+    action: 'delete',
+    orderId,
+  });
+};
