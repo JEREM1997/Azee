@@ -17,7 +17,7 @@ const AuthGuard: React.FC = () => {
   }
 
   // Role-based route protection
-  const adminOnlyRoutes = ['/admin', '/users', '/users/create', '/stats'];
+  const adminOnlyRoutes = ['/admin', '/users', '/users/create', '/stats', '/audit'];
   const productionRoutes = ['/production', '/plans'];
 
   const isAdminRoute = adminOnlyRoutes.some(route => location.pathname.startsWith(route));
