@@ -1,5 +1,6 @@
 // @ts-ignore - Deno environment (npm specifier)
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
+import { summarizeMapQuantities, writeAuditLog } from '../_shared/audit.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -48,6 +49,19 @@ Deno.serve(async (req) => {
       throw new Error('Invalid token');
     }
 
+    const { data: roleRow } = await supabase
+      .from('user_roles')
+      .select('role, store_ids')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    const userRole = roleRow?.role || user.user_metadata?.role;
+    const userStoreIds: string[] = roleRow?.store_ids || user.user_metadata?.store_ids || [];
+
+    if (!userRole) {
+      throw new Error('User role not found');
+    }
+
     // Get the request body
     const { storeProductionId, updates } = await req.json();
 
@@ -55,6 +69,23 @@ Deno.serve(async (req) => {
       throw new Error('Missing required fields');
     }
 
+    const { data: currentStoreProduction, error: currentStoreProductionError } = await supabase
+      .from('store_productions')
+      .select('id, plan_id, store_id, store_name, delivery_confirmed, waste_reported')
+      .eq('id', storeProductionId)
+      .single();
+
+    if (currentStoreProductionError || !currentStoreProduction) {
+      throw new Error('Store production not found');
+    }
+
+    if (
+      userRole === 'store' &&
+      !userStoreIds.includes(currentStoreProduction.store_id)
+    ) {
+      throw new Error('Insufficient permissions for this store');
+    }
+    
     // Update store production status
     const { data: storeProduction, error: updateError } = await supabase
       .from('store_productions')
@@ -164,6 +195,57 @@ Deno.serve(async (req) => {
       }
     }
 
+const receivedItems = summarizeMapQuantities(updates.received as Record<string, unknown> | undefined);
+    const receivedBoxes = summarizeMapQuantities(updates.boxReceived as Record<string, unknown> | undefined);
+    const wasteItems = summarizeMapQuantities(updates.waste as Record<string, unknown> | undefined);
+    const wasteBoxes = summarizeMapQuantities(updates.boxWaste as Record<string, unknown> | undefined);
+
+    const auditAction =
+      updates.waste || updates.boxWaste
+        ? 'delivery.report_waste'
+        : updates.deliveryConfirmed === true
+          ? currentStoreProduction.delivery_confirmed
+            ? 'delivery.update_reception'
+            : 'delivery.confirm_reception'
+          : 'delivery.update';
+
+    await writeAuditLog(
+      supabase,
+      {
+        userId: user.id,
+        email: user.email ?? null,
+        role: userRole,
+      },
+      {
+        action: auditAction,
+        entityType: 'store_production',
+        entityId: currentStoreProduction.id,
+        planId: currentStoreProduction.plan_id,
+        storeProductionId: currentStoreProduction.id,
+        details: {
+          store_id: currentStoreProduction.store_id,
+          store_name: currentStoreProduction.store_name,
+          before: {
+            delivery_confirmed: currentStoreProduction.delivery_confirmed,
+            waste_reported: currentStoreProduction.waste_reported,
+          },
+          after: {
+            delivery_confirmed: storeProduction.delivery_confirmed,
+            waste_reported: storeProduction.waste_reported,
+          },
+          delivery_confirmed_requested: updates.deliveryConfirmed ?? null,
+          received_item_count: receivedItems.count,
+          received_item_total: receivedItems.total,
+          received_box_count: receivedBoxes.count,
+          received_box_total: receivedBoxes.total,
+          waste_item_count: wasteItems.count,
+          waste_item_total: wasteItems.total,
+          waste_box_count: wasteBoxes.count,
+          waste_box_total: wasteBoxes.total,
+        },
+      }
+    );
+    
     return new Response(
       JSON.stringify(storeProduction),
       {
