@@ -1023,8 +1023,8 @@ const DeliveryPage: React.FC = () => {
                       <div className="ml-3">
                         <p className="text-sm text-blue-700">
                           <span className="font-medium">Processus de livraison:</span> 
-                          {!storeDetails.delivery_confirmed && " 1. Confirmez d'abord la rÃ©ception en ajustant les quantitÃ©s reÃ§ues si nÃ©cessaire."}
-                          {storeDetails.delivery_confirmed && !storeDetails.waste_reported && " 2. Vous pouvez maintenant signaler les dÃ©chets pour chaque variÃ©tÃ©."}
+                          {!storeDetails.delivery_confirmed && " 1. Confirmez d'abord la réception en ajustant les quantités reçues si nécessaire."}
+                          {storeDetails.delivery_confirmed && !storeDetails.waste_reported && " 2. Vous pouvez maintenant signaler les déchets pour chaque variété."}
                         </p>
                       </div>
                     </div>
@@ -1033,11 +1033,11 @@ const DeliveryPage: React.FC = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead>
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VariÃ©tÃ©</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variété</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Forme</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">PrÃ©vu (unitÃ©)</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ReÃ§u (unitÃ©)</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">DÃ©chets (unitÃ©)</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Prévu (unité)</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Reçu (unité)</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Déchets (unité)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
