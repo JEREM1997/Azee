@@ -41,9 +41,8 @@ const PlansPage: React.FC = () => {
       let plansData: ProductionPlan[] = [];
 
       if (filterMode === 'all') {
-        // Broad range to effectively fetch all
-        const start = '2025-10-20';
-        const end = '2025-11-06';
+        const start = '2000-01-01';
+        const end = '2100-12-31';
         plansData = await productionService.getProductionPlans(start, end);
       } else if (filterMode === 'last7') {
         // Last 7 days up to today (rolling window)
@@ -565,9 +564,9 @@ const PlansPage: React.FC = () => {
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
           <ul className="divide-y divide-gray-200">
             {plans.map((plan) => (
-              <li key={plan.id}>
+             <li key={plan.id || plan.date}> 
                 <div className={`px-4 py-4 sm:px-6 hover:bg-gray-50 transition-colors duration-200 ${
-                  recentlySavedPlanId === plan.id 
+                 !!plan.id && recentlySavedPlanId === plan.id 
                     ? 'bg-green-50 border-l-4 border-green-400 shadow-md' 
                     : ''
                 }`}>
@@ -575,16 +574,16 @@ const PlansPage: React.FC = () => {
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
                         <Calendar className={`h-6 w-6 ${
-                          recentlySavedPlanId === plan.id ? 'text-green-600' : 'text-krispy-green'
+                         !!plan.id && recentlySavedPlanId === plan.id ? 'text-green-600' : 'text-krispy-green'  
                         }`} />
                       </div>
                       <div className="ml-4">
                         <div className="flex items-center">
                           <p className={`text-sm font-medium truncate ${
-                            recentlySavedPlanId === plan.id ? 'text-green-700' : 'text-krispy-green'
+                            !!plan.id && recentlySavedPlanId === plan.id ? 'text-green-700' : 'text-krispy-green'
                           }`}>
                             {formatDate(plan.date)}
-                            {recentlySavedPlanId === plan.id && (
+                             {!!plan.id && recentlySavedPlanId === plan.id && (
                               <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 animate-pulse">
                                 ✨ Récemment sauvegardé
                               </span>
@@ -623,9 +622,9 @@ const PlansPage: React.FC = () => {
                             </button>
                             <button
                               onClick={() => handleDeletePlan(plan)}
-                              disabled={deleting === plan.id}
+                              disabled={!plan.id || deleting === plan.id}
                               className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Supprimer ce plan de production"
+                              title={plan.id ? 'Supprimer ce plan de production' : 'Enregistrez ce plan avant suppression'}
                             >
                               {deleting === plan.id ? (
                                 <>
