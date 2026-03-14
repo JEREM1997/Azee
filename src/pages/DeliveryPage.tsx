@@ -44,6 +44,8 @@ interface DeliveryStoreProduction {
   customer_name?: string | null;
   company_name?: string | null;
   customer_phone?: string | null;
+  handledBy?: string | null;
+  deliveredBy?: string | null;
   comments?: string | null;
 }
 
@@ -223,6 +225,8 @@ const DeliveryPage: React.FC = () => {
               customer_name: store.customer_name || null,
               company_name: store.company_name || null,
               customer_phone: store.customer_phone || null,
+              handledBy: store.handled_by || store.handledBy || null,
+              deliveredBy: store.delivered_by || store.deliveredBy || null,
               comments: store.comments || null,
             });
           });
@@ -463,10 +467,19 @@ const DeliveryPage: React.FC = () => {
     if (storeDetails.customer_phone) {
       headers.push(['Telephone', storeDetails.customer_phone]);
     }
+    if (storeDetails.handledBy) {
+      headers.push(['Traitee par', storeDetails.handledBy]);
+    }
+    if (storeDetails.deliveredBy) {
+      headers.push(['Livree par', storeDetails.deliveredBy]);
+    }
 
-    headers.forEach((row, i) => {
-      doc.cell(14, 20 + (i * 10), 80, 10, row[0], i + 1, 'left');
-      doc.cell(94, 20 + (i * 10), 80, 10, row[1], i + 1, 'left');
+     let currentY = 20;
+    headers.forEach(([label, value]) => {
+      const wrappedValue = doc.splitTextToSize(String(value), 105);
+      doc.text(`${label}:`, 20, currentY);
+      doc.text(wrappedValue, 70, currentY);
+      currentY += Math.max(wrappedValue.length, 1) * 8;
     });
 
     // Add individual items table
@@ -482,7 +495,7 @@ const DeliveryPage: React.FC = () => {
     ]) || [];
 
     (doc as any).autoTable({
-      startY: 20 + (headers.length * 10) + 10,
+      startY: currentY + 6,
       head: itemsTableHeaders,
       body: itemsTableData,
       theme: 'grid',
@@ -933,6 +946,16 @@ const DeliveryPage: React.FC = () => {
                         <span className="font-medium">Client:</span> {storeDetails.customer_name}
                       </p>
                     )}
+                    {storeDetails.handledBy && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Traitee par:</span> {storeDetails.handledBy}
+                      </p>
+                    )}
+                    {storeDetails.deliveredBy && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Livree par:</span> {storeDetails.deliveredBy}
+                      </p>
+                    )}
                     <p className="text-sm text-gray-600">
                       <span className="font-medium">Date de livraison:</span> {
                         storeDetails.deliverydate ? formatDateSafe(storeDetails.deliverydate) : 'Non dÃ©finie'
@@ -962,7 +985,7 @@ const DeliveryPage: React.FC = () => {
                       </div>
                       <div className="ml-3">
                         <p className="text-sm text-blue-700">
-                          Cette ligne provient d une commande validee. Elle garde sa propre date de livraison et son propre bulletin.
+                        Cette ligne provient d une commande validee. Elle garde sa propre date de livraison, son propre bulletin, et elle est consideree comme recue a 100% avec 0 dechet.  
                         </p>
                       </div>
                     </div>
@@ -1097,7 +1120,7 @@ const DeliveryPage: React.FC = () => {
                               } doughnuts`}
                             />
                           ) : isOrderDelivery ? (
-                            <span className="text-gray-400 text-sm">Bulletin commande</span>
+                            item.waste ?? 0
                           ) : !storeDetails.delivery_confirmed ? (
                             <span className="text-gray-400 text-sm">Confirmez d'abord la rÃ©ception</span>
                           ) : (
@@ -1224,7 +1247,7 @@ const DeliveryPage: React.FC = () => {
                                   } boÃ®tes`}
                                 />
                               ) : isOrderDelivery ? (
-                                <span className="text-gray-400 text-sm">Bulletin commande</span>
+                                box.waste ?? 0
                               ) : !storeDetails.delivery_confirmed ? (
                                 <span className="text-gray-400 text-sm">Confirmez d'abord la rÃ©ception</span>
                               ) : (
