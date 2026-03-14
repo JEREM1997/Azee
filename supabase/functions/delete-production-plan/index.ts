@@ -4,7 +4,51 @@
 // This is a Deno edge function - TypeScript errors are expected in Node.js environment
 
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
-import { writeAuditLog } from '../_shared/audit.ts';
+
+interface AuditActor {
+  userId?: string | null;
+  email?: string | null;
+  role?: string | null;
+}
+
+interface AuditEntry {
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  planId?: string | null;
+  storeProductionId?: string | null;
+  details?: Record<string, unknown>;
+}
+
+async function writeAuditLog(
+  supabaseClient: any,
+  actor: AuditActor,
+  entry: AuditEntry
+) {
+  try {
+    const { error } = await supabaseClient.from('audit_logs').insert({
+      actor_user_id: actor.userId ?? null,
+      actor_email: actor.email ?? null,
+      actor_role: actor.role ?? null,
+      action: entry.action,
+      entity_type: entry.entityType,
+      entity_id: entry.entityId ?? null,
+      plan_id: entry.planId ?? null,
+      store_production_id: entry.storeProductionId ?? null,
+      details: entry.details ?? {},
+    });
+
+    if (error) {
+      console.error('[audit] failed to write log', {
+        error,
+        action: entry.action,
+        entityType: entry.entityType,
+      });
+    }
+  } catch (error) {
+    console.error('[audit] unexpected write failure', error);
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
