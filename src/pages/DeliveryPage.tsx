@@ -1145,7 +1145,7 @@ const DeliveryPage: React.FC = () => {
                           ) : isOrderDelivery ? (
                             item.waste ?? 0
                           ) : !storeDetails.delivery_confirmed ? (
-                            <span className="text-gray-400 text-sm">Confirmez d'abord la rÃ©ception</span>
+                            <span className="text-gray-400 text-sm">Confirmez d'abord la réception</span>
                           ) : (
                             wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : (item.waste !== null && item.waste !== undefined ? item.waste : 0)
                           )}
