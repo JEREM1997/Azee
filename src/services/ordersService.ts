@@ -34,136 +34,53 @@ export const getSuggestedProductionDate = (deliveryDate: string) => {
   return productionDate.toISOString().split('T')[0];
 };
 
-const mapOrderRowToOrder = (row: any, itemsByOrder: Record<string, OrderLineItem[]>): Order => ({
-  id: row.id,
-  storeId: row.store_id,
-  storeName: row.store_name ?? undefined,
-  customerName: row.customer_name,
-  customerPhone: row.customer_phone,
-  companyName: row.company_name ?? undefined,
-  deliveryAddress: row.delivery_address ?? undefined,
-  billingAddress: row.billing_address ?? undefined,
-  deliveryDate: row.delivery_date,
-  productionDate: row.production_date ?? getSuggestedProductionDate(row.delivery_date),
-  productionApproved: !!row.production_approved,
-  orderType: row.order_type,
-  paymentStatus: row.payment_status,
-  handledBy: row.handled_by,
-  deliveredBy: row.delivered_by ?? undefined,
-  conditioning: row.conditioning,
-  comments: row.comments ?? undefined,
-  items: itemsByOrder[row.id] || [],
-  createdAt: row.created_at,
-});
+const toFunctionError = async (error: any): Promise<Error> => {
+  const context = error?.context;
 
-export const fetchOrders = async (options: FetchOrdersOptions = {}): Promise<Order[]> => {
-  try {
-    const { role, storeIds = [] } = options;
+  if (context && typeof context.json === 'function') {
+    try {
+      const payload = await context.json();
+      if (payload?.error) {
+        return new Error(payload.error);
+      }
+    } catch (_) {}
+  }
 
-    if (role === 'store' && storeIds.length === 0) {
-      return [];
-    }
+  if (context && typeof context.text === 'function') {
+    try {
+      const message = await context.text();
+      if (message) {
+        return new Error(message);
+      }
+    } catch (_) {}
+  }
 
-    let ordersQuery = supabase
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false });
+  if (error instanceof Error) {
+    return error;
+  }
 
-    if (role === 'store') {
-      ordersQuery = ordersQuery.in('store_id', storeIds);
-    }
+  return new Error('Orders function failed');
+};
 
-    const { data: ordersData, error: ordersError } = await ordersQuery;
+const invokeManageOrders = async <T>(body: Record<string, unknown>): Promise<T> => {
+  const { data, error } = await supabase.functions.invoke<T>('manage-orders', { body });
 
-    if (ordersError) throw ordersError;
-    if (!ordersData?.length) return [];
+  if (error) {
+    throw await toFunctionError(error);
+  }
 
-    const orderIds = ordersData.map(order => order.id);
+  return data as T;
+};
 
-    const { data: itemsData, error: itemsError } = await supabase
-      .from('order_items')
-      .select('*')
-      .in('order_id', orderIds);
-
-    if (itemsError) throw itemsError;
-
-    const itemsByOrder = (itemsData || []).reduce<Record<string, OrderLineItem[]>>((acc, item) => {
-      if (!acc[item.order_id]) acc[item.order_id] = [];
-      acc[item.order_id].push({
-        varietyId: item.variety_id,
-        quantity: item.quantity,
-        conditioning: item.conditioning,
-      });
-      return acc;
-    }, {});
-
-    return ordersData.map(order => mapOrderRowToOrder(order, itemsByOrder));
-  } catch (error: any) {
-    const missingTable =
-      error?.code === '42P01' ||
-      error?.message?.includes('relation') ||
-      error?.message?.includes('does not exist');
-    
-    if (missingTable) {
-      console.warn('[fetchOrders] Supabase tables missing, returning empty order list');
-      return [];
-    }
-
-    console.error('[fetchOrders] Error while loading orders', error);
-    throw error;
-   } 
+export const fetchOrders = async (_options: FetchOrdersOptions = {}): Promise<Order[]> => {
+  return invokeManageOrders<Order[]>({ action: 'list' });
 };
 
 export const createOrder = async (payload: CreateOrderPayload): Promise<Order> => {
-  const productionDate = payload.productionDate?.trim() || getSuggestedProductionDate(payload.deliveryDate);
-  
-  const { data: orderData, error: orderError } = await supabase
-    .from('orders')
-    .insert({
-      store_id: payload.storeId,
-      store_name: payload.storeName,
-      customer_name: payload.customerName,
-      customer_phone: payload.customerPhone,
-      company_name: payload.companyName,
-      delivery_address: payload.deliveryAddress,
-      billing_address: payload.billingAddress,
-      delivery_date: payload.deliveryDate,
-      production_date: productionDate,
-      production_approved: payload.productionApproved,
-      order_type: payload.orderType,
-      payment_status: payload.paymentStatus,
-      handled_by: payload.handledBy,
-      delivered_by: payload.deliveredBy,
-      conditioning: payload.conditioning,
-      comments: payload.comments,
-    })
-    .select()
-    .single();
-
-  if (orderError) throw orderError;
-  if (!orderData) throw new Error('Order insertion failed');
-
-  const { error: itemsError } = await supabase.from('order_items').insert(
-    payload.items.map(item => ({
-      order_id: orderData.id,
-      variety_id: item.varietyId,
-      quantity: item.quantity,
-      conditioning: item.conditioning,
-    }))
-  );
-
-  if (itemsError) {
-    await supabase.from('orders').delete().eq('id', orderData.id);
-    throw itemsError;
-  }
-
-  return mapOrderRowToOrder(
-    {
-      ...orderData,
-      production_date: productionDate,
-    },
-    { [orderData.id]: payload.items }
-  );
+  return invokeManageOrders<Order>({
+    action: 'create',
+    ...payload,
+  });
 };
 
 export const updateOrderProduction = async (
@@ -171,31 +88,11 @@ export const updateOrderProduction = async (
   productionDate: string,
   productionApproved: boolean
 ): Promise<Order> => {
-  const { data, error } = await supabase
-    .from('orders')
-    .update({
-      production_date: productionDate,
-      production_approved: productionApproved,
-    })
-    .eq('id', orderId)
-    .select()
-    .single();
-
-  if (error) throw error;
-  if (!data) throw new Error('Order update failed');
-
-  const { data: itemsData, error: itemsError } = await supabase
-    .from('order_items')
-    .select('*')
-    .eq('order_id', orderId);
-
-  if (itemsError) throw itemsError;
-
-  const items = (itemsData || []).map(item => ({
-    varietyId: item.variety_id,
-    quantity: item.quantity,
-    conditioning: item.conditioning,
-  }));
-
-  return mapOrderRowToOrder(data, { [orderId]: items });
+  return invokeManageOrders<Order>({
+    action: 'updateProduction',
+    orderId,
+    productionDate,
+    productionApproved,
+  });
 };
+
