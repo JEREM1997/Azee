@@ -234,6 +234,8 @@ export const apiService = {
     async getLogs(filters: AuditLogFilters = {}) {
       return apiService.invoke<AuditLog[]>('get-audit-logs', filters as unknown as Record<string, unknown>);
     }
+  }
+};
 
   /**
    * Authentication Functions
