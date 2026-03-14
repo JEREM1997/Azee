@@ -39,16 +39,36 @@ Deno.serve(async (req) => {
       throw new Error('Invalid token');
     }
 
-    const { data: roleRow } = await supabaseClient
+    const { data: roleRow, error: roleError } = await supabaseClient
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    const userRole = roleRow?.role || user.user_metadata?.role;
+    if (roleError) {
+      throw new Error(`Unable to read user role: ${roleError.message}`);
+    }
+
+    const userRole =
+      roleRow?.role ||
+      user.user_metadata?.role ||
+      user.app_metadata?.role;
+
+    if (!userRole) {
+      return new Response(
+        JSON.stringify({
+          error: 'User role not found. The account is authenticated, but no admin role is configured in user_roles or metadata.',
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     if (userRole !== 'admin') {
       return new Response(
-        JSON.stringify({ error: 'Insufficient permissions' }),
+        JSON.stringify({ error: `Insufficient permissions. Audit access requires admin role, current role is "${userRole}".` }),
         {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -86,6 +106,9 @@ Deno.serve(async (req) => {
 
     const { data, error } = await query;
     if (error) {
+    if (error.code === '42P01') {
+        throw new Error('Database error: audit_logs table is missing. The audit migration has likely not been applied on Supabase yet.');
+      }
       throw new Error(`Database error: ${error.message}`);
     }
 
