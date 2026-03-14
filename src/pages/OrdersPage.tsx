@@ -4,6 +4,7 @@ import { useAdmin } from '../context/AdminContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import {
   createOrder,
+  deleteOrder,
   fetchOrders,
   updateOrderProduction,
 } from '../services/ordersService';
@@ -72,7 +73,7 @@ const buildInitialForm = (storeId: string, catalogue: DonutVariety[]): OrderForm
 };
 
 const OrdersPage: React.FC = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isProduction } = useAuth();
   const { stores, varieties, loading: adminLoading, error: adminError, refresh } = useAdmin();
   const [form, setForm] = useState<OrderFormState | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -84,7 +85,7 @@ const OrdersPage: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState('');
 
   const isStoreUser = user?.role === 'store';
-
+  const canManageOrders = isAdmin || isProduction;
   const catalogue = useMemo(
     () => varieties.filter(variety => variety.isActive && variety.isOrderable !== false),
     [varieties]
@@ -230,6 +231,18 @@ const OrdersPage: React.FC = () => {
     setOrders(prev => prev.map(order => (order.id === orderId ? { ...order, productionDate: value } : order)));
   };
 
+  const canDeleteOrder = (order: Order) => {
+    if (canManageOrders) {
+      return true;
+    }
+
+    if (!isStoreUser) {
+      return false;
+    }
+
+    return !order.productionApproved && !!user?.storeIds?.includes(order.storeId);
+  };
+
   const saveAdminDate = async (orderId: string) => {
     const order = orders.find(item => item.id === orderId);
     if (!order?.productionDate) {
@@ -267,6 +280,35 @@ const OrdersPage: React.FC = () => {
     } catch (error) {
       console.error('Error while approving order:', error);
       setOrdersError(error instanceof Error ? error.message : "Impossible de valider la commande.");
+    } finally {
+      setSavingOrderId(null);
+    }
+  };
+
+  const handleDeleteOrder = async (orderId: string) => {
+    const order = orders.find(item => item.id === orderId);
+    if (!order) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Supprimer la commande de ${order.customerName} pour ${order.storeName || order.storeId} ?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setSavingOrderId(orderId);
+      setOrdersError(null);
+      setSuccessMessage('');
+      await deleteOrder(orderId);
+      setOrders(prev => prev.filter(item => item.id !== orderId));
+      setSuccessMessage('Commande supprimee.');
+    } catch (error) {
+      console.error('Error while deleting order:', error);
+      setOrdersError(error instanceof Error ? error.message : "Impossible de supprimer la commande.");
     } finally {
       setSavingOrderId(null);
     }
@@ -551,7 +593,7 @@ const OrdersPage: React.FC = () => {
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-900">
                       <div>Livraison : {order.deliveryDate}</div>
-                      {isAdmin && (
+                      {canManageOrders && (
                         <div className="mt-2 space-y-2">
                           <div className="text-xs text-gray-500">Date de production admin</div>
                           {order.productionApproved ? (
@@ -601,22 +643,35 @@ const OrdersPage: React.FC = () => {
                       </ul>
                     </td>
                     <td className="px-4 py-4 text-right text-sm">
-                      {isAdmin ? (
-                        order.productionApproved ? (
-                          <span className="text-green-700 text-xs font-medium">Validation terminee</span>
+                      <div className="flex flex-col items-end gap-2">
+                        {canManageOrders ? (
+                          order.productionApproved ? (
+                            <span className="text-green-700 text-xs font-medium">Validation terminee</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => approveOrder(order.id)}
+                              disabled={savingOrderId === order.id}
+                              className="inline-flex items-center px-3 py-2 text-xs font-medium rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                            >
+                              {savingOrderId === order.id ? 'Validation...' : 'Valider et ajouter au plan'}
+                            </button>
+                          )
                         ) : (
+                          <span className="text-gray-500 text-xs">Validation reservee a l'admin</span>
+                        )}
+
+                        {canDeleteOrder(order) && (
                           <button
                             type="button"
-                            onClick={() => approveOrder(order.id)}
+                            onClick={() => handleDeleteOrder(order.id)}
                             disabled={savingOrderId === order.id}
                             className="inline-flex items-center px-3 py-2 text-xs font-medium rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
                           >
-                            {savingOrderId === order.id ? 'Validation...' : 'Valider et ajouter au plan'}
+                           {savingOrderId === order.id ? 'Suppression...' : 'Supprimer'} 
                           </button>
-                        )
-                      ) : (
-                        <span className="text-gray-500 text-xs">Validation reservee a l'admin</span>
-                      )}
+                         )}
+                      </div>
                     </td>
                   </tr>
                 ))}
