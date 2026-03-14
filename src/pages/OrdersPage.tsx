@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import {
-createOrder,
+  createOrder,
   fetchOrders,
   updateOrderProduction,
 } from '../services/ordersService';
@@ -27,9 +27,9 @@ interface OrderFormState {
 }
 
 const paymentStatusLabels: Record<OrderPaymentStatus, string> = {
-  deja_paye: 'Déjà payé',
-  a_facturer: 'À facturer',
-  a_la_livraison: 'À la livraison',
+  deja_paye: 'Deja paye',
+  a_facturer: 'A facturer',
+  a_la_livraison: 'A la livraison',
 };
 
 const orderTypeLabels: Record<OrderType, string> = {
@@ -37,7 +37,7 @@ const orderTypeLabels: Record<OrderType, string> = {
   b2b: 'B2B',
 };
 
-const conditioningOptions = ['Boîte 6', 'Boîte 12'];
+const conditioningOptions = ['Boite 6', 'Boite 12'];
 
 const buildInitialForm = (storeId: string, catalogue: DonutVariety[]): OrderFormState => {
   const defaultDelivery = new Date();
@@ -60,7 +60,13 @@ const buildInitialForm = (storeId: string, catalogue: DonutVariety[]): OrderForm
     deliveredBy: '',
     comments: '',
     items: firstVariety
-     [{ varietyId: firstVariety.id, quantity: 12, conditioning: conditioningOptions[1] }]
+      ? [
+          {
+            varietyId: firstVariety.id,
+            quantity: 12,
+            conditioning: conditioningOptions[1],
+          },
+        ]
       : [],
   };
 };
@@ -93,7 +99,7 @@ const OrdersPage: React.FC = () => {
     return activeStores;
   }, [isStoreUser, stores, user?.storeIds]);
 
- const preferredStoreId = useMemo(() => {
+  const preferredStoreId = useMemo(() => {
     if (isStoreUser && user?.storeIds?.length) {
       const assignedStore = storeOptions.find(store => user.storeIds?.includes(store.id));
       if (assignedStore) return assignedStore.id;
@@ -110,15 +116,15 @@ const OrdersPage: React.FC = () => {
     setForm(buildInitialForm(preferredStoreId, catalogue));
   }, [adminLoading, catalogue, preferredStoreId, storeOptions]);
 
-   const loadOrders = useCallback(async () => {
+  const loadOrders = useCallback(async () => {
     try {
       setOrdersLoading(true);
       setOrdersError(null);
       const data = await fetchOrders({ role: user?.role, storeIds: user?.storeIds });
       setOrders(data);
-     } catch (error) {
+    } catch (error) {
       console.error('Error while loading orders:', error);
-      setOrdersError('Impossible de charger les commandes depuis Supabase.'); 
+      setOrdersError('Impossible de charger les commandes depuis Supabase.');
     } finally {
       setOrdersLoading(false);
     }
@@ -129,10 +135,10 @@ const OrdersPage: React.FC = () => {
       loadOrders();
     }
   }, [adminLoading, loadOrders]);
-  
+
   const handleFormChange = (field: keyof OrderFormState, value: string) => {
     if (!form) return;
-   setForm(prev => (prev ? { ...prev, [field]: value } : prev)); 
+    setForm(prev => (prev ? { ...prev, [field]: value } : prev));
   };
 
   const handleItemChange = (index: number, field: keyof OrderLineItem, value: string | number) => {
@@ -146,7 +152,7 @@ const OrdersPage: React.FC = () => {
   };
 
   const handleAddItem = () => {
-   if (!form || !catalogue.length) return;
+    if (!form || !catalogue.length) return;
     setForm(prev => {
       if (!prev) return prev;
       return {
@@ -156,12 +162,12 @@ const OrdersPage: React.FC = () => {
           { varietyId: catalogue[0].id, quantity: 6, conditioning: prev.conditioning || conditioningOptions[0] },
         ],
       };
-    });  
+    });
   };
 
   const handleRemoveItem = (index: number) => {
     if (!form) return;
-   setForm(prev => (prev ? { ...prev, items: prev.items.filter((_, itemIndex) => itemIndex !== index) } : prev)); 
+    setForm(prev => (prev ? { ...prev, items: prev.items.filter((_, itemIndex) => itemIndex !== index) } : prev));
   };
 
   const validateForm = () => {
@@ -169,7 +175,7 @@ const OrdersPage: React.FC = () => {
     if (!form) return ['Le formulaire ne peut pas etre charge.'];
     if (!form.storeId) errors.push('Selectionnez un magasin.');
     if (!form.customerName.trim()) errors.push('Le nom du client est requis.');
-    if (!form.customerPhone.trim()) errors.push('Le numéro de téléphone est requis.');
+    if (!form.customerPhone.trim()) errors.push('Le numero de telephone est requis.');
     if (!form.deliveryDate) errors.push('La date de livraison est requise.');
     if (!form.items.length) errors.push('Ajoutez au moins une variete.');
     if (form.items.some(item => item.quantity <= 0)) errors.push('Chaque ligne doit avoir une quantite positive.');
@@ -179,7 +185,7 @@ const OrdersPage: React.FC = () => {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!form || submitting) return;
-    
+
     const errors = validateForm();
     setFormErrors(errors);
     setSuccessMessage('');
@@ -217,7 +223,7 @@ const OrdersPage: React.FC = () => {
       setFormErrors(["Impossible d'enregistrer la commande dans Supabase."]);
     } finally {
       setSubmitting(false);
-    }   
+    }
   };
 
   const handleProductionFieldChange = (orderId: string, value: string) => {
@@ -233,13 +239,13 @@ const OrdersPage: React.FC = () => {
 
     try {
       setSavingOrderId(orderId);
-     setOrdersError(null);
+      setOrdersError(null);
       const updated = await updateOrderProduction(orderId, order.productionDate, order.productionApproved);
       setOrders(prev => prev.map(item => (item.id === orderId ? updated : item)));
       setSuccessMessage('Date de production enregistree.');
     } catch (error) {
       console.error('Error while saving order date:', error);
-      setOrdersError("Impossible d'enregistrer la date de production."); 
+      setOrdersError("Impossible d'enregistrer la date de production.");
     } finally {
       setSavingOrderId(null);
     }
@@ -267,11 +273,11 @@ const OrdersPage: React.FC = () => {
   };
 
   const isFormReady = !!form && catalogue.length > 0 && storeOptions.length > 0;
-  
+
   if (adminLoading) {
     return (
       <div className="bg-white shadow rounded-lg p-6 border border-gray-100">
-       <LoadingSpinner message="Chargement du catalogue..." /> 
+        <LoadingSpinner message="Chargement du catalogue..." />
       </div>
     );
   }
@@ -282,15 +288,15 @@ const OrdersPage: React.FC = () => {
         <div className="flex items-start justify-between flex-wrap gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Commandes magasin</h1>
-           <p className="text-gray-600">Le magasin saisit seulement la livraison. La production est fixee par un admin.</p>
+            <p className="text-gray-600">Le magasin saisit seulement la livraison. La production est fixee par un admin.</p>
           </div>
           <div className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 text-sm">
-            Validation admin obligatoire avant apparition dans le plan 
+            Validation admin obligatoire avant apparition dans le plan
           </div>
         </div>
 
         {adminError && (
-         <div className="rounded-md bg-red-50 p-4 mb-4 text-sm text-red-700">
+          <div className="rounded-md bg-red-50 p-4 mb-4 text-sm text-red-700">
             <div className="flex items-center gap-2">
               <span className="font-semibold">Erreur :</span>
               <span>{adminError}</span>
@@ -302,15 +308,15 @@ const OrdersPage: React.FC = () => {
         )}
 
         {!isFormReady ? (
-           <div className="rounded-md bg-yellow-50 p-4 text-sm text-yellow-800">
+          <div className="rounded-md bg-yellow-50 p-4 text-sm text-yellow-800">
             Catalogue ou magasins indisponibles pour ce compte.
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div>
-                 <label className="block text-sm font-medium text-gray-700">Magasin demandeur</label>
+                  <label className="block text-sm font-medium text-gray-700">Magasin demandeur</label>
                   <select
                     value={form.storeId}
                     onChange={event => handleFormChange('storeId', event.target.value)}
@@ -324,7 +330,7 @@ const OrdersPage: React.FC = () => {
                     ))}
                   </select>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">  
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <input
                     type="text"
                     value={form.customerName}
@@ -340,27 +346,27 @@ const OrdersPage: React.FC = () => {
                     placeholder="Telephone"
                   />
                 </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <select
                     value={form.orderType}
                     onChange={event => handleFormChange('orderType', event.target.value as OrderType)}
                     className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
                   >
                     {Object.entries(orderTypeLabels).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option> 
+                      <option key={key} value={key}>{label}</option>
                     ))}
                   </select>
                   <select
                     value={form.paymentStatus}
-                  onChange={event => handleFormChange('paymentStatus', event.target.value as OrderPaymentStatus)}
-                    className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"  
+                    onChange={event => handleFormChange('paymentStatus', event.target.value as OrderPaymentStatus)}
+                    className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
                   >
                     {Object.entries(paymentStatusLabels).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option> 
+                      <option key={key} value={key}>{label}</option>
                     ))}
                   </select>
                 </div>
-              {form.orderType === 'b2b' && (
+                {form.orderType === 'b2b' && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <input
                       type="text"
@@ -369,7 +375,7 @@ const OrdersPage: React.FC = () => {
                       className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
                       placeholder="Societe"
                     />
-                   <input
+                    <input
                       type="text"
                       value={form.billingAddress}
                       onChange={event => handleFormChange('billingAddress', event.target.value)}
@@ -402,7 +408,7 @@ const OrdersPage: React.FC = () => {
                     className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
                   >
                     {conditioningOptions.map(option => (
-                     <option key={option} value={option}>{option}</option>  
+                      <option key={option} value={option}>{option}</option>
                     ))}
                   </select>
                   <input
@@ -413,7 +419,7 @@ const OrdersPage: React.FC = () => {
                     placeholder="Commentaire"
                   />
                 </div>
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <input
                     type="text"
                     value={form.handledBy}
@@ -432,7 +438,7 @@ const OrdersPage: React.FC = () => {
               </div>
             </div>
 
-          <div className="space-y-3">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Varietes commandees</h2>
@@ -442,8 +448,8 @@ const OrdersPage: React.FC = () => {
                   Ajouter une ligne
                 </button>
               </div>
-              
-            {form.items.map((item, index) => (
+
+              {form.items.map((item, index) => (
                 <div key={`${item.varietyId}-${index}`} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-gray-50 border border-gray-100 rounded-lg p-4">
                   <div className="md:col-span-5">
                     <select
@@ -487,7 +493,7 @@ const OrdersPage: React.FC = () => {
               ))}
             </div>
 
-          {formErrors.length > 0 && (
+            {formErrors.length > 0 && (
               <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
                 <ul className="list-disc list-inside space-y-1">
                   {formErrors.map(error => <li key={error}>{error}</li>)}
@@ -495,19 +501,19 @@ const OrdersPage: React.FC = () => {
               </div>
             )}
 
-          {successMessage && <div className="rounded-md bg-green-50 p-4 text-sm text-green-700">{successMessage}</div>}
+            {successMessage && <div className="rounded-md bg-green-50 p-4 text-sm text-green-700">{successMessage}</div>}
 
-         <div className="flex justify-end">
+            <div className="flex justify-end">
               <button type="submit" disabled={submitting} className="px-6 py-3 text-sm font-semibold rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark disabled:opacity-60">
                 {submitting ? 'Enregistrement...' : 'Enregistrer la commande'}
               </button>
             </div>
-          </form> 
+          </form>
         )}
       </div>
 
       <div className="bg-white shadow rounded-lg p-6 border border-gray-100">
-       <div className="mb-4">
+        <div className="mb-4">
           <h2 className="text-xl font-semibold text-gray-900">Commandes</h2>
           <p className="text-sm text-gray-600">Les magasins ne voient que leurs propres commandes.</p>
         </div>
@@ -517,7 +523,7 @@ const OrdersPage: React.FC = () => {
         {ordersLoading ? (
           <LoadingSpinner message="Chargement des commandes..." />
         ) : orders.length === 0 ? (
-          <div className="text-sm text-gray-600">Aucune commande pour le moment.</div> 
+          <div className="text-sm text-gray-600">Aucune commande pour le moment.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -546,7 +552,7 @@ const OrdersPage: React.FC = () => {
                     <td className="px-4 py-4 text-sm text-gray-900">
                       <div>Livraison : {order.deliveryDate}</div>
                       {isAdmin && (
-                       <div className="mt-2 space-y-2">
+                        <div className="mt-2 space-y-2">
                           <div className="text-xs text-gray-500">Date de production admin</div>
                           {order.productionApproved ? (
                             <div className="text-sm text-gray-700">{order.productionDate}</div>
@@ -568,7 +574,7 @@ const OrdersPage: React.FC = () => {
                               </button>
                             </>
                           )}
-                        </div>  
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-900">
@@ -577,14 +583,14 @@ const OrdersPage: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-900">
-                     <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium border ${order.productionApproved ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium border ${order.productionApproved ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
                         {order.productionApproved ? 'Validee par admin' : 'En attente de validation'}
                       </span>
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-900">
                       <ul className="space-y-1">
                         {order.items.map(item => {
-                          const variety = catalogue.find(entry => entry.id === item.varietyId); 
+                          const variety = catalogue.find(entry => entry.id === item.varietyId);
                           return (
                             <li key={`${order.id}-${item.varietyId}`} className="flex flex-col">
                               <span className="font-medium">{variety?.name || item.varietyId}</span>
@@ -595,7 +601,7 @@ const OrdersPage: React.FC = () => {
                       </ul>
                     </td>
                     <td className="px-4 py-4 text-right text-sm">
-                    {isAdmin ? (
+                      {isAdmin ? (
                         order.productionApproved ? (
                           <span className="text-green-700 text-xs font-medium">Validation terminee</span>
                         ) : (
