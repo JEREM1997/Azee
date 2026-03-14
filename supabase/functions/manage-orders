@@ -1,0 +1,297 @@
+import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+const isMissingTableError = (error: any) =>
+  error?.code === '42P01' || error?.message?.includes('relation') || error?.message?.includes('does not exist');
+
+const normalizeStoreIds = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0) : [];
+
+const getSuggestedProductionDate = (deliveryDate: string) => {
+  if (!deliveryDate) return '';
+
+  const productionDate = new Date(deliveryDate);
+  productionDate.setDate(productionDate.getDate() - 1);
+  return productionDate.toISOString().split('T')[0];
+};
+
+const mapOrderRowToOrder = (row: any, itemsByOrder: Record<string, any[]>) => ({
+  id: row.id,
+  storeId: row.store_id,
+  storeName: row.store_name ?? undefined,
+  customerName: row.customer_name,
+  customerPhone: row.customer_phone,
+  companyName: row.company_name ?? undefined,
+  deliveryAddress: row.delivery_address ?? undefined,
+  billingAddress: row.billing_address ?? undefined,
+  deliveryDate: row.delivery_date,
+  productionDate: row.production_date ?? getSuggestedProductionDate(row.delivery_date),
+  productionApproved: !!row.production_approved,
+  orderType: row.order_type,
+  paymentStatus: row.payment_status,
+  handledBy: row.handled_by,
+  deliveredBy: row.delivered_by ?? undefined,
+  conditioning: row.conditioning,
+  comments: row.comments ?? undefined,
+  items: itemsByOrder[row.id] || [],
+  createdAt: row.created_at,
+});
+
+async function loadOrdersWithItems(supabaseClient: any, ordersQuery: any) {
+  const { data: ordersData, error: ordersError } = await ordersQuery;
+  if (ordersError) {
+    throw new Error(`Orders query failed: ${ordersError.message}`);
+  }
+
+  if (!ordersData?.length) {
+    return [];
+  }
+
+  const orderIds = ordersData.map((order: any) => order.id);
+  const { data: itemsData, error: itemsError } = await supabaseClient
+    .from('order_items')
+    .select('*')
+    .in('order_id', orderIds);
+
+  if (itemsError) {
+    throw new Error(`Order items query failed: ${itemsError.message}`);
+  }
+
+  const itemsByOrder = (itemsData || []).reduce<Record<string, any[]>>((acc, item) => {
+    if (!acc[item.order_id]) {
+      acc[item.order_id] = [];
+    }
+
+    acc[item.order_id].push({
+      varietyId: item.variety_id,
+      quantity: item.quantity,
+      conditioning: item.conditioning,
+    });
+    return acc;
+  }, {});
+
+  return ordersData.map((order: any) => mapOrderRowToOrder(order, itemsByOrder));
+}
+
+Deno.serve(async req => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error('Missing environment variables');
+    }
+
+    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('Missing authorization header');
+    }
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseClient.auth.getUser(authHeader.replace('Bearer ', ''));
+
+    if (userError || !user) {
+      throw new Error('Invalid token');
+    }
+
+    const requestBody = await req.json().catch(() => ({}));
+    const action = requestBody?.action;
+
+    const { data: roleRow, error: roleError } = await supabaseClient
+      .from('user_roles')
+      .select('role, store_ids')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (roleError && !isMissingTableError(roleError)) {
+      throw new Error(`Unable to read user role: ${roleError.message}`);
+    }
+
+    const userRole = roleRow?.role || user.user_metadata?.role || user.app_metadata?.role;
+    const storeIds = normalizeStoreIds(
+      roleRow?.store_ids ?? user.user_metadata?.store_ids ?? user.app_metadata?.store_ids
+    );
+
+    if (!userRole) {
+      throw new Error('User role not found');
+    }
+
+    if (action === 'list') {
+      let ordersQuery = supabaseClient
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (userRole === 'store') {
+        if (!storeIds.length) {
+          return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        ordersQuery = ordersQuery.in('store_id', storeIds);
+      }
+
+      const orders = await loadOrdersWithItems(supabaseClient, ordersQuery);
+      return new Response(JSON.stringify(orders), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'create') {
+      const storeId = String(requestBody?.storeId || '').trim();
+      if (!storeId) {
+        throw new Error('Missing storeId');
+      }
+
+      if (userRole === 'store' && !storeIds.includes(storeId)) {
+        return new Response(JSON.stringify({ error: 'Insufficient permissions for this store.' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const productionDate =
+        String(requestBody?.productionDate || '').trim() || getSuggestedProductionDate(String(requestBody?.deliveryDate || ''));
+
+      const { data: orderData, error: orderError } = await supabaseClient
+        .from('orders')
+        .insert({
+          store_id: storeId,
+          store_name: requestBody?.storeName,
+          customer_name: requestBody?.customerName,
+          customer_phone: requestBody?.customerPhone,
+          company_name: requestBody?.companyName,
+          delivery_address: requestBody?.deliveryAddress,
+          billing_address: requestBody?.billingAddress,
+          delivery_date: requestBody?.deliveryDate,
+          production_date: productionDate,
+          production_approved: false,
+          order_type: requestBody?.orderType,
+          payment_status: requestBody?.paymentStatus,
+          handled_by: requestBody?.handledBy,
+          delivered_by: requestBody?.deliveredBy,
+          conditioning: requestBody?.conditioning,
+          comments: requestBody?.comments,
+        })
+        .select()
+        .single();
+
+      if (orderError) {
+        throw new Error(`Order insertion failed: ${orderError.message}`);
+      }
+
+      const items = Array.isArray(requestBody?.items) ? requestBody.items : [];
+      const { error: itemsError } = await supabaseClient.from('order_items').insert(
+        items.map((item: any) => ({
+          order_id: orderData.id,
+          variety_id: item.varietyId,
+          quantity: item.quantity,
+          conditioning: item.conditioning,
+        }))
+      );
+
+      if (itemsError) {
+        await supabaseClient.from('orders').delete().eq('id', orderData.id);
+        throw new Error(`Order items insertion failed: ${itemsError.message}`);
+      }
+
+      const mappedOrder = mapOrderRowToOrder(
+        {
+          ...orderData,
+          production_date: productionDate,
+        },
+        { [orderData.id]: items }
+      );
+
+      return new Response(JSON.stringify(mappedOrder), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'updateProduction') {
+      if (!['admin', 'production'].includes(userRole)) {
+        return new Response(JSON.stringify({ error: 'Insufficient permissions.' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const orderId = String(requestBody?.orderId || '').trim();
+      const productionDate = String(requestBody?.productionDate || '').trim();
+      const productionApproved = !!requestBody?.productionApproved;
+
+      if (!orderId || !productionDate) {
+        throw new Error('Missing orderId or productionDate');
+      }
+
+      const { data: updatedOrder, error: updateError } = await supabaseClient
+        .from('orders')
+        .update({
+          production_date: productionDate,
+          production_approved: productionApproved,
+        })
+        .eq('id', orderId)
+        .select()
+        .single();
+
+      if (updateError) {
+        throw new Error(`Order update failed: ${updateError.message}`);
+      }
+
+      const { data: itemsData, error: itemsError } = await supabaseClient
+        .from('order_items')
+        .select('*')
+        .eq('order_id', orderId);
+
+      if (itemsError) {
+        throw new Error(`Order items query failed: ${itemsError.message}`);
+      }
+
+      const items = (itemsData || []).map((item: any) => ({
+        varietyId: item.variety_id,
+        quantity: item.quantity,
+        conditioning: item.conditioning,
+      }));
+
+      return new Response(JSON.stringify(mapOrderRowToOrder(updatedOrder, { [orderId]: items })), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unsupported action: ${action}`);
+  } catch (error) {
+    console.error('[manage-orders] error', error);
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : 'An unknown error occurred',
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
+});
