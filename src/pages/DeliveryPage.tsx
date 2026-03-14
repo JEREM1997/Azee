@@ -28,7 +28,7 @@ interface DeliveryBoxProduction {
 }
 
 interface DeliveryStoreProduction {
-  id: string;                 // PK in store_productions
+  id: string;                 // PK in store_productions or synthetic ID for orders
   store_id: string;           // FK to stores table
   store_name: string;         // Friendly name
   deliverydate?: string;      // YYYY-MM-DD, optional
@@ -38,6 +38,13 @@ interface DeliveryStoreProduction {
   production_items?: DeliveryProductionItem[];
   box_productions?: DeliveryBoxProduction[];
   production_date?: string;
+  source_type?: 'plan' | 'order';
+  source_label?: string;
+  source_order_id?: string | null;
+  customer_name?: string | null;
+  company_name?: string | null;
+  customer_phone?: string | null;
+  comments?: string | null;
 }
 
 interface DeliveryProductionPlan {
@@ -46,6 +53,7 @@ interface DeliveryProductionPlan {
   total_production: number;
   status: string;
   store_productions?: DeliveryStoreProduction[];
+  delivery_entries?: DeliveryStoreProduction[];
 }
 
 const DeliveryPage: React.FC = () => {
@@ -89,7 +97,7 @@ const DeliveryPage: React.FC = () => {
   
   // Function to initialize local state with current values from the plan
   const initializeLocalState = (stores: DeliveryStoreProduction[]) => {
-    console.log('🔄 Initializing local state for', stores.length, 'stores');
+    console.log('ðŸ”„ Initializing local state for', stores.length, 'stores');
     
     const newReceivedQuantities: { [key: string]: number } = {};
     const newWasteQuantities: { [key: string]: number } = {};
@@ -97,17 +105,17 @@ const DeliveryPage: React.FC = () => {
     const newBoxWasteQuantities: { [key: string]: number } = {};
     
     stores.forEach(store => {
-      console.log(`🏪 Store ${store.store_name}: delivery_confirmed=${store.delivery_confirmed}, waste_reported=${store.waste_reported}`);
+      console.log(`ðŸª Store ${store.store_name}: delivery_confirmed=${store.delivery_confirmed}, waste_reported=${store.waste_reported}`);
       
       // Initialize production items
       store.production_items?.forEach(item => {
         if (item.received !== null && item.received !== undefined) {
           newReceivedQuantities[item.id] = item.received;
-          console.log(`  📦 Item ${item.variety_name}: received=${item.received}`);
+          console.log(`  ðŸ“¦ Item ${item.variety_name}: received=${item.received}`);
         }
         if (item.waste !== null && item.waste !== undefined) {
           newWasteQuantities[item.id] = item.waste;
-          console.log(`  🗑️ Item ${item.variety_name}: waste=${item.waste}`);
+          console.log(`  ðŸ—‘ï¸ Item ${item.variety_name}: waste=${item.waste}`);
         }
       });
       
@@ -115,16 +123,16 @@ const DeliveryPage: React.FC = () => {
       store.box_productions?.forEach(box => {
         if (box.received !== null && box.received !== undefined) {
           newBoxReceivedQuantities[box.id] = box.received;
-          console.log(`  📦 Box ${box.box_name}: received=${box.received}`);
+          console.log(`  ðŸ“¦ Box ${box.box_name}: received=${box.received}`);
         }
         if (box.waste !== null && box.waste !== undefined) {
           newBoxWasteQuantities[box.id] = box.waste;
-          console.log(`  🗑️ Box ${box.box_name}: waste=${box.waste}`);
+          console.log(`  ðŸ—‘ï¸ Box ${box.box_name}: waste=${box.waste}`);
         }
       });
     });
     
-    console.log('📊 Setting local state:', {
+    console.log('ðŸ“Š Setting local state:', {
       receivedQuantities: Object.keys(newReceivedQuantities).length,
       wasteQuantities: Object.keys(newWasteQuantities).length,
       boxReceivedQuantities: Object.keys(newBoxReceivedQuantities).length,
@@ -139,61 +147,67 @@ const DeliveryPage: React.FC = () => {
   
   const loadCurrentPlan = async () => {
     try {
-      console.log('🔄 Loading current plan...');
+      console.log('ðŸ”„ Loading current plan...');
       setLoading(true);
       setError(null);
       
-      // Charger uniquement une fenêtre autour de la date de livraison sélectionnée (±15 jours)
-const rangeDays = 15;
+      // Charger uniquement une fenÃªtre autour de la date de livraison sÃ©lectionnÃ©e (Â±15 jours)
+      const rangeDays = 15;
 
-const selected = new Date(deliveryDate);
+      const selected = new Date(deliveryDate);
 
-// Sécurité au cas où deliveryDate serait vide ou invalide
-if (isNaN(selected.getTime())) {
-  throw new Error(`Invalid deliveryDate: ${deliveryDate}`);
-}
+      // SÃ©curitÃ© au cas oÃ¹ deliveryDate serait vide ou invalide
+      if (isNaN(selected.getTime())) {
+        throw new Error(`Invalid deliveryDate: ${deliveryDate}`);
+      }
 
-const start = new Date(selected);
-start.setDate(start.getDate() - rangeDays);
+      const start = new Date(selected);
+      start.setDate(start.getDate() - rangeDays);
 
-const end = new Date(selected);
-end.setDate(end.getDate() + rangeDays);
+      const end = new Date(selected);
+      end.setDate(end.getDate() + rangeDays);
 
-// On envoie des dates au format YYYY-MM-DD
-const startDate = start.toISOString().split('T')[0];
-const endDate = end.toISOString().split('T')[0];
+      // On envoie des dates au format YYYY-MM-DD
+      const startDate = start.toISOString().split('T')[0];
+      const endDate = end.toISOString().split('T')[0];
 
-console.log('📅 Fetching plans from', startDate, 'to', endDate, 'for deliveryDate', deliveryDate);
+      console.log('ðŸ“… Fetching plans from', startDate, 'to', endDate, 'for deliveryDate', deliveryDate);
 
-const { data: plans, error } = await apiService.production.getProductionPlans(
-  startDate,
-  endDate,
-  showAllStores
-);
+      const { data: plans, error } = await apiService.production.getProductionPlans(
+        startDate,
+        endDate,
+        showAllStores
+      );
       
       if (error) {
-        console.error('❌ Error fetching plans:', error);
+        console.error('âŒ Error fetching plans:', error);
         setCurrentPlan(null);
         return;
       }
       
       if (!plans || plans.length === 0) {
-        console.log('ℹ️ No production plans found in the database');
+        console.log('â„¹ï¸ No production plans found in the database');
         setCurrentPlan(null);
         return;
       }
       
-      console.log(`📋 Found ${plans.length} plans from server`);
+      console.log(`ðŸ“‹ Found ${plans.length} plans from server`);
       
       // Process all stores from all plans
       const allStores: DeliveryStoreProduction[] = [];
       
       plans.forEach((plan: any) => {
-        if (plan.stores && Array.isArray(plan.stores)) {
-          plan.stores.forEach((store: any) => {
+        const deliveryEntries = Array.isArray(plan.delivery_entries)
+          ? plan.delivery_entries
+          : Array.isArray(plan.stores)
+            ? plan.stores
+            : [];
+
+        if (deliveryEntries.length > 0) {
+          deliveryEntries.forEach((store: any) => {
             // For each store, create a store production record
             allStores.push({
-              id: store.id,
+              id: store.id || `delivery:${plan.date}:${store.store_id}`,
               store_id: store.store_id,
               store_name: store.store_name,
               deliverydate: store.delivery_date || store.deliverydate || plan.date,
@@ -202,7 +216,14 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
               waste_reported: store.waste_reported || false,
               production_items: store.production_items || [],
               box_productions: store.box_productions || [],
-              production_date: plan.date
+              production_date: store.production_date || plan.date,
+              source_type: store.source_type || 'plan',
+              source_label: store.source_label || 'Plan habituel',
+              source_order_id: store.source_order_id || null,
+              customer_name: store.customer_name || null,
+              company_name: store.company_name || null,
+              customer_phone: store.customer_phone || null,
+              comments: store.comments || null,
             });
           });
         }
@@ -224,7 +245,7 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
       });
       
       if (filteredStores.length > 0) {
-        console.log(`✅ Found ${filteredStores.length} stores for delivery date ${deliveryDate}`);
+        console.log(`âœ… Found ${filteredStores.length} stores for delivery date ${deliveryDate}`);
         
         // Calculate total production
         const totalProduction = filteredStores.reduce((sum, store) => sum + (store.total_quantity || 0), 0);
@@ -249,11 +270,11 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
         // Always initialize local state with the latest data
         initializeLocalState(uniqueStores);
       } else {
-        console.log(`ℹ️ No stores found for delivery date ${deliveryDate}`);
+        console.log(`â„¹ï¸ No stores found for delivery date ${deliveryDate}`);
         setCurrentPlan(null);
       }
     } catch (err) {
-      console.error('❌ Error loading production plan:', err);
+      console.error('âŒ Error loading production plan:', err);
       setError(err instanceof Error ? err.message : 'Error loading production plan');
     } finally {
       setLoading(false);
@@ -401,6 +422,13 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
   const storeDetails = selectedStore 
     ? currentPlan?.store_productions?.find(store => store.id === selectedStore)
     : null;
+  const isOrderDelivery = storeDetails?.source_type === 'order';
+  const canManageSelectedDelivery = !!storeDetails && !isOrderDelivery && !!(
+    currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction
+  );
+  const canEditSelectedDelivery = !!storeDetails && !isOrderDelivery && !!(
+    isAdmin || currentUser?.storeIds?.includes(storeDetails.store_id)
+  );
 
   const generateDeliveryBulletin = () => {
     if (!storeDetails) return;
@@ -417,10 +445,24 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
     doc.setFont('helvetica', 'normal');
     
     const headers = [
+      ['Type', storeDetails.source_label || 'Plan habituel'],
       ['Date de la production', productionDate],
       ['Date de livraison', deliveryDate],
       ['Magasin', storeDetails.store_name]
     ];
+
+    if (storeDetails.source_order_id) {
+      headers.push(['Commande', storeDetails.source_order_id]);
+    }
+    if (storeDetails.company_name) {
+      headers.push(['Societe', storeDetails.company_name]);
+    }
+    if (storeDetails.customer_name) {
+      headers.push(['Client', storeDetails.customer_name]);
+    }
+    if (storeDetails.customer_phone) {
+      headers.push(['Telephone', storeDetails.customer_phone]);
+    }
 
     headers.forEach((row, i) => {
       doc.cell(14, 20 + (i * 10), 80, 10, row[0], i + 1, 'left');
@@ -429,7 +471,7 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
 
     // Add individual items table
     const itemsTableHeaders = [
-      ['Variété', 'Quantité Prévue (unité)', 'Quantité Reçue (unité)', 'Déchets (unité)']
+      ['VariÃ©tÃ©', 'QuantitÃ© PrÃ©vue (unitÃ©)', 'QuantitÃ© ReÃ§ue (unitÃ©)', 'DÃ©chets (unitÃ©)']
     ];
 
     const itemsTableData = storeDetails.production_items?.slice().sort((a,b)=>a.variety_name.localeCompare(b.variety_name)).map(item => [
@@ -440,7 +482,7 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
     ]) || [];
 
     (doc as any).autoTable({
-      startY: 60, // Adjusted to account for the extra header row
+      startY: 20 + (headers.length * 10) + 10,
       head: itemsTableHeaders,
       body: itemsTableData,
       theme: 'grid',
@@ -453,7 +495,7 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
     // Add boxes table if there are any boxes
     if (storeDetails.box_productions && storeDetails.box_productions.length > 0) {
       const boxesTableHeaders = [
-        ['Boîte', 'Quantité Prévue (unité)', 'Quantité Reçue (unité)', 'Déchets (unité)']
+        ['BoÃ®te', 'QuantitÃ© PrÃ©vue (unitÃ©)', 'QuantitÃ© ReÃ§ue (unitÃ©)', 'DÃ©chets (unitÃ©)']
       ];
 
       const boxesTableData = storeDetails.box_productions.slice().sort((a,b)=>a.box_name.localeCompare(b.box_name)).map(box => [
@@ -476,16 +518,24 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
     }
 
     const finalY = (doc as any).lastAutoTable.finalY || 150;
+    if (storeDetails.comments) {
+      doc.text(`Commentaire: ${storeDetails.comments}`, 20, finalY + 15);
+    }
     doc.line(20, finalY + 30, 190, finalY + 30);
     doc.text('Signature:', 20, finalY + 40);
 
     // Update filename to include delivery date
     const fileDate = storeDetails.deliverydate ? formatDateSafe(storeDetails.deliverydate) : productionDate;
-    doc.save(`bulletin-livraison-${storeDetails.store_name}-${fileDate}.pdf`);
+    const filePrefix = isOrderDelivery ? 'bulletin-livraison-commande' : 'bulletin-livraison';
+    doc.save(`${filePrefix}-${storeDetails.store_name}-${fileDate}.pdf`);
   };
 
   const handleConfirmDelivery = async () => {
     if (!storeDetails) return;
+    if (isOrderDelivery) {
+      setError('La reception d une commande validee reste en lecture seule pour le moment. Le bulletin dedie est disponible.');
+      return;
+    }
 
     try {
       setSaving(true);
@@ -571,12 +621,12 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
       }
 
       // Add a small delay to ensure server has processed the update
-      console.log('✅ Delivery confirmed, reloading plan in 500ms...');
+      console.log('âœ… Delivery confirmed, reloading plan in 500ms...');
       setTimeout(async () => {
         try {
-          console.log('🔄 Reloading plan after delivery confirmation...');
+          console.log('ðŸ”„ Reloading plan after delivery confirmation...');
           await loadCurrentPlan();
-          console.log('✅ Plan reloaded successfully');
+          console.log('âœ… Plan reloaded successfully');
         } catch (error) {
           console.error('Error reloading plan after delivery confirmation:', error);
           // Don't show error to user as the main operation succeeded
@@ -592,6 +642,10 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
 
   const handleReportWaste = async () => {
     if (!storeDetails) return;
+    if (isOrderDelivery) {
+      setError('Les dechets des commandes validees ne sont pas encore saisis separement. Utilisez le bulletin dedie.');
+      return;
+    }
 
     try {
       setSaving(true);
@@ -613,7 +667,7 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
 
         if (waste > received) {
           validationErrors.push(
-            `${item.variety_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`
+            `${item.variety_name}: prÃ©vu ${planned}, reÃ§u ${received}, dÃ©chets ${waste}`
           );
         }
       });
@@ -631,14 +685,14 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
 
         if (waste > received) {
           validationErrors.push(
-            `${box.box_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`
+            `${box.box_name}: prÃ©vu ${planned}, reÃ§u ${received}, dÃ©chets ${waste}`
           );
         }
       });
 
       if (validationErrors.length > 0) {
         setError(
-          `Les déchets dépassent les quantités reçues pour:\n- ${validationErrors.join(
+          `Les dÃ©chets dÃ©passent les quantitÃ©s reÃ§ues pour:\n- ${validationErrors.join(
             '\n- '
           )}`
         );
@@ -690,12 +744,12 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
       }
 
       // Add a small delay to ensure server has processed the update
-      console.log('✅ Waste reported, reloading plan in 500ms...');
+      console.log('âœ… Waste reported, reloading plan in 500ms...');
       setTimeout(async () => {
         try {
-          console.log('🔄 Reloading plan after waste reporting...');
+          console.log('ðŸ”„ Reloading plan after waste reporting...');
           await loadCurrentPlan();
-          console.log('✅ Plan reloaded successfully');
+          console.log('âœ… Plan reloaded successfully');
         } catch (error) {
           console.error('Error reloading plan after waste reporting:', error);
           // Don't show error to user as the main operation succeeded
@@ -731,7 +785,7 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
           </button>
         )}
         </div>
-        <p className="text-gray-600 mt-1">Gérer les livraisons et suivre les déchets</p>
+        <p className="text-gray-600 mt-1">GÃ©rer les livraisons et suivre les dÃ©chets</p>
 
         <div className="mt-4 md:mt-0">
           <div className="w-full md:w-auto">
@@ -787,21 +841,25 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                   <div className="flex justify-between items-center">
                     <span className="font-medium text-gray-900">{store.store_name}</span>
                     <span className={`text-sm inline-flex items-center px-2.5 py-0.5 rounded-full font-medium ${
-                      store.delivery_confirmed && store.waste_reported
+                      store.source_type === 'order'
+                        ? 'bg-blue-100 text-blue-800'
+                        : store.delivery_confirmed && store.waste_reported
                         ? 'bg-krispy-green bg-opacity-10 text-krispy-green'
                         : store.delivery_confirmed && !store.waste_reported
                         ? 'bg-orange-100 text-orange-800'
                         : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {store.delivery_confirmed && store.waste_reported ? (
+                      {store.source_type === 'order' ? (
+                        <>Commande</>
+                      ) : store.delivery_confirmed && store.waste_reported ? (
                         <>
                           <Check className="h-3 w-3 mr-1" />
-                          Confirmé
+                          ConfirmÃ©
                         </>
                       ) : store.delivery_confirmed && !store.waste_reported ? (
                         <>
                           <AlertTriangle className="h-3 w-3 mr-1" />
-                          Déchets en attente
+                          DÃ©chets en attente
                         </>
                       ) : (
                         <>
@@ -812,7 +870,12 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                     </span>
                   </div>
                   <div className="mt-1 text-sm text-gray-500">
-                    {store.total_quantity} doughnuts prévus
+                    {store.total_quantity} doughnuts prÃ©vus
+                    {store.source_type === 'order' && (
+                      <div className="text-xs text-blue-500 mt-1">
+                        Bulletin de livraison dedie a la commande
+                      </div>
+                    )}
                     {store.deliverydate && (
                       <div className="text-xs text-gray-400 mt-1">
                         Livraison: {formatDateSafe(store.deliverydate)}
@@ -825,10 +888,10 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
               {userStores.length === 0 && (
                 <div className="text-center py-8 text-gray-500">
                   <div className="text-sm">
-                    Aucune livraison prévue pour le {formatDateSafe(deliveryDate)}
+                    Aucune livraison prÃ©vue pour le {formatDateSafe(deliveryDate)}
                   </div>
                   <div className="text-xs text-gray-400 mt-1">
-                    Sélectionnez une autre date pour voir les livraisons
+                    SÃ©lectionnez une autre date pour voir les livraisons
                   </div>
                 </div>
               )}
@@ -836,12 +899,12 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
           </div>
         </div>
         
-        {/* Détails de livraison */}
+        {/* DÃ©tails de livraison */}
         <div className="lg:col-span-2 bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-800 flex items-center">
               <FileText className="h-5 w-5 mr-2 text-krispy-green" />
-              Détails de la Livraison
+              DÃ©tails de la Livraison
             </h2>
           </div>
           
@@ -853,27 +916,59 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                   <div className="mt-1 space-y-1">
                   <p className="text-gray-500">Total : {storeDetails.total_quantity} doughnuts</p>
                     <p className="text-sm text-gray-600">
+                      <span className="font-medium">Source:</span> {storeDetails.source_label || 'Plan habituel'}
+                    </p>
+                    {storeDetails.source_order_id && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Commande:</span> {storeDetails.source_order_id}
+                      </p>
+                    )}
+                    {storeDetails.company_name && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Societe:</span> {storeDetails.company_name}
+                      </p>
+                    )}
+                    {storeDetails.customer_name && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Client:</span> {storeDetails.customer_name}
+                      </p>
+                    )}
+                    <p className="text-sm text-gray-600">
                       <span className="font-medium">Date de livraison:</span> {
-                        storeDetails.deliverydate ? formatDateSafe(storeDetails.deliverydate) : 'Non définie'
+                        storeDetails.deliverydate ? formatDateSafe(storeDetails.deliverydate) : 'Non dÃ©finie'
                       }
                     </p>
                   </div>
                 </div>
                 <div className="space-x-2">
-                  {(isAdmin || isProduction) && (
+                  {(isAdmin || isProduction || currentUser?.storeIds?.includes(storeDetails.store_id)) && (
                     <button
                       onClick={generateDeliveryBulletin}
                       className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
                     >
                       <Printer className="h-4 w-4 mr-1" />
-                      Télécharger le Bulletin
+                      TÃ©lÃ©charger le Bulletin
                     </button>
                   )}
                 </div>
               </div>
               
               <div className="overflow-x-auto">
-                {(!storeDetails.delivery_confirmed || !storeDetails.waste_reported) && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) && (
+                {isOrderDelivery && (
+                  <div className="mb-4 bg-blue-50 border-l-4 border-blue-400 p-4">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <FileText className="h-5 w-5 text-blue-400" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-blue-700">
+                          Cette ligne provient d une commande validee. Elle garde sa propre date de livraison et son propre bulletin.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {!isOrderDelivery && (!storeDetails.delivery_confirmed || !storeDetails.waste_reported) && canManageSelectedDelivery && (
                   <div className="mb-4 bg-blue-50 border-l-4 border-blue-400 p-4">
                     <div className="flex">
                       <div className="flex-shrink-0">
@@ -882,8 +977,8 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                       <div className="ml-3">
                         <p className="text-sm text-blue-700">
                           <span className="font-medium">Processus de livraison:</span> 
-                          {!storeDetails.delivery_confirmed && " 1. Confirmez d'abord la réception en ajustant les quantités reçues si nécessaire."}
-                          {storeDetails.delivery_confirmed && !storeDetails.waste_reported && " 2. Vous pouvez maintenant signaler les déchets pour chaque variété."}
+                          {!storeDetails.delivery_confirmed && " 1. Confirmez d'abord la rÃ©ception en ajustant les quantitÃ©s reÃ§ues si nÃ©cessaire."}
+                          {storeDetails.delivery_confirmed && !storeDetails.waste_reported && " 2. Vous pouvez maintenant signaler les dÃ©chets pour chaque variÃ©tÃ©."}
                         </p>
                       </div>
                     </div>
@@ -892,11 +987,11 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead>
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variété</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VariÃ©tÃ©</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Forme</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Prévu (unité)</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Reçu (unité)</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Déchets (unité)</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">PrÃ©vu (unitÃ©)</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ReÃ§u (unitÃ©)</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">DÃ©chets (unitÃ©)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -912,7 +1007,7 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                           {item.quantity}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                          {!storeDetails.delivery_confirmed && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) ? (
+                          {!isOrderDelivery && !storeDetails.delivery_confirmed && canManageSelectedDelivery ? (
                             <input
                               type="number"
                               min="0"
@@ -923,9 +1018,9 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                                 [item.id]: parseInt(e.target.value) || 0
                               })}
                               className="w-20 text-center border-2 border-blue-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-blue-50 hover:bg-white transition-colors"
-                              title={`Quantité prévue: ${item.quantity}. Ajustez si nécessaire.`}
+                              title={`QuantitÃ© prÃ©vue: ${item.quantity}. Ajustez si nÃ©cessaire.`}
                             />
-                          ) : storeDetails.delivery_confirmed && (isAdmin || currentUser?.storeIds?.includes(storeDetails.store_id)) ? (
+                          ) : !isOrderDelivery && storeDetails.delivery_confirmed && canEditSelectedDelivery ? (
                             <input
                               type="number"
                               min="0"
@@ -936,17 +1031,16 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                                 [item.id]: parseInt(e.target.value) || 0
                               })}
                               className="w-20 text-center border-2 border-green-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-green-50 hover:bg-white transition-colors"
-                              title={`Admin: Modifier la quantité reçue. Quantité prévue: ${item.quantity}.`}
+                              title={`Admin: Modifier la quantitÃ© reÃ§ue. QuantitÃ© prÃ©vue: ${item.quantity}.`}
                             />
                           ) : (
-                            // Show received quantity: prioritize database value, then local state, then dash
                             item.received !== null && item.received !== undefined 
                               ? item.received 
                               : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : '-')
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                          {!storeDetails.waste_reported && storeDetails.delivery_confirmed && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) ? (
+                          {!isOrderDelivery && !storeDetails.waste_reported && storeDetails.delivery_confirmed && canManageSelectedDelivery ? (
                             <input
                               type="number"
                               min="0"
@@ -974,7 +1068,7 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                                   : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity)
                               } doughnuts`}
                             />
-                          ) : storeDetails.waste_reported && (isAdmin || currentUser?.storeIds?.includes(storeDetails.store_id)) ? (
+                          ) : !isOrderDelivery && storeDetails.waste_reported && canEditSelectedDelivery ? (
                             <input
                               type="number"
                               min="0"
@@ -996,14 +1090,16 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                                 });
                               }}
                               className="w-20 text-center border-2 border-red-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-red-50 hover:bg-white transition-colors"
-                              title={`Admin: Modifier les déchets. Maximum: ${
+                              title={`Admin: Modifier les dÃ©chets. Maximum: ${
                                 item.received !== null && item.received !== undefined 
                                   ? item.received 
                                   : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity)
                               } doughnuts`}
                             />
+                          ) : isOrderDelivery ? (
+                            <span className="text-gray-400 text-sm">Bulletin commande</span>
                           ) : !storeDetails.delivery_confirmed ? (
-                            <span className="text-gray-400 text-sm">Confirmez d'abord la réception</span>
+                            <span className="text-gray-400 text-sm">Confirmez d'abord la rÃ©ception</span>
                           ) : (
                             wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : (item.waste !== null && item.waste !== undefined ? item.waste : 0)
                           )}
@@ -1017,15 +1113,15 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
               {/* Box information */}
               {storeDetails.box_productions && storeDetails.box_productions.length > 0 && (
                 <div className="mt-8">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Boîtes</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">BoÃ®tes</h3>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead>
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîte</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Prévu (unité)</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Reçu (unité)</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Déchets (unité)</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">BoÃ®te</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">PrÃ©vu (unitÃ©)</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ReÃ§u (unitÃ©)</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">DÃ©chets (unitÃ©)</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -1038,7 +1134,7 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                               {box.quantity}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                              {!storeDetails.delivery_confirmed && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) ? (
+                              {!isOrderDelivery && !storeDetails.delivery_confirmed && canManageSelectedDelivery ? (
                                 <input
                                   type="number"
                                   min="0"
@@ -1049,9 +1145,9 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                                     [box.id]: parseInt(e.target.value) || 0
                                   })}
                                   className="w-20 text-center border-2 border-blue-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-blue-50 hover:bg-white transition-colors"
-                                  title={`Quantité prévue: ${box.quantity}. Ajustez si nécessaire.`}
+                                  title={`QuantitÃ© prÃ©vue: ${box.quantity}. Ajustez si nÃ©cessaire.`}
                                 />
-                              ) : storeDetails.delivery_confirmed && (isAdmin || currentUser?.storeIds?.includes(storeDetails.store_id)) ? (
+                              ) : !isOrderDelivery && storeDetails.delivery_confirmed && canEditSelectedDelivery ? (
                                 <input
                                   type="number"
                                   min="0"
@@ -1062,17 +1158,16 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                                     [box.id]: parseInt(e.target.value) || 0
                                   })}
                                   className="w-20 text-center border-2 border-green-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-green-50 hover:bg-white transition-colors"
-                                  title={`Admin: Modifier la quantité reçue. Quantité prévue: ${box.quantity}.`}
+                                  title={`Admin: Modifier la quantitÃ© reÃ§ue. QuantitÃ© prÃ©vue: ${box.quantity}.`}
                                 />
                               ) : (
-                                // Show received quantity: prioritize database value, then local state, then dash
                                 box.received !== null && box.received !== undefined 
                                   ? box.received 
                                   : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : '-')
                               )}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                              {!storeDetails.waste_reported && storeDetails.delivery_confirmed && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) ? (
+                              {!isOrderDelivery && !storeDetails.waste_reported && storeDetails.delivery_confirmed && canManageSelectedDelivery ? (
                                 <input
                                   type="number"
                                   min="0"
@@ -1098,9 +1193,9 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                                     box.received !== null && box.received !== undefined 
                                       ? box.received 
                                       : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity)
-                                  } boîtes`}
+                                  } boÃ®tes`}
                                 />
-                              ) : storeDetails.waste_reported && (isAdmin || currentUser?.storeIds?.includes(storeDetails.store_id)) ? (
+                              ) : !isOrderDelivery && storeDetails.waste_reported && canEditSelectedDelivery ? (
                                 <input
                                   type="number"
                                   min="0"
@@ -1122,14 +1217,16 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                                     });
                                   }}
                                   className="w-20 text-center border-2 border-red-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-red-50 hover:bg-white transition-colors"
-                                  title={`Admin: Modifier les déchets. Maximum: ${
+                                  title={`Admin: Modifier les dÃ©chets. Maximum: ${
                                     box.received !== null && box.received !== undefined 
                                       ? box.received 
                                       : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity)
-                                  } boîtes`}
+                                  } boÃ®tes`}
                                 />
+                              ) : isOrderDelivery ? (
+                                <span className="text-gray-400 text-sm">Bulletin commande</span>
                               ) : !storeDetails.delivery_confirmed ? (
-                                <span className="text-gray-400 text-sm">Confirmez d'abord la réception</span>
+                                <span className="text-gray-400 text-sm">Confirmez d'abord la rÃ©ception</span>
                               ) : (
                                 boxWasteQuantities[box.id] !== undefined ? boxWasteQuantities[box.id] : (box.waste !== null && box.waste !== undefined ? box.waste : 0)
                               )}
@@ -1142,7 +1239,7 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                 </div>
               )}
               
-              {storeDetails.delivery_confirmed && storeDetails.waste_reported && (
+              {!isOrderDelivery && storeDetails.delivery_confirmed && storeDetails.waste_reported && (
                 <div className="mt-6 bg-krispy-green bg-opacity-5 border-l-4 border-krispy-green p-4">
                   <div className="flex">
                     <div className="flex-shrink-0">
@@ -1150,10 +1247,10 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                     </div>
                     <div className="ml-3">
                       <p className="text-sm text-krispy-green">
-                        Livraison confirmée et déchets reportés
+                        Livraison confirmÃ©e et dÃ©chets reportÃ©s
                         {isAdmin && (
                           <span className="block text-xs text-gray-600 mt-1">
-                            En tant qu'administrateur, vous pouvez modifier les quantités ci-dessus si nécessaire.
+                            En tant qu'administrateur, vous pouvez modifier les quantitÃ©s ci-dessus si nÃ©cessaire.
                           </span>
                         )}
                       </p>
@@ -1162,7 +1259,7 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                 </div>
               )}
               
-              {!storeDetails.delivery_confirmed && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) && (
+              {!isOrderDelivery && !storeDetails.delivery_confirmed && canManageSelectedDelivery && (
                 <div className="mt-6 flex justify-end">
                   <button
                     onClick={handleConfirmDelivery}
@@ -1177,14 +1274,14 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                     ) : (
                       <>
                         <Check className="h-4 w-4 mr-2" />
-                        Confirmer la Réception
+                        Confirmer la RÃ©ception
                       </>
                     )}
                   </button>
                 </div>
               )}
               
-              {storeDetails.delivery_confirmed && !storeDetails.waste_reported && (currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction) && (
+              {!isOrderDelivery && storeDetails.delivery_confirmed && !storeDetails.waste_reported && canManageSelectedDelivery && (
                 <div className="mt-6 flex justify-end">
                   <button
                     onClick={handleReportWaste}
@@ -1199,14 +1296,14 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                     ) : (
                       <>
                         <AlertTriangle className="h-4 w-4 mr-2" />
-                        Signaler les Déchets
+                        Signaler les DÃ©chets
                       </>
                     )}
                   </button>
                 </div>
               )}
               
-              {storeDetails.delivery_confirmed && storeDetails.waste_reported && (isAdmin || currentUser?.storeIds?.includes(storeDetails.store_id)) && (
+              {!isOrderDelivery && storeDetails.delivery_confirmed && storeDetails.waste_reported && canEditSelectedDelivery && (
                 <div className="mt-6 flex justify-end space-x-3">
                   <button
                     onClick={handleConfirmDelivery}
@@ -1216,12 +1313,12 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                     {saving ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Mise à jour en cours...
+                        Mise Ã  jour en cours...
                       </>
                     ) : (
                       <>
                         <Edit className="h-4 w-4 mr-2" />
-                        Mettre à jour les Quantités Reçues
+                        Mettre Ã  jour les QuantitÃ©s ReÃ§ues
                       </>
                     )}
                   </button>
@@ -1233,12 +1330,12 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
                     {saving ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Mise à jour en cours...
+                        Mise Ã  jour en cours...
                       </>
                     ) : (
                       <>
                         <AlertTriangle className="h-4 w-4 mr-2" />
-                        Mettre à jour les Déchets
+                        Mettre Ã  jour les DÃ©chets
                       </>
                     )}
                   </button>
@@ -1247,7 +1344,7 @@ const { data: plans, error } = await apiService.production.getProductionPlans(
             </div>
           ) : (
             <div className="p-6 text-center text-gray-500">
-              Sélectionnez un magasin pour voir les détails de livraison
+              SÃ©lectionnez un magasin pour voir les dÃ©tails de livraison
             </div>
           )}
         </div>
