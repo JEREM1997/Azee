@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
+mport { summarizePlanSnapshot, writeAuditLog } from '../_shared/audit.ts';
 
 interface ProductionPlanRequest {
   date: string;
@@ -135,6 +136,7 @@ Deno.serve(async (req) => {
     }
 
     let plan;
+    let previousPlanSummary = null;
 
     // Check if a plan already exists for this date
     console.log(`[DB DEBUG] Checking existing plan for date: ${planData.date}`);
@@ -154,6 +156,38 @@ Deno.serve(async (req) => {
 
     const planId = planData.existingPlanId || existingPlan?.id;
     console.log(`[DB DEBUG] Resolved planId:`, planId || 'null (will create new plan)');
+
+    if (planId) {
+      const { data: existingPlanSnapshot, error: existingPlanSnapshotError } = await supabaseClient
+        .from('production_plans')
+        .select(`
+          id,
+          date,
+          status,
+          stores:store_productions!store_productions_plan_id_fkey (
+            id,
+            delivery_confirmed,
+            waste_reported,
+            production_items (
+              received,
+              waste
+            ),
+            box_productions (
+              received,
+              waste
+            )
+          )
+        `)
+        .eq('id', planId)
+        .maybeSingle();
+
+      if (existingPlanSnapshotError) {
+        console.warn('[audit] could not load existing plan snapshot', existingPlanSnapshotError.message);
+      } else {
+        previousPlanSummary = summarizePlanSnapshot(existingPlanSnapshot);
+      }
+    }
+
 
     // Get box configurations to calculate proper totals (do this BEFORE any deletes)
     const { data: boxConfigs, error: boxConfigError } = await supabaseClient
@@ -397,6 +431,36 @@ Deno.serve(async (req) => {
         }
       }
     }
+
+  await writeAuditLog(
+      supabaseClient,
+      {
+        userId: user.id,
+        email: user.email ?? null,
+        role: userRole,
+      },
+      {
+        action: planId ? 'plan.update' : 'plan.create',
+        entityType: 'production_plan',
+        entityId: plan.id,
+        planId: plan.id,
+        details: {
+          plan_date: planData.date,
+          total_production: resolvedTotalProduction,
+          status: planData.status,
+          store_count: preparedStoreProductions.length,
+          previous_plan_summary: previousPlanSummary,
+          stores: preparedStoreProductions.map((store) => ({
+            store_id: store.store_id,
+            store_name: store.store_name,
+            delivery_date: store.delivery_date ?? null,
+            total_quantity: store.total_quantity,
+            item_count: store.items.length,
+            box_count: store.boxes.length,
+          })),
+        },
+      }
+    );  
 
     return new Response(
       JSON.stringify({ id: plan.id }),
