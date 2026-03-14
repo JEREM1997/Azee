@@ -228,21 +228,20 @@ export const apiService = {
   },
 
   /**
-   * Audit Functions
-   */
-  audit: {
-    async getLogs(filters: AuditLogFilters = {}) {
-      return apiService.invoke<AuditLog[]>('get-audit-logs', filters as unknown as Record<string, unknown>);
-    }
-  }
-};
-
-  /**
    * Authentication Functions
    */
   auth: {
-    async getUserRole() {
+    getUserRole: async () => {
       return apiService.invoke('auth-role');
-    }
-  }
+    },
+  },
+
+  /**
+   * Audit Functions
+   */
+  audit: {
+    getLogs: async (filters: AuditLogFilters = {}) => {
+      return apiService.invoke<AuditLog[]>('get-audit-logs', filters as unknown as Record<string, unknown>);
+    },
+  },
 }; 
