@@ -479,10 +479,10 @@ const DeliveryPage: React.FC = () => {
       headers.push(['Client', storeDetails.customer_name]);
     }
     if (storeDetails.customer_phone) {
-      headers.push(['Telephone', storeDetails.customer_phone]);
+      headers.push(['Télephone', storeDetails.customer_phone]);
     }
     if (storeDetails.handledBy) {
-      headers.push(['Traitee par', storeDetails.handledBy]);
+      headers.push(['Traitée par', storeDetails.handledBy]);
     }
     if (storeDetails.deliveredBy) {
       headers.push(['Livrée par', storeDetails.deliveredBy]); 
@@ -698,7 +698,7 @@ const DeliveryPage: React.FC = () => {
 
         if (waste > received) {
           validationErrors.push(
-            `${item.variety_name}: prÃ©vu ${planned}, reÃ§u ${received}, dÃ©chets ${waste}`
+            `${item.variety_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`
           );
         }
       });
@@ -716,14 +716,14 @@ const DeliveryPage: React.FC = () => {
 
         if (waste > received) {
           validationErrors.push(
-            `${box.box_name}: prÃ©vu ${planned}, reÃ§u ${received}, dÃ©chets ${waste}`
+            `${box.box_name}: prévu ${planned}, reçu ${received}, déchets ${waste}`
           );
         }
       });
 
       if (validationErrors.length > 0) {
         setError(
-          `Les dÃ©chets dÃ©passent les quantitÃ©s reÃ§ues pour:\n- ${validationErrors.join(
+          `Les déchets dépassent les quantités reçues pour:\n- ${validationErrors.join(
             '\n- '
           )}`
         );
@@ -1064,7 +1064,7 @@ const DeliveryPage: React.FC = () => {
                                 [item.id]: parseInt(e.target.value) || 0
                               })}
                               className="w-20 text-center border-2 border-blue-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-blue-50 hover:bg-white transition-colors"
-                              title={`QuantitÃ© prÃ©vue: ${item.quantity}. Ajustez si nÃ©cessaire.`}
+                              title={`Quantité prévue: ${item.quantity}. Ajustez si nécessaire.`}
                             />
                           ) : !isOrderDelivery && storeDetails.delivery_confirmed && canEditSelectedDelivery ? (
                             <input
@@ -1077,7 +1077,7 @@ const DeliveryPage: React.FC = () => {
                                 [item.id]: parseInt(e.target.value) || 0
                               })}
                               className="w-20 text-center border-2 border-green-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-green-50 hover:bg-white transition-colors"
-                              title={`Admin: Modifier la quantitÃ© reÃ§ue. QuantitÃ© prÃ©vue: ${item.quantity}.`}
+                              title={`Admin: Modifier la quantité reçue. Quantité prévue: ${item.quantity}.`}
                             />
                           ) : (
                             item.received !== null && item.received !== undefined 
@@ -1136,7 +1136,7 @@ const DeliveryPage: React.FC = () => {
                                 });
                               }}
                               className="w-20 text-center border-2 border-red-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-red-50 hover:bg-white transition-colors"
-                              title={`Admin: Modifier les dÃ©chets. Maximum: ${
+                              title={`Admin: Modifier les déchets. Maximum: ${
                                 item.received !== null && item.received !== undefined 
                                   ? item.received 
                                   : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity)
@@ -1191,7 +1191,7 @@ const DeliveryPage: React.FC = () => {
                                     [box.id]: parseInt(e.target.value) || 0
                                   })}
                                   className="w-20 text-center border-2 border-blue-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-blue-50 hover:bg-white transition-colors"
-                                  title={`QuantitÃ© prÃ©vue: ${box.quantity}. Ajustez si nÃ©cessaire.`}
+                                  title={`QuantitÃ© prÃ©vue: ${box.quantity}. Ajustez si nécessaire.`}
                                 />
                               ) : !isOrderDelivery && storeDetails.delivery_confirmed && canEditSelectedDelivery ? (
                                 <input
@@ -1204,7 +1204,7 @@ const DeliveryPage: React.FC = () => {
                                     [box.id]: parseInt(e.target.value) || 0
                                   })}
                                   className="w-20 text-center border-2 border-green-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-green-50 hover:bg-white transition-colors"
-                                  title={`Admin: Modifier la quantitÃ© reÃ§ue. QuantitÃ© prÃ©vue: ${box.quantity}.`}
+                                  title={`Admin: Modifier la quantité reçue. Quantité prévue: ${box.quantity}.`}
                                 />
                               ) : (
                                 box.received !== null && box.received !== undefined 
@@ -1263,11 +1263,11 @@ const DeliveryPage: React.FC = () => {
                                     });
                                   }}
                                   className="w-20 text-center border-2 border-red-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-red-50 hover:bg-white transition-colors"
-                                  title={`Admin: Modifier les dÃ©chets. Maximum: ${
+                                  title={`Admin: Modifier les déchets. Maximum: ${
                                     box.received !== null && box.received !== undefined 
                                       ? box.received 
                                       : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity)
-                                  } boÃ®tes`}
+                                  } boîtes`}
                                 />
                               ) : isOrderDelivery ? (
                                 box.waste ?? 0
@@ -1293,10 +1293,10 @@ const DeliveryPage: React.FC = () => {
                     </div>
                     <div className="ml-3">
                       <p className="text-sm text-krispy-green">
-                        Livraison confirmÃ©e et dÃ©chets reportÃ©s
+                        Livraison confirmé et déchets reportés
                         {isAdmin && (
                           <span className="block text-xs text-gray-600 mt-1">
-                            En tant qu'administrateur, vous pouvez modifier les quantitÃ©s ci-dessus si nÃ©cessaire.
+                            En tant qu'administrateur, vous pouvez modifier les quantités ci-dessus si nécessaire.
                           </span>
                         )}
                       </p>
@@ -1320,7 +1320,7 @@ const DeliveryPage: React.FC = () => {
                     ) : (
                       <>
                         <Check className="h-4 w-4 mr-2" />
-                        Confirmer la RÃ©ception
+                        Confirmer la Réception
                       </>
                     )}
                   </button>
@@ -1342,7 +1342,7 @@ const DeliveryPage: React.FC = () => {
                     ) : (
                       <>
                         <AlertTriangle className="h-4 w-4 mr-2" />
-                        Signaler les DÃ©chets
+                        Signaler les Déchets
                       </>
                     )}
                   </button>
@@ -1364,7 +1364,7 @@ const DeliveryPage: React.FC = () => {
                     ) : (
                       <>
                         <Edit className="h-4 w-4 mr-2" />
-                        Mettre Ã  jour les QuantitÃ©s ReÃ§ues
+                        Mettre Ã  jour les Quantités Reçues
                       </>
                     )}
                   </button>
@@ -1381,7 +1381,7 @@ const DeliveryPage: React.FC = () => {
                     ) : (
                       <>
                         <AlertTriangle className="h-4 w-4 mr-2" />
-                        Mettre Ã  jour les DÃ©chets
+                        Mettre Ã  jour les Déchets
                       </>
                     )}
                   </button>
@@ -1390,7 +1390,7 @@ const DeliveryPage: React.FC = () => {
             </div>
           ) : (
             <div className="p-6 text-center text-gray-500">
-              SÃ©lectionnez un magasin pour voir les dÃ©tails de livraison
+              Sélectionnez un magasin pour voir les détails de livraison
             </div>
           )}
         </div>
