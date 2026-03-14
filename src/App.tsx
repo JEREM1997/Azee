@@ -30,14 +30,14 @@ export default function App() {
               <Suspense fallback={<LoadingSpinner fullScreen message="Loading application..." />}>
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
-                  
-                  {/* Protected routes */}
+
                   <Route element={<AuthGuard />}>
                     <Route element={<Navbar />}>
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
                       <Route path="/order" element={<Navigate to="/orders" replace />} />
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/production" element={<ProductionPage />} />
+                      <Route path="/orders" element={<OrdersPage />} />
                       <Route path="/delivery" element={<DeliveryPage />} />
                       <Route path="/admin" element={<AdminPage />} />
                       <Route path="/users" element={<UsersPage />} />
@@ -48,23 +48,25 @@ export default function App() {
                     </Route>
                   </Route>
 
-                  {/* 404 route */}
-                  <Route path="*" element={
-                    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                      <div className="text-center">
-                        <h1 className="text-4xl font-bold text-gray-900">404</h1>
-                        <p className="mt-2 text-lg text-gray-600">Page not found</p>
-                        <div className="mt-6">
-                          <a
-                            href="/"
-                            className="text-base font-medium text-krispy-green hover:text-krispy-green-dark"
-                          >
-                            Go back home<span aria-hidden="true"> &rarr;</span>
-                          </a>
+                  <Route
+                    path="*"
+                    element={
+                      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                        <div className="text-center">
+                          <h1 className="text-4xl font-bold text-gray-900">404</h1>
+                          <p className="mt-2 text-lg text-gray-600">Page not found</p>
+                          <div className="mt-6">
+                            <a
+                              href="/"
+                              className="text-base font-medium text-krispy-green hover:text-krispy-green-dark"
+                            >
+                              Go back home<span aria-hidden="true"> &rarr;</span>
+                            </a>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  } />
+                    }
+                  />
                 </Routes>
               </Suspense>
             </div>
@@ -74,3 +76,4 @@ export default function App() {
     </ErrorBoundary>
   );
 }
+
