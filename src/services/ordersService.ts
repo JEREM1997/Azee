@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { Order, OrderLineItem } from '../types';
+import { Order, OrderLineItem, UserRole } from '../types';
 
 export interface CreateOrderPayload {
   storeId: string;
@@ -10,7 +10,7 @@ export interface CreateOrderPayload {
   deliveryAddress?: string;
   billingAddress?: string;
   deliveryDate: string;
-  productionDate: string;
+  productionDate?: string;
   productionApproved: boolean;
   orderType: Order['orderType'];
   paymentStatus: Order['paymentStatus'];
@@ -20,6 +20,19 @@ export interface CreateOrderPayload {
   comments?: string;
   items: OrderLineItem[];
 }
+
+export interface FetchOrdersOptions {
+  role?: UserRole;
+  storeIds?: string[];
+}
+
+export const getSuggestedProductionDate = (deliveryDate: string) => {
+  if (!deliveryDate) return '';
+
+  const productionDate = new Date(deliveryDate);
+  productionDate.setDate(productionDate.getDate() - 1);
+  return productionDate.toISOString().split('T')[0];
+};
 
 const mapOrderRowToOrder = (row: any, itemsByOrder: Record<string, OrderLineItem[]>): Order => ({
   id: row.id,
@@ -31,8 +44,8 @@ const mapOrderRowToOrder = (row: any, itemsByOrder: Record<string, OrderLineItem
   deliveryAddress: row.delivery_address ?? undefined,
   billingAddress: row.billing_address ?? undefined,
   deliveryDate: row.delivery_date,
-  productionDate: row.production_date,
-  productionApproved: row.production_approved,
+  productionDate: row.production_date ?? getSuggestedProductionDate(row.delivery_date),
+  productionApproved: !!row.production_approved,
   orderType: row.order_type,
   paymentStatus: row.payment_status,
   handledBy: row.handled_by,
@@ -43,12 +56,24 @@ const mapOrderRowToOrder = (row: any, itemsByOrder: Record<string, OrderLineItem
   createdAt: row.created_at,
 });
 
-export const fetchOrders = async (): Promise<Order[]> => {
-try {
-    const { data: ordersData, error: ordersError } = await supabase
+export const fetchOrders = async (options: FetchOrdersOptions = {}): Promise<Order[]> => {
+  try {
+    const { role, storeIds = [] } = options;
+
+    if (role === 'store' && storeIds.length === 0) {
+      return [];
+    }
+
+    let ordersQuery = supabase
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false });
+
+    if (role === 'store') {
+      ordersQuery = ordersQuery.in('store_id', storeIds);
+    }
+
+    const { data: ordersData, error: ordersError } = await ordersQuery;
 
     if (ordersError) throw ordersError;
     if (!ordersData?.length) return [];
@@ -74,10 +99,11 @@ try {
 
     return ordersData.map(order => mapOrderRowToOrder(order, itemsByOrder));
   } catch (error: any) {
-    // When Supabase tables aren't provisioned locally, avoid blocking the UI with
-    // a hard failure and return an empty list instead. This keeps the Orders page
-    // usable for development/demo environments without Supabase seed data.
-    const missingTable = error?.code === '42P01' || error?.message?.includes('relation') || error?.message?.includes('does not exist');
+    const missingTable =
+      error?.code === '42P01' ||
+      error?.message?.includes('relation') ||
+      error?.message?.includes('does not exist');
+    
     if (missingTable) {
       console.warn('[fetchOrders] Supabase tables missing, returning empty order list');
       return [];
@@ -85,10 +111,12 @@ try {
 
     console.error('[fetchOrders] Error while loading orders', error);
     throw error;
-  }  
+   } 
 };
 
 export const createOrder = async (payload: CreateOrderPayload): Promise<Order> => {
+  const productionDate = payload.productionDate?.trim() || getSuggestedProductionDate(payload.deliveryDate);
+  
   const { data: orderData, error: orderError } = await supabase
     .from('orders')
     .insert({
@@ -100,7 +128,7 @@ export const createOrder = async (payload: CreateOrderPayload): Promise<Order> =
       delivery_address: payload.deliveryAddress,
       billing_address: payload.billingAddress,
       delivery_date: payload.deliveryDate,
-      production_date: payload.productionDate,
+      production_date: productionDate,
       production_approved: payload.productionApproved,
       order_type: payload.orderType,
       payment_status: payload.paymentStatus,
@@ -124,9 +152,18 @@ export const createOrder = async (payload: CreateOrderPayload): Promise<Order> =
     }))
   );
 
-  if (itemsError) throw itemsError;
+  if (itemsError) {
+    await supabase.from('orders').delete().eq('id', orderData.id);
+    throw itemsError;
+  }
 
-  return mapOrderRowToOrder(orderData, { [orderData.id]: payload.items });
+  return mapOrderRowToOrder(
+    {
+      ...orderData,
+      production_date: productionDate,
+    },
+    { [orderData.id]: payload.items }
+  );
 };
 
 export const updateOrderProduction = async (
