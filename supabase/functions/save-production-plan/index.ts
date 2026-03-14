@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
-mport { summarizePlanSnapshot, writeAuditLog } from '../_shared/audit.ts';
+import { summarizePlanSnapshot, writeAuditLog } from '../_shared/audit.ts';
 
 interface ProductionPlanRequest {
   date: string;
