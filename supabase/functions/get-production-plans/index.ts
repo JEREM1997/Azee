@@ -74,9 +74,9 @@ async function fetchApprovedOrdersForRange(
 
   const { data: itemsData, error: itemsError } = await supabaseClient
     .from('order_items')
-    .select('order_id, variety_id, quantity')
+    
     .in('order_id', orderIds);
-
+    .select('order_id, variety_id, quantity, conditioning')
   if (itemsError) {
     if (isMissingTableError(itemsError)) {
       return [];
@@ -115,6 +115,9 @@ async function fetchApprovedOrdersForRange(
         form_id: variety?.form_id || '',
         form_name: formsById.get(variety?.form_id) || 'Commande',
         quantity: Number(item.quantity) || 0,
+        conditioning: item.conditioning ?? null,
+        received: Number(item.quantity) || 0,
+        waste: 0,
         received: null,
         waste: null,
       };
@@ -230,6 +233,11 @@ function mergeApprovedOrdersIntoPlan(plan: any, approvedOrders: any[], date: str
 
       if (existingItem) {
         existingItem.quantity = Number(existingItem.quantity || 0) + orderItem.quantity;
+        existingItem.received = Number(existingItem.received || 0) + Number(orderItem.received || orderItem.quantity || 0);
+        existingItem.waste = Number(existingItem.waste || 0) + Number(orderItem.waste || 0);
+        if (!existingItem.conditioning && orderItem.conditioning) {
+          existingItem.conditioning = orderItem.conditioning;
+        } 
       } else {
         storePlan.production_items.push({ ...orderItem });
       }
