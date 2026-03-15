@@ -19,8 +19,13 @@ export default class ErrorBoundary extends Component<Props, State> {
   };
 
   public static getDerivedStateFromError(error: Error): State {
+    const handled = AppErrorHandler.handleApiError(error);
     return {
-      error: AppErrorHandler.handleApiError(error),
+      error: {
+        ...handled,
+        message: error.message || handled.message,
+        details: error.stack,
+      },
       hasError: true,
     };
   }
