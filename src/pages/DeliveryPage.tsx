@@ -275,10 +275,10 @@ const DeliveryPage: React.FC = () => {
   };
   
   const loadCurrentPlan = async (options: { silent?: boolean } = {}) => {
-    const { silent = false } = options;
+    const isSilent = options.silent === true;
     try {
       console.log('ðŸ”„ Loading current plan...');
-      if (!silent) {
+      if (!isSilent) {
         setLoading(true);
       }
       setError(null);
@@ -413,7 +413,7 @@ const DeliveryPage: React.FC = () => {
       console.error('âŒ Error loading production plan:', err);
       setError(err instanceof Error ? err.message : 'Error loading production plan');
     } finally {
-       if (!silent) {
+     if (!isSilent) {
         setLoading(false);
       } 
     }
