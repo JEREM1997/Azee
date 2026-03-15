@@ -28,8 +28,8 @@ interface OrderFormState {
 }
 
 const paymentStatusLabels: Record<OrderPaymentStatus, string> = {
-  deja_paye: 'Deja paye',
-  a_facturer: 'A facturer',
+  deja_paye: 'Déja payé',
+  a_facturer: 'à facturer',
   a_la_livraison: 'A la livraison',
 };
 
@@ -55,7 +55,7 @@ const buildInitialForm = (storeId: string, catalogue: DonutVariety[]): OrderForm
     deliveryDate,
     storeId,
     orderType: 'retail',
-    paymentStatus: 'a_facturer',
+    paymentStatus: 'à_facturer',
     conditioning: conditioningOptions[1],
     handledBy: '',
     deliveredBy: '',
@@ -173,13 +173,13 @@ const OrdersPage: React.FC = () => {
 
   const validateForm = () => {
     const errors: string[] = [];
-    if (!form) return ['Le formulaire ne peut pas etre charge.'];
-    if (!form.storeId) errors.push('Selectionnez un magasin.');
+    if (!form) return ['Le formulaire ne peut pas etre chargé.'];
+    if (!form.storeId) errors.push('Sélectionnez un magasin.');
     if (!form.customerName.trim()) errors.push('Le nom du client est requis.');
-    if (!form.customerPhone.trim()) errors.push('Le numero de telephone est requis.');
+    if (!form.customerPhone.trim()) errors.push('Le numero de télephone est requis.');
     if (!form.deliveryDate) errors.push('La date de livraison est requise.');
-    if (!form.items.length) errors.push('Ajoutez au moins une variete.');
-    if (form.items.some(item => item.quantity <= 0)) errors.push('Chaque ligne doit avoir une quantite positive.');
+    if (!form.items.length) errors.push('Ajoutez au moins une variété.');
+    if (form.items.some(item => item.quantity <= 0)) errors.push('Chaque ligne doit avoir une quantité positive.');
     return errors;
   };
 
@@ -218,7 +218,7 @@ const OrdersPage: React.FC = () => {
       setOrders(prev => [savedOrder, ...prev]);
       setForm(buildInitialForm(form.storeId, catalogue));
       setFormErrors([]);
-      setSuccessMessage('Commande enregistree. Un admin doit encore fixer puis valider la date de production.');
+      setSuccessMessage('Commande enregistrée. Un admin doit encore fixer puis valider la date de production.');
     } catch (error) {
       console.error('Error while creating order:', error);
       setFormErrors(["Impossible d'enregistrer la commande dans Supabase."]);
@@ -255,7 +255,7 @@ const OrdersPage: React.FC = () => {
       setOrdersError(null);
       const updated = await updateOrderProduction(orderId, order.productionDate, order.productionApproved);
       setOrders(prev => prev.map(item => (item.id === orderId ? updated : item)));
-      setSuccessMessage('Date de production enregistree.');
+      setSuccessMessage('Date de production enregistrée.');
     } catch (error) {
       console.error('Error while saving order date:', error);
       setOrdersError(error instanceof Error ? error.message : "Impossible d'enregistrer la date de production."); 
@@ -276,7 +276,7 @@ const OrdersPage: React.FC = () => {
       setOrdersError(null);
       const updated = await updateOrderProduction(orderId, order.productionDate, true);
       setOrders(prev => prev.map(item => (item.id === orderId ? updated : item)));
-      setSuccessMessage('Commande validee. Elle doit maintenant apparaitre dans le plan du bon magasin.');
+      setSuccessMessage('Commande validée. Elle doit maintenant apparaitre dans le plan du bon magasin.');
     } catch (error) {
       console.error('Error while approving order:', error);
       setOrdersError(error instanceof Error ? error.message : "Impossible de valider la commande.");
@@ -305,7 +305,7 @@ const OrdersPage: React.FC = () => {
       setSuccessMessage('');
       await deleteOrder(orderId);
       setOrders(prev => prev.filter(item => item.id !== orderId));
-      setSuccessMessage('Commande supprimee.');
+      setSuccessMessage('Commande supprimée.');
     } catch (error) {
       console.error('Error while deleting order:', error);
       setOrdersError(error instanceof Error ? error.message : "Impossible de supprimer la commande.");
@@ -330,7 +330,7 @@ const OrdersPage: React.FC = () => {
         <div className="flex items-start justify-between flex-wrap gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Commandes magasin</h1>
-            <p className="text-gray-600">Le magasin saisit seulement la livraison. La production est fixee par un admin.</p>
+            <p className="text-gray-600">Le magasin saisit seulement la livraison. La production est fixée par un admin.</p>
           </div>
           <div className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 text-sm">
             Validation admin obligatoire avant apparition dans le plan
@@ -343,7 +343,7 @@ const OrdersPage: React.FC = () => {
               <span className="font-semibold">Erreur :</span>
               <span>{adminError}</span>
               <button type="button" onClick={refresh} className="ml-auto text-xs underline">
-                Reessayer
+                Réessayer
               </button>
             </div>
           </div>
@@ -385,7 +385,7 @@ const OrdersPage: React.FC = () => {
                     value={form.customerPhone}
                     onChange={event => handleFormChange('customerPhone', event.target.value)}
                     className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
-                    placeholder="Telephone"
+                    placeholder="Télephone"
                   />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -415,7 +415,7 @@ const OrdersPage: React.FC = () => {
                       value={form.companyName}
                       onChange={event => handleFormChange('companyName', event.target.value)}
                       className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
-                      placeholder="Societe"
+                      placeholder="Sociéte"
                     />
                     <input
                       type="text"
@@ -442,7 +442,7 @@ const OrdersPage: React.FC = () => {
                   onChange={event => handleFormChange('deliveryDate', event.target.value)}
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
                 />
-                <p className="text-xs text-gray-500">La date de production reste reservee a la validation admin.</p>
+                <p className="text-xs text-gray-500">La date de production reste reservée à la validation admin.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <select
                     value={form.conditioning}
@@ -467,14 +467,14 @@ const OrdersPage: React.FC = () => {
                     value={form.handledBy}
                     onChange={event => handleFormChange('handledBy', event.target.value)}
                     className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
-                    placeholder="Traitee par"
+                    placeholder="Traitée par"
                   />
                   <input
                     type="text"
                     value={form.deliveredBy}
                     onChange={event => handleFormChange('deliveredBy', event.target.value)}
                     className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
-                    placeholder="Livree par"
+                    placeholder="Livrée par"
                   />
                 </div>
               </div>
@@ -483,8 +483,8 @@ const OrdersPage: React.FC = () => {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Varietes commandees</h2>
-                  <p className="text-sm text-gray-600">Selection depuis le catalogue actif.</p>
+                  <h2 className="text-lg font-semibold text-gray-900">Variétés commandées</h2>
+                  <p className="text-sm text-gray-600">Sélection depuis le catalogue actif.</p>
                 </div>
                 <button type="button" onClick={handleAddItem} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark">
                   Ajouter une ligne
@@ -626,7 +626,7 @@ const OrdersPage: React.FC = () => {
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-900">
                       <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium border ${order.productionApproved ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
-                        {order.productionApproved ? 'Validee par admin' : 'En attente de validation'}
+                        {order.productionApproved ? 'Validée par admin' : 'En attente de validation'}
                       </span>
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-900">
@@ -646,7 +646,7 @@ const OrdersPage: React.FC = () => {
                       <div className="flex flex-col items-end gap-2">
                         {canManageOrders ? (
                           order.productionApproved ? (
-                            <span className="text-green-700 text-xs font-medium">Validation terminee</span>
+                            <span className="text-green-700 text-xs font-medium">Validation terminée</span>
                           ) : (
                             <button
                               type="button"
