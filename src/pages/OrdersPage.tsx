@@ -352,15 +352,24 @@ const OrdersPage: React.FC = () => {
               </div>
 
               <div className="space-y-4">
-                <input type="date" value={form.deliveryDate} onChange={(event) => handleFormChange('deliveryDate', event.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green" />
-                <p className="text-xs text-gray-500">La date de production reste reservee a la validation admin.</p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Date de livraison</label>
+                  <input type="date" value={form.deliveryDate} onChange={(event) => handleFormChange('deliveryDate', event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green" />
+                </div>
+                <p className="text-xs text-gray-500">La date de production reste reservée a la validation admin.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <select value={form.conditioning} onChange={(event) => handleFormChange('conditioning', event.target.value)} className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green">
-                    {conditioningOptions.map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                  <input type="text" value={form.comments} onChange={(event) => handleFormChange('comments', event.target.value)} className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green" placeholder="Commentaire" />
+                 <div>
+                    <label className="block text-sm font-medium text-gray-700">Conditionnement</label>
+                    <select value={form.conditioning} onChange={(event) => handleFormChange('conditioning', event.target.value)} className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green">
+                      {conditioningOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Commentaire</label>
+                    <input type="text" value={form.comments} onChange={(event) => handleFormChange('comments', event.target.value)} className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green" placeholder="Commentaire" />
+                  </div> 
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <input type="text" value={form.handledBy} onChange={(event) => handleFormChange('handledBy', event.target.value)} className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green" placeholder="Traitee par" />
@@ -377,21 +386,24 @@ const OrdersPage: React.FC = () => {
                 </div>
                 <button type="button" onClick={handleAddItem} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark">Ajouter une ligne</button>
               </div>
-
+              <label className="block text-sm font-medium text-gray-700">Variete</label>
+                    <select value={item.varietyId} onChange={(event) => handleItemChange(index, 'varietyId', event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green">
               {form.items.map((item, index) => (
                 <div key={`${item.varietyId}-${index}`} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-gray-50 border border-gray-100 rounded-lg p-4">
                   <div className="md:col-span-5">
-                    <select value={item.varietyId} onChange={(event) => handleItemChange(index, 'varietyId', event.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green">
+                    <label className="block text-sm font-medium text-gray-700">Quantité</label>
+                    <input type="number" min={1} value={item.quantity} onChange={(event) => handleItemChange(index, 'quantity', Number(event.target.value))} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green" />
                       {catalogue.map((variety) => (
                         <option key={variety.id} value={variety.id}>{variety.name}</option>
                       ))}
                     </select>
                   </div>
                   <div className="md:col-span-3">
-                    <input type="number" min={1} value={item.quantity} onChange={(event) => handleItemChange(index, 'quantity', Number(event.target.value))} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green" />
+                    
                   </div>
                   <div className="md:col-span-3">
-                    <select value={item.conditioning} onChange={(event) => handleItemChange(index, 'conditioning', event.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green">
+                    <label className="block text-sm font-medium text-gray-700">Conditionnement</label>
+                    <select value={item.conditioning} onChange={(event) => handleItemChange(index, 'conditioning', event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green">
                       {conditioningOptions.map((option) => (
                         <option key={option} value={option}>{option}</option>
                       ))}
