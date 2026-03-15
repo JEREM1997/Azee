@@ -562,11 +562,13 @@ const OrdersPage: React.FC = () => {
 
         {ordersError && <div className="rounded-md bg-red-50 p-4 mb-4 text-sm text-red-700">{ordersError}</div>}
 
-        {ordersLoading ? (
-          <LoadingSpinner message="Chargement des commandes..." />
-        ) : orders.length === 0 ? (
+        {ordersLoading && <LoadingSpinner message="Chargement des commandes..." />}
+
+        {!ordersLoading && orders.length === 0 && (
           <div className="text-sm text-gray-600">Aucune commande pour le moment.</div>
-        ) : (
+         )}
+
+        {!ordersLoading && orders.length > 0 && (
           <div className="overflow-x-auto">
             <div className="overflow-hidden md:overflow-x-auto">
             <table className="responsive-table min-w-full divide-y divide-gray-200">
@@ -582,16 +584,18 @@ const OrdersPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {orders.map(order => (
+                {orders.map((order) => (
                   <tr key={order.id}>
                     <td data-label="Commande" className="px-4 py-4 text-sm text-gray-900">
                       <div className="font-semibold">{order.customerName}</div>
                       <div className="text-gray-600">{orderTypeLabels[order.orderType]}</div>
                     </td>
+                    
                     <td data-label="Magasin" className="px-4 py-4 text-sm text-gray-900">
                       <div className="font-semibold">{order.storeName || 'Magasin inconnu'}</div>
                       <div className="text-gray-600">{order.storeId}</div>
                     </td>
+                    
                     <td data-label="Livraison" className="px-4 py-4 text-sm text-gray-900">
                       <div>Livraison : {order.deliveryDate}</div>
                       {canManageOrders && (
@@ -604,7 +608,7 @@ const OrdersPage: React.FC = () => {
                               <input
                                 type="date"
                                 value={order.productionDate}
-                                onChange={event => handleProductionFieldChange(order.id, event.target.value)}
+                                onChange={(event) => handleProductionFieldChange(order.id, event.target.value)}
                                 className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
                               />
                               <button
@@ -620,20 +624,29 @@ const OrdersPage: React.FC = () => {
                         </div>
                       )}
                     </td>
+                    
                     <td data-label="Paiement" className="px-4 py-4 text-sm text-gray-900">
                       <span className="inline-flex rounded-full px-3 py-1 text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
                         {paymentStatusLabels[order.paymentStatus]}
                       </span>
                     </td>
+                    
                     <td data-label="Production" className="px-4 py-4 text-sm text-gray-900">
-                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium border ${order.productionApproved ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-medium border ${
+                          order.productionApproved
+                            ? 'bg-green-50 text-green-700 border-green-200'
+                            : 'bg-gray-100 text-gray-700 border-gray-200'
+                        }`}
+                      >
                         {order.productionApproved ? 'Validée par admin' : 'En attente de validation'}
                       </span>
                     </td>
+                    
                     <td data-label="Articles" className="px-4 py-4 text-sm text-gray-900">
                       <ul className="space-y-1">
-                        {order.items.map(item => {
-                          const variety = catalogue.find(entry => entry.id === item.varietyId);
+                        {order.items.map((item) => {
+                          const variety = catalogue.find((entry) => entry.id === item.varietyId);
                           return (
                             <li key={`${order.id}-${item.varietyId}`} className="flex flex-col">
                               <span className="font-medium">{variety?.name || item.varietyId}</span>
@@ -643,25 +656,28 @@ const OrdersPage: React.FC = () => {
                         })}
                       </ul>
                     </td>
+                    
                      <td data-label="Actions" className="px-4 py-4 text-right text-sm">
                       <div className="flex flex-col gap-2 items-stretch md:items-end">
-                        {canManageOrders ? (
-                          order.productionApproved ? (
-                           <span className="text-green-700 text-xs font-medium md:text-right">Validation terminée</span> 
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => approveOrder(order.id)}
-                              disabled={savingOrderId === order.id}
-                              className="inline-flex items-center px-3 py-2 text-xs font-medium rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                            >
-                              {savingOrderId === order.id ? 'Validation...' : 'Valider et ajouter au plan'}
-                            </button>
-                          )
-                        ) : (
+                        {!canManageOrders && (
                           <span className="text-gray-500 text-xs">Validation reservee a l'admin</span>
                         )}
 
+                        {canManageOrders && order.productionApproved && (
+                          <span className="text-green-700 text-xs font-medium md:text-right">Validation terminee</span>
+                        )}
+
+                        {canManageOrders && !order.productionApproved && (
+                          <button
+                            type="button"
+                            onClick={() => approveOrder(order.id)}
+                            disabled={savingOrderId === order.id}
+                            className="inline-flex items-center px-3 py-2 text-xs font-medium rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                          >
+                            {savingOrderId === order.id ? 'Validation...' : 'Valider et ajouter au plan'}
+                          </button>
+                        )}
+                        
                         {canDeleteOrder(order) && (
                           <button
                             type="button"
