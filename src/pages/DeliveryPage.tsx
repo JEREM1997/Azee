@@ -126,7 +126,10 @@ const DeliveryPage: React.FC = () => {
     cleanText(item?.variety_name, 'Variété inconnue');
 
   const getBoxDisplayName = (box: Partial<DeliveryBoxProduction> | null | undefined) =>
-    cleanText(box?.box_name, 'Boîte inconnue');
+    cleanText(box?.box_name, 'Bo\u00eete inconnue');
+
+  const getFormDisplayName = (formId: string, fallback: string) =>
+    safeForms.find((form) => form.id === formId)?.name || fallback;
 
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null;
@@ -1060,7 +1063,7 @@ const DeliveryPage: React.FC = () => {
                         {getVarietyDisplayName(item)} 
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                         {safeForms.find((form) => form.id === item.form_id)?.name || item.form_name}
+                         {getFormDisplayName(item.form_id, item.form_name)}
                         </td>
                         </td>
                         <td data-label="Prévu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
