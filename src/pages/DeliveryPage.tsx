@@ -120,6 +120,30 @@ const DeliveryPage: React.FC = () => {
     }
     return fallback;
   };
+
+  const updateStoreInCurrentPlan = (
+    storeId: string,
+    updater: (store: DeliveryStoreProduction) => DeliveryStoreProduction
+  ) => {
+    setCurrentPlan(prev => {
+      if (!prev?.store_productions) {
+        return prev;
+      }
+
+      const storeIndex = prev.store_productions.findIndex(store => store.id === storeId);
+      if (storeIndex < 0) {
+        return prev;
+      }
+
+      const nextStores = [...prev.store_productions];
+      nextStores[storeIndex] = updater(nextStores[storeIndex]);
+
+      return {
+        ...prev,
+        store_productions: nextStores,
+      };
+    });
+  };
   
   // Function to initialize local state with current values from the plan
   const initializeLocalState = (stores: DeliveryStoreProduction[]) => {
@@ -630,39 +654,20 @@ const DeliveryPage: React.FC = () => {
       setReceivedQuantities(finalReceivedQuantities);
       setBoxReceivedQuantities(finalBoxReceivedQuantities);
 
-      // Update the current plan state immediately to reflect changes
-      if (currentPlan && storeDetails) {
-        const updatedPlan = { ...currentPlan };
-        const storeIndex = updatedPlan.store_productions?.findIndex(s => s.id === storeDetails.id);
-        
-        if (storeIndex !== undefined && updatedPlan.store_productions) {
-          updatedPlan.store_productions[storeIndex] = {
-            ...updatedPlan.store_productions[storeIndex],
-            delivery_confirmed: true
-          };
-          
-          // Update production items with received quantities
-          if (updatedPlan.store_productions[storeIndex].production_items) {
-            updatedPlan.store_productions[storeIndex].production_items = 
-              updatedPlan.store_productions[storeIndex].production_items!.map(item => ({
-                ...item,
-                received: finalReceivedQuantities[item.id] ?? item.received ?? item.quantity
-              }));
-          }
-          
-          // Update box productions with received quantities
-          if (updatedPlan.store_productions[storeIndex].box_productions) {
-            updatedPlan.store_productions[storeIndex].box_productions = 
-              updatedPlan.store_productions[storeIndex].box_productions!.map(box => ({
-                ...box,
-                received: finalBoxReceivedQuantities[box.id] ?? box.received ?? box.quantity
-              }));
-          }
-          
-          setCurrentPlan(updatedPlan);
-        }
-      }
-
+      
+ updateStoreInCurrentPlan(storeDetails.id, store => ({
+        ...store,
+        delivery_confirmed: true,
+        production_items: store.production_items?.map(item => ({
+          ...item,
+          received: finalReceivedQuantities[item.id] ?? item.received ?? item.quantity,
+        })),
+        box_productions: store.box_productions?.map(box => ({
+          ...box,
+          received: finalBoxReceivedQuantities[box.id] ?? box.received ?? box.quantity,
+        })),
+      }));
+      
       // Add a small delay to ensure server has processed the update
       console.log('âœ… Delivery confirmed, reloading plan in 500ms...');
       setTimeout(async () => {
@@ -754,38 +759,18 @@ const DeliveryPage: React.FC = () => {
       
       if (error) throw error;
 
-      // Update the current plan state immediately to reflect changes
-      if (currentPlan && storeDetails) {
-        const updatedPlan = { ...currentPlan };
-        const storeIndex = updatedPlan.store_productions?.findIndex(s => s.id === storeDetails.id);
-        
-        if (storeIndex !== undefined && updatedPlan.store_productions) {
-          updatedPlan.store_productions[storeIndex] = {
-            ...updatedPlan.store_productions[storeIndex],
-            waste_reported: true
-          };
-          
-          // Update production items with waste quantities
-          if (updatedPlan.store_productions[storeIndex].production_items) {
-            updatedPlan.store_productions[storeIndex].production_items = 
-              updatedPlan.store_productions[storeIndex].production_items!.map(item => ({
-                ...item,
-                waste: wasteQuantities[item.id] ?? item.waste ?? 0
-              }));
-          }
-          
-          // Update box productions with waste quantities
-          if (updatedPlan.store_productions[storeIndex].box_productions) {
-            updatedPlan.store_productions[storeIndex].box_productions = 
-              updatedPlan.store_productions[storeIndex].box_productions!.map(box => ({
-                ...box,
-                waste: boxWasteQuantities[box.id] ?? box.waste ?? 0
-              }));
-          }
-          
-          setCurrentPlan(updatedPlan);
-        }
-      }
+     updateStoreInCurrentPlan(storeDetails.id, store => ({
+        ...store,
+        waste_reported: true,
+        production_items: store.production_items?.map(item => ({
+          ...item,
+          waste: wasteQuantities[item.id] ?? item.waste ?? 0,
+        })),
+        box_productions: store.box_productions?.map(box => ({
+          ...box,
+          waste: boxWasteQuantities[box.id] ?? box.waste ?? 0,
+        })),
+      }));
 
       // Add a small delay to ensure server has processed the update
       console.log('âœ… Waste reported, reloading plan in 500ms...');
