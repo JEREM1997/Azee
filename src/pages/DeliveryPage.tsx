@@ -108,7 +108,25 @@ const DeliveryPage: React.FC = () => {
   const [wasteQuantities, setWasteQuantities] = useState<{ [key: string]: number }>({});
   const [boxReceivedQuantities, setBoxReceivedQuantities] = useState<{ [key: string]: number }>({});
   const [boxWasteQuantities, setBoxWasteQuantities] = useState<{ [key: string]: number }>({});
+  const currentUserStoreIds = Array.isArray(currentUser?.storeIds)
+    ? currentUser.storeIds.filter((storeId): storeId is string => typeof storeId === 'string')
+    : [];
 
+  const cleanText = (value: unknown, fallback = '') =>
+    typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
+
+  const compareText = (left: unknown, right: unknown) =>
+    cleanText(left).localeCompare(cleanText(right), 'fr', { sensitivity: 'base' });
+
+  const getStoreDisplayName = (store: Partial<DeliveryStoreProduction> | null | undefined) =>
+    cleanText(store?.store_name, 'Magasin inconnu');
+
+  const getVarietyDisplayName = (item: Partial<DeliveryProductionItem> | null | undefined) =>
+    cleanText(item?.variety_name, 'Variété inconnue');
+
+  const getBoxDisplayName = (box: Partial<DeliveryBoxProduction> | null | undefined) =>
+    cleanText(box?.box_name, 'Boîte inconnue');
+  
   const toUiErrorMessage = (err: unknown, fallback: string) => {
     if (err instanceof Error && err.message) {
       return err.message;
@@ -303,10 +321,11 @@ const DeliveryPage: React.FC = () => {
         const isMatchingDate = normalize(store.deliverydate || '') === normalize(deliveryDate);
         
         // Check if user has access to this store
-        const hasAccess = isAdmin || isProduction || 
-                         !currentUser?.storeIds || 
-                         currentUser.storeIds.length === 0 || 
-                         currentUser.storeIds.includes(store.store_id);
+        const hasAccess =
+          isAdmin ||
+          isProduction ||
+          currentUserStoreIds.length === 0 ||
+          currentUserStoreIds.includes(store.store_id);
         
         return isMatchingDate && (showAllStores || hasAccess);
       });
@@ -361,33 +380,42 @@ const DeliveryPage: React.FC = () => {
     }
   }, [currentPlan]);
 
-  // Filter stores based on user role and store IDs
-  const clean = (s:string)=>s.trim().toLowerCase();
-
   const allowedStoreIds = new Set(
-    (currentUser?.storeIds || []).map(clean)
+     currentUserStoreIds.map((storeId) => cleanText(storeId).toLowerCase()) 
   );
 
-  const userStoresUnsorted = currentPlan?.store_productions?.filter(store=>{
-    if (isAdmin || isProduction) return true;
-    if (showAllStores) return true;
-    return allowedStoreIds.has(clean(store.store_id ?? ''));
-  }) || [];
+  const userStoresUnsorted =
+    currentPlan?.store_productions?.filter((store) => {
+      if (isAdmin || isProduction) return true;
+      if (showAllStores) return true;
+      return allowedStoreIds.has(cleanText(store.store_id).toLowerCase());
+    }) || [];
 
-  const userStores = userStoresUnsorted.sort((a,b)=>a.store_name.localeCompare(b.store_name));
+  const userStores = [...userStoresUnsorted].sort((a, b) =>
+    compareText(getStoreDisplayName(a), getStoreDisplayName(b))
+  );
 
   const storeDetails = selectedStore 
     ? currentPlan?.store_productions?.find(store => store.id === selectedStore)
     : null;
   const selectedConditionings = storeDetails
-    ? [...new Set((storeDetails.production_items || []).map(item => item.conditioning).filter(Boolean))]
+    ? [
+        ...new Set(
+          (storeDetails.production_items || [])
+            .map((item) => item.conditioning)
+            .filter(
+              (conditioning): conditioning is string =>
+                typeof conditioning === 'string' && conditioning.trim().length > 0
+            )
+        ),
+      ]
     : [];
   const isOrderDelivery = storeDetails?.source_type === 'order';
   const canManageSelectedDelivery = !!storeDetails && !isOrderDelivery && !!(
-    currentUser?.storeIds?.includes(storeDetails.store_id) || isAdmin || isProduction
+  currentUserStoreIds.includes(storeDetails.store_id) || isAdmin || isProduction 
   );
   const canEditSelectedDelivery = !!storeDetails && !isOrderDelivery && !!(
-    isAdmin || currentUser?.storeIds?.includes(storeDetails.store_id)
+    isAdmin || currentUserStoreIds.includes(storeDetails.store_id)
   );
 
   const generateDeliveryBulletin = () => {
@@ -408,7 +436,7 @@ const DeliveryPage: React.FC = () => {
       ['Type', storeDetails.source_label || 'Plan habituel'],
       ['Date de la production', productionDate],
       ['Date de livraison', deliveryDate],
-      ['Magasin', storeDetails.store_name]
+      ['Magasin', getStoreDisplayName(storeDetails)]
     ];
 
     if (storeDetails.source_order_id) {
@@ -445,8 +473,9 @@ const DeliveryPage: React.FC = () => {
      ['Variété', 'Conditionnement', 'Quantité Prévue (unité)', 'Quantité Reçue (unité)', 'Déchets (unité)'] 
     ];
 
-    const itemsTableData = storeDetails.production_items?.slice().sort((a,b)=>a.variety_name.localeCompare(b.variety_name)).map(item => [
-      item.variety_name,
+    
+    const itemsTableData = storeDetails.production_items?.slice().sort((a,b)=>compareText(a.variety_name, b.variety_name)).map(item => [
+      getVarietyDisplayName(item),
       item.conditioning || '-',
       item.quantity.toString(),
       receivedQuantities[item.id]?.toString() || item.received?.toString() || '',
@@ -470,8 +499,8 @@ const DeliveryPage: React.FC = () => {
         ['Boîte', 'Quantité Prévue (unitÃ©)', 'Quantités Reçue (unité)', 'Déchets (unité)']
       ];
 
-      const boxesTableData = storeDetails.box_productions.slice().sort((a,b)=>a.box_name.localeCompare(b.box_name)).map(box => [
-        box.box_name,
+      const boxesTableData = storeDetails.box_productions.slice().sort((a,b)=>compareText(a.box_name, b.box_name)).map(box => [
+        getBoxDisplayName(box),
         box.quantity.toString(),
         boxReceivedQuantities[box.id]?.toString() || box.received?.toString() || '',
         boxWasteQuantities[box.id]?.toString() || box.waste?.toString() || ''
@@ -499,7 +528,7 @@ const DeliveryPage: React.FC = () => {
     // Update filename to include delivery date
     const fileDate = storeDetails.deliverydate ? formatDateSafe(storeDetails.deliverydate) : productionDate;
     const filePrefix = isOrderDelivery ? 'bulletin-livraison-commande' : 'bulletin-livraison';
-    doc.save(`${filePrefix}-${storeDetails.store_name}-${fileDate}.pdf`);
+    doc.save(`${filePrefix}-${getStoreDisplayName(storeDetails)}-${fileDate}.pdf`);
   };
 
   const handleConfirmDelivery = async () => {
@@ -576,8 +605,6 @@ const DeliveryPage: React.FC = () => {
       }));
       
       await loadCurrentPlan({ silent: true });
-      if (false) {
-      if (false) {
       // Add a small delay to ensure server has processed the update
       console.log('âœ… Delivery confirmed, reloading plan in 500ms...');
       setTimeout(async () => {
@@ -590,8 +617,6 @@ const DeliveryPage: React.FC = () => {
           // Don't show error to user as the main operation succeeded
         }
       }, 500);
-      }
-      } 
     } catch (err) {
       console.error('Error confirming delivery:', err);
       setError(toUiErrorMessage(err, 'Erreur lors de la confirmation de réception.')); 
@@ -697,21 +722,18 @@ const DeliveryPage: React.FC = () => {
 
       await loadCurrentPlan({ silent: true });
 
-       if (false) {
-
       // Add a small delay to ensure server has processed the update
       console.log('âœ… Waste reported, reloading plan in 500ms...');
       setTimeout(async () => {
         try {
           console.log('ðŸ”„ Reloading plan after waste reporting...');
-          await loadCurrentPlan();
+          await loadCurrentPlan({ silent: true });
           console.log('âœ… Plan reloaded successfully');
         } catch (error) {
           console.error('Error reloading plan after waste reporting:', error);
           // Don't show error to user as the main operation succeeded
         }
       }, 500);
-      }   
     } catch (err) {
       console.error('Error reporting waste:', err);
       const message = toUiErrorMessage(err, 'Erreur lors de la déclaration des déchets.');
@@ -719,7 +741,7 @@ const DeliveryPage: React.FC = () => {
       if (message === 'An unexpected server error occurred') {
         try {
           await wait(500);
-          await loadCurrentPlan();
+          await loadCurrentPlan({ silent: true });
           setError(null);
           return;
         } catch (reloadError) {
@@ -809,7 +831,7 @@ const DeliveryPage: React.FC = () => {
                   }`}
                 >
                   <div className="flex justify-between items-center">
-                    <span className="font-medium text-gray-900">{store.store_name}</span>
+                    <span className="font-medium text-gray-900">{getStoreDisplayName(store)}</span>
                     <span className={`text-sm inline-flex items-center px-2.5 py-0.5 rounded-full font-medium ${
                       store.source_type === 'order'
                         ? 'bg-blue-100 text-blue-800'
@@ -882,7 +904,7 @@ const DeliveryPage: React.FC = () => {
             <div className="p-6">
              <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between"> 
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900">{storeDetails.store_name}</h3>
+                  <h3 className="text-lg font-medium text-gray-900">{getStoreDisplayName(storeDetails)}</h3>
                   <div className="mt-1 space-y-1">
                   <p className="text-gray-500">Total : {storeDetails.total_quantity} doughnuts</p>
                     <p className="text-sm text-gray-600">
@@ -926,7 +948,7 @@ const DeliveryPage: React.FC = () => {
                   </div>
                 </div>
                  <div className="flex flex-wrap gap-2">
-                  {(isAdmin || isProduction || currentUser?.storeIds?.includes(storeDetails.store_id)) && (
+                  {(isAdmin || isProduction || currentUserStoreIds.includes(storeDetails.store_id)) && (
                     <button
                       onClick={generateDeliveryBulletin}
                       className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
@@ -980,10 +1002,10 @@ const DeliveryPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {storeDetails.production_items?.slice().sort((a,b)=>a.variety_name.localeCompare(b.variety_name)).map((item) => (
+                    {storeDetails.production_items?.slice().sort((a,b)=>compareText(a.variety_name, b.variety_name)).map((item) => (
                       <tr key={item.id}>
                        <td data-label="Variété" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> 
-                          {item.variety_name}
+                        {getVarietyDisplayName(item)} 
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                           {forms.find(form => form.id === item.form_id)?.name || item.form_name}
@@ -1110,10 +1132,10 @@ const DeliveryPage: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {storeDetails.box_productions.slice().sort((a,b)=>a.box_name.localeCompare(b.box_name)).map((box) => (
+                       {storeDetails.box_productions.slice().sort((a,b)=>compareText(a.box_name, b.box_name)).map((box) => (
                           <tr key={box.id}>
                            <td data-label="Boîte" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> 
-                              {box.box_name}
+                             {getBoxDisplayName(box)} 
                             </td>
                             <td data-label="Prévu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                               {box.quantity}
