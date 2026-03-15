@@ -138,7 +138,7 @@ const Navbar: React.FC = () => {
               />
             </div>
 
-            <div className="hidden sm:flex min-w-0 flex-1 items-center">
+             <div className="hidden sm:flex min-w-0 flex-1 items-center gap-4">
               <div className="ml-2 flex min-w-0 flex-1 items-center gap-4 overflow-x-auto lg:gap-6">
                 {desktopPrimaryNavigation.map(item => (
                   <Link
@@ -153,43 +153,58 @@ const Navbar: React.FC = () => {
                     {renderNavLabel(item)}
                   </Link>
                 ))}
+               </div> 
 
-                {desktopManagementNavigation.length > 0 && (
-                  <div className="relative flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setIsManagementOpen(prev => !prev)}
-                      className={`${
-                        desktopManagementNavigation.some(item => isActive(item.href)) 
-                          ? 'border-krispy-green text-gray-900'
-                          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                       } inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium`}
-                    >
+               {desktopManagementNavigation.length > 0 && (
+                <div className="relative hidden lg:flex flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsManagementOpen(prev => !prev)}
+                    className={`${
+                      desktopManagementNavigation.some(item => isActive(item.href))
+                        ? 'border-krispy-green text-gray-900'
+                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                    } inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium`}
+                  >
                     Gestion
-                      <ChevronDown className="ml-1 h-4 w-4" />
-                    </button>
+                    <ChevronDown className="ml-1 h-4 w-4" />
+                  </button>
+                
+             {isManagementOpen && (
+                    <div className="absolute right-0 top-full z-30 mt-3 w-56 rounded-xl border border-gray-200 bg-white p-2 shadow-xl ring-1 ring-black/5">
+                      {desktopManagementNavigation.map(item => (
+                        <Link
+                          key={item.name}
+                          to={item.href}
+                          onClick={() => setIsManagementOpen(false)}
+                          className={`${
+                            isActive(item.href)
+                              ? 'bg-krispy-green-light text-krispy-green'
+                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          } block rounded-lg px-3 py-2 text-sm font-medium`}
+                        >
+                          {renderNavLabel(item)}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
-                    {isManagementOpen && (
-                      <div className="absolute right-0 z-20 mt-3 w-52 rounded-xl border border-gray-200 bg-white p-2 shadow-lg">
-                        {desktopManagementNavigation.map(item => (
-                          <Link
-                            key={item.name}
-                            to={item.href}
-                            onClick={() => setIsManagementOpen(false)}
-                            className={`${
-                              isActive(item.href)
-                                ? 'bg-krispy-green-light text-krispy-green'
-                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                            } block rounded-lg px-3 py-2 text-sm font-medium`}
-                          >
-                            {renderNavLabel(item)}
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}  
-              </div>
+              {desktopManagementNavigation.length > 0 && (
+                <div className="hidden md:flex lg:hidden flex-shrink-0">
+                  <Link
+                    to="/admin"
+                    className={`${
+                      desktopManagementNavigation.some(item => isActive(item.href))
+                        ? 'border-krispy-green text-gray-900'
+                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                    } inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium`}
+                  >
+                    Gestion
+                  </Link>
+                </div>
+              )}       
             </div>
 
             <div className="hidden sm:flex flex-shrink-0 items-center gap-3">
