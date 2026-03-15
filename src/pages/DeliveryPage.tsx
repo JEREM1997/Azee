@@ -465,6 +465,12 @@ const DeliveryPage: React.FC = () => {
         ),
       ]
     : [];
+  const sortedProductionItems = storeDetails?.production_items
+    ? [...storeDetails.production_items].sort((a, b) => compareText(a.variety_name, b.variety_name))
+    : [];
+  const sortedBoxProductions = storeDetails?.box_productions
+    ? [...storeDetails.box_productions].sort((a, b) => compareText(a.box_name, b.box_name))
+    : [];
   const isOrderDelivery = storeDetails?.source_type === 'order';
   const canManageSelectedDelivery = !!storeDetails && !isOrderDelivery && !!(
   currentUserStoreIds.includes(storeDetails.store_id) || isAdmin || isProduction 
@@ -1057,7 +1063,7 @@ const DeliveryPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {storeDetails.production_items?.slice().sort((a,b)=>compareText(a.variety_name, b.variety_name)).map((item) => (
+                    {sortedProductionItems.map((item) => (
                       <tr key={item.id}>
                        <td data-label="Variété" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> 
                         {getVarietyDisplayName(item)} 
@@ -1188,7 +1194,7 @@ const DeliveryPage: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                       {storeDetails.box_productions.slice().sort((a,b)=>compareText(a.box_name, b.box_name)).map((box) => (
+                       {sortedBoxProductions.map((box) => (
                           <tr key={box.id}>
                            <td data-label="Boîte" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> 
                              {getBoxDisplayName(box)} 
