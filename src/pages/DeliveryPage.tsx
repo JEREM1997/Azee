@@ -1054,13 +1054,15 @@ const DeliveryPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {storeDetails.production_items?.slice().sort((a,b)=>compareText(a.variety_name, b.variety_name)).map((item) => (
+                    {storeDetails.production_items?.slice().sort((a,b)=>compareText(a.variety_name, b.variety_name)).map((item) => {
+                      const matchedForm = safeForms.find((form) => form.id === item.form_id);
+                      return (
                       <tr key={item.id}>
                        <td data-label="Variété" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> 
                         {getVarietyDisplayName(item)} 
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                          {safeForms.find(form => form.id === item.form_id)?.name || item.form_name}
+                         {matchedForm?.name || item.form_name} 
                         </td>
                         </td>
                         <td data-label="Prévu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
@@ -1165,7 +1167,8 @@ const DeliveryPage: React.FC = () => {
                           )}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
