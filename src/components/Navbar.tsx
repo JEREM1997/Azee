@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Menu, X, LogOut, User, Settings, PieChart, FileText, Home, Users, Calendar, Truck } from 'lucide-react';
 import krispyKremeLogo from '../assets/krispy-kreme-ops-logo.png';
+import { countPendingOrders, ORDERS_CHANGED_EVENT } from '../services/ordersService';
 
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const { user, logout, isAdmin, isProduction } = useAuth();
   const location = useLocation();
+  const canValidateOrders = isAdmin || isProduction;
 
-  const navigation = [
+  const navigation = useMemo(() => [
     { name: 'Tableau de bord', href: '/dashboard', visible: true },
     { name: 'Production', href: '/production', visible: isProduction || isAdmin },
     { name: 'Plans', href: '/plans', visible: isProduction || isAdmin },
@@ -19,9 +22,65 @@ const Navbar: React.FC = () => {
     { name: 'Audit', href: '/audit', visible: isAdmin },
     { name: 'Utilisateurs', href: '/users', visible: isAdmin },
     { name: 'Admin', href: '/admin', visible: isAdmin },
-  ];
+  ], [isAdmin, isProduction]);
 
   const isActive = (path: string) => location.pathname === path;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const refreshPendingOrdersCount = async () => {
+      if (!canValidateOrders || !user) {
+        if (isMounted) {
+          setPendingOrdersCount(0);
+        }
+        return;
+      }
+
+      try {
+        const count = await countPendingOrders();
+        if (isMounted) {
+          setPendingOrdersCount(count);
+        }
+      } catch (error) {
+        console.error('Navbar: unable to load pending orders count', error);
+      }
+    };
+
+    refreshPendingOrdersCount();
+
+    const intervalId = window.setInterval(refreshPendingOrdersCount, 30000);
+    const handleOrdersChanged = () => {
+      void refreshPendingOrdersCount();
+    };
+    const handleWindowFocus = () => {
+      void refreshPendingOrdersCount();
+    };
+
+    window.addEventListener(ORDERS_CHANGED_EVENT, handleOrdersChanged);
+    window.addEventListener('focus', handleWindowFocus);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener(ORDERS_CHANGED_EVENT, handleOrdersChanged);
+      window.removeEventListener('focus', handleWindowFocus);
+    };
+  }, [canValidateOrders, user, location.pathname]);
+
+  const renderOrdersBadge = () => {
+    if (!canValidateOrders || pendingOrdersCount <= 0) {
+      return null;
+    }
+
+    const displayCount = pendingOrdersCount > 99 ? '99+' : String(pendingOrdersCount);
+
+    return (
+      <span className="ml-2 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white">
+        {displayCount}
+      </span>
+    );
+  };
 
   return (
     <>
@@ -50,6 +109,7 @@ const Navbar: React.FC = () => {
                       } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
                     >
                       {item.name}
+                      {item.href === '/orders' && renderOrdersBadge()}
                     </Link>
                   ))}
               </div>
@@ -129,7 +189,10 @@ const Navbar: React.FC = () => {
                   } block pl-3 pr-4 py-2 border-l-4 text-base font-medium`}
                   onClick={() => setIsOpen(false)}
                 >
-                  {item.name}
+                 <span className="inline-flex items-center">
+                    {item.name}
+                    {item.href === '/orders' && renderOrdersBadge()}
+                  </span> 
                 </Link>
               ))}
           </div>
