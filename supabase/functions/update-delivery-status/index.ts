@@ -148,29 +148,7 @@ Deno.serve(async (req) => {
       throw new Error('Insufficient permissions for this store');
     }
     
-    // Update store production status without sending undefined fields.
-    const storeProductionPatch: Record<string, unknown> = {};
-    if (typeof updates.deliveryConfirmed === 'boolean') {
-      storeProductionPatch.delivery_confirmed = updates.deliveryConfirmed;
-    }
-    if (updates.waste || updates.boxWaste) {
-      storeProductionPatch.waste_reported = true;
-    }
-
-    let storeProduction = currentStoreProduction;
-    if (Object.keys(storeProductionPatch).length > 0) {
-      const { data: updatedStoreProduction, error: updateError } = await supabase
-        .from('store_productions')
-        .update(storeProductionPatch)
-        .eq('id', storeProductionId)
-        .select()
-        .single();
-
-      if (updateError) throw updateError;
-      storeProduction = updatedStoreProduction;
-    }
-
-    // Helper to fetch current received for waste validation
+       // Helper to fetch current received for waste validation
     async function getItemInfo(itemId: string) {
       const { data, error } = await supabase
         .from('production_items')
@@ -266,6 +244,28 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Update store production status only after item/box writes succeeded.
+    const storeProductionPatch: Record<string, unknown> = {};
+    if (typeof updates.deliveryConfirmed === 'boolean') {
+      storeProductionPatch.delivery_confirmed = updates.deliveryConfirmed;
+    }
+    if (updates.waste || updates.boxWaste) {
+      storeProductionPatch.waste_reported = true;
+    }
+
+    let storeProduction = currentStoreProduction;
+    if (Object.keys(storeProductionPatch).length > 0) {
+      const { data: updatedStoreProduction, error: updateError } = await supabase
+        .from('store_productions')
+        .update(storeProductionPatch)
+        .eq('id', storeProductionId)
+        .select('id, plan_id, store_id, store_name, delivery_confirmed, waste_reported')
+        .single();
+
+      if (updateError) throw updateError;
+      storeProduction = updatedStoreProduction;
+    }
+
 const receivedItems = summarizeMapQuantities(updates.received as Record<string, unknown> | undefined);
     const receivedBoxes = summarizeMapQuantities(updates.boxReceived as Record<string, unknown> | undefined);
     const wasteItems = summarizeMapQuantities(updates.waste as Record<string, unknown> | undefined);
@@ -318,7 +318,14 @@ const receivedItems = summarizeMapQuantities(updates.received as Record<string, 
     );
     
     return new Response(
-      JSON.stringify(storeProduction),
+      JSON.stringify({
+        id: storeProduction.id,
+        plan_id: storeProduction.plan_id,
+        store_id: storeProduction.store_id,
+        store_name: storeProduction.store_name,
+        delivery_confirmed: !!storeProduction.delivery_confirmed,
+        waste_reported: !!storeProduction.waste_reported,
+      }),
       {
         headers: {
           ...corsHeaders,
@@ -327,8 +334,17 @@ const receivedItems = summarizeMapQuantities(updates.received as Record<string, 
       }
     );
   } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : (error && typeof error === 'object' && 'message' in error && typeof (error as { message?: unknown }).message === 'string')
+            ? (error as { message: string }).message
+            : 'Unknown update-delivery-status error';
+    
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: message }),
       {
         status: 400,
         headers: {
