@@ -90,6 +90,33 @@ const DeliveryPage: React.FC = () => {
     });
   };
   
+  const normalizeDateKey = (value: unknown): string => {
+    if (typeof value !== 'string') {
+      return '';
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return '';
+    }
+
+    // Keep the raw date part when available to avoid timezone shifts.
+    const leadingDate = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (leadingDate) {
+      return leadingDate[1];
+    }
+
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) {
+      return '';
+    }
+
+    const year = parsed.getUTCFullYear();
+    const month = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const [selectedStore, setSelectedStore] = useState<string | null>(null);
   const [currentPlan, setCurrentPlan] = useState<DeliveryProductionPlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -365,10 +392,14 @@ const DeliveryPage: React.FC = () => {
       });
       
       // Filter stores based on the selected delivery date and user permissions
+      const selectedDeliveryDateKey = normalizeDateKey(deliveryDate);
       const filteredStores = allStores.filter(store => {
-        // Normalize dates for comparison
-        const normalize = (d: string) => d ? new Date(d).toISOString().split('T')[0] : '';
-        const isMatchingDate = normalize(store.deliverydate || '') === normalize(deliveryDate);
+        if (!selectedDeliveryDateKey) {
+          return false;
+        }
+
+        // Normalize dates for comparison and avoid runtime errors on malformed values
+        const isMatchingDate = normalizeDateKey(store.deliverydate) === selectedDeliveryDateKey;
         
         // Check if user has access to this store
         const hasAccess =
@@ -421,14 +452,6 @@ const DeliveryPage: React.FC = () => {
   useEffect(() => {
     loadCurrentPlan();
   }, [deliveryDate, showAllStores]);
-
-  useEffect(() => {
-    if (currentPlan?.store_productions) {
-      if (!silent) {
-        setLoading(false);
-      }
-    }
-  }, [currentPlan]);
 
   const safeStoreProductions = Array.isArray(currentPlan?.store_productions)
     ? currentPlan.store_productions.filter(Boolean)
