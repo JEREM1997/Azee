@@ -148,6 +148,13 @@ const DeliveryPage: React.FC = () => {
 
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
   
+  const resetLocalState = () => {
+    setReceivedQuantities({});
+    setWasteQuantities({});
+    setBoxReceivedQuantities({});
+    setBoxWasteQuantities({});
+  };
+  
   // Function to initialize local state with current values from the plan
   const initializeLocalState = (stores: DeliveryStoreProduction[]) => {
     console.log('ðŸ”„ Initializing local state for', stores.length, 'stores');
@@ -198,10 +205,13 @@ const DeliveryPage: React.FC = () => {
     setBoxWasteQuantities(newBoxWasteQuantities);
   };
   
-  const loadCurrentPlan = async () => {
+  const loadCurrentPlan = async (options: { silent?: boolean } = {}) => {
+    const { silent = false } = options;
     try {
       console.log('ðŸ”„ Loading current plan...');
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       setError(null);
       
       // Charger uniquement une fenÃªtre autour de la date de livraison sÃ©lectionnÃ©e (Â±15 jours)
@@ -235,12 +245,14 @@ const DeliveryPage: React.FC = () => {
       if (error) {
         console.error('âŒ Error fetching plans:', error);
         setCurrentPlan(null);
+        resetLocalState();
         return;
       }
       
       if (!plans || plans.length === 0) {
         console.log('â„¹ï¸ No production plans found in the database');
         setCurrentPlan(null);
+        resetLocalState();
         return;
       }
       
@@ -322,17 +334,18 @@ const DeliveryPage: React.FC = () => {
           store_productions: uniqueStores
         });
         
-        // Always initialize local state with the latest data
-        initializeLocalState(uniqueStores);
       } else {
         console.log(`â„¹ï¸ No stores found for delivery date ${deliveryDate}`);
         setCurrentPlan(null);
+        resetLocalState();
       }
     } catch (err) {
       console.error('âŒ Error loading production plan:', err);
       setError(err instanceof Error ? err.message : 'Error loading production plan');
     } finally {
-      setLoading(false);
+       if (!silent) {
+        setLoading(false);
+      } 
     }
   };
 
@@ -340,124 +353,13 @@ const DeliveryPage: React.FC = () => {
     loadCurrentPlan();
   }, [deliveryDate, showAllStores]);
 
-  // Effect to restore local state when component mounts or when plan changes
-  // Only initialize state if it's empty to avoid overwriting user changes
   useEffect(() => {
     if (currentPlan?.store_productions) {
-      // Only restore if local state is empty (initial load)
-      const hasLocalState = Object.keys(receivedQuantities).length > 0 || 
-                           Object.keys(wasteQuantities).length > 0 ||
-                           Object.keys(boxReceivedQuantities).length > 0 ||
-                           Object.keys(boxWasteQuantities).length > 0;
-      
-      if (!hasLocalState) {
-        // Restore local state from the current plan
-        const newReceivedQuantities: { [key: string]: number } = {};
-        const newWasteQuantities: { [key: string]: number } = {};
-        const newBoxReceivedQuantities: { [key: string]: number } = {};
-        const newBoxWasteQuantities: { [key: string]: number } = {};
-        
-        currentPlan.store_productions.forEach(store => {
-          store.production_items?.forEach(item => {
-            if (item.received !== null && item.received !== undefined) {
-              newReceivedQuantities[item.id] = item.received;
-            }
-            if (item.waste !== null && item.waste !== undefined) {
-              newWasteQuantities[item.id] = item.waste;
-            }
-          });
-          
-          store.box_productions?.forEach(box => {
-            if (box.received !== null && box.received !== undefined) {
-              newBoxReceivedQuantities[box.id] = box.received;
-            }
-            if (box.waste !== null && box.waste !== undefined) {
-              newBoxWasteQuantities[box.id] = box.waste;
-            }
-          });
-        });
-        
-        // Update local state with server values only if no local changes exist
-        setReceivedQuantities(newReceivedQuantities);
-        setWasteQuantities(newWasteQuantities);
-        setBoxReceivedQuantities(newBoxReceivedQuantities);
-        setBoxWasteQuantities(newBoxWasteQuantities);
+      if (!silent) {
+        setLoading(false);
       }
     }
   }, [currentPlan]);
-
-  // Effect to sync local state when selected store changes
-  // Only merge server data if local state doesn't have values to preserve user input
-  useEffect(() => {
-    if (storeDetails && currentPlan) {
-      // Update local state to reflect the current store's data
-      const newReceivedQuantities: { [key: string]: number } = {};
-      const newWasteQuantities: { [key: string]: number } = {};
-      const newBoxReceivedQuantities: { [key: string]: number } = {};
-      const newBoxWasteQuantities: { [key: string]: number } = {};
-      
-      // Initialize with current values from the store
-      storeDetails.production_items?.forEach(item => {
-        if (item.received !== null && item.received !== undefined) {
-          newReceivedQuantities[item.id] = item.received;
-        }
-        if (item.waste !== null && item.waste !== undefined) {
-          newWasteQuantities[item.id] = item.waste;
-        }
-      });
-      
-      storeDetails.box_productions?.forEach(box => {
-        if (box.received !== null && box.received !== undefined) {
-          newBoxReceivedQuantities[box.id] = box.received;
-        }
-        if (box.waste !== null && box.waste !== undefined) {
-          newBoxWasteQuantities[box.id] = box.waste;
-        }
-      });
-      
-      // Merge with existing local state to preserve user input
-      // Only update if the local state doesn't already have a value for that item
-      setReceivedQuantities(prev => {
-        const merged = { ...prev };
-        Object.keys(newReceivedQuantities).forEach(key => {
-          if (merged[key] === undefined) {
-            merged[key] = newReceivedQuantities[key];
-          }
-        });
-        return merged;
-      });
-      
-      setWasteQuantities(prev => {
-        const merged = { ...prev };
-        Object.keys(newWasteQuantities).forEach(key => {
-          if (merged[key] === undefined) {
-            merged[key] = newWasteQuantities[key];
-          }
-        });
-        return merged;
-      });
-      
-      setBoxReceivedQuantities(prev => {
-        const merged = { ...prev };
-        Object.keys(newBoxReceivedQuantities).forEach(key => {
-          if (merged[key] === undefined) {
-            merged[key] = newBoxReceivedQuantities[key];
-          }
-        });
-        return merged;
-      });
-      
-      setBoxWasteQuantities(prev => {
-        const merged = { ...prev };
-        Object.keys(newBoxWasteQuantities).forEach(key => {
-          if (merged[key] === undefined) {
-            merged[key] = newBoxWasteQuantities[key];
-          }
-        });
-        return merged;
-      });
-    }
-  }, [selectedStore, currentPlan]);
 
   // Filter stores based on user role and store IDs
   const clean = (s:string)=>s.trim().toLowerCase();
@@ -621,14 +523,14 @@ const DeliveryPage: React.FC = () => {
       storeDetails.production_items?.forEach((item) => {
         finalReceivedQuantities[item.id] = receivedQuantities[item.id] !== undefined 
           ? receivedQuantities[item.id] 
-          : item.quantity;
+          : item.received ?? item.quantity;
       });
 
       // For box productions
       storeDetails.box_productions?.forEach((box) => {
         finalBoxReceivedQuantities[box.id] = boxReceivedQuantities[box.id] !== undefined 
           ? boxReceivedQuantities[box.id] 
-          : box.quantity;
+          : box.received ?? box.quantity;
       });
 
       const validationErrors: string[] = [];
@@ -672,7 +574,8 @@ const DeliveryPage: React.FC = () => {
           received: finalBoxReceivedQuantities[box.id] ?? box.received ?? box.quantity,
         })),
       }));
-
+      
+      await loadCurrentPlan({ silent: true });
       if (false) {
       if (false) {
       // Add a small delay to ensure server has processed the update
@@ -680,7 +583,7 @@ const DeliveryPage: React.FC = () => {
       setTimeout(async () => {
         try {
           console.log('ðŸ”„ Reloading plan after delivery confirmation...');
-          await loadCurrentPlan();
+          await loadCurrentPlan({ silent: true });
           console.log('âœ… Plan reloaded successfully');
         } catch (error) {
           console.error('Error reloading plan after delivery confirmation:', error);
@@ -791,6 +694,8 @@ const DeliveryPage: React.FC = () => {
           waste: currentStoreBoxWaste[box.id] ?? box.waste ?? 0,
         })),
       }));
+
+      await loadCurrentPlan({ silent: true });
 
        if (false) {
 
