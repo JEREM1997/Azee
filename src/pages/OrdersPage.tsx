@@ -568,8 +568,8 @@ const OrdersPage: React.FC = () => {
           <div className="text-sm text-gray-600">Aucune commande pour le moment.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <div className="overflow-hidden md:overflow-x-auto">
+            <table className="responsive-table min-w-full divide-y divide-gray-200">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Commande</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Magasin</th>
@@ -583,15 +583,15 @@ const OrdersPage: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {orders.map(order => (
                   <tr key={order.id}>
-                    <td className="px-4 py-4 text-sm text-gray-900">
+                    <td data-label="Commande" className="px-4 py-4 text-sm text-gray-900">
                       <div className="font-semibold">{order.customerName}</div>
                       <div className="text-gray-600">{orderTypeLabels[order.orderType]}</div>
                     </td>
-                    <td className="px-4 py-4 text-sm text-gray-900">
+                    <td data-label="Magasin" className="px-4 py-4 text-sm text-gray-900">
                       <div className="font-semibold">{order.storeName || 'Magasin inconnu'}</div>
                       <div className="text-gray-600">{order.storeId}</div>
                     </td>
-                    <td className="px-4 py-4 text-sm text-gray-900">
+                    <td data-label="Livraison" className="px-4 py-4 text-sm text-gray-900">
                       <div>Livraison : {order.deliveryDate}</div>
                       {canManageOrders && (
                         <div className="mt-2 space-y-2">
@@ -619,17 +619,17 @@ const OrdersPage: React.FC = () => {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-4 text-sm text-gray-900">
+                    <td data-label="Paiement" className="px-4 py-4 text-sm text-gray-900">
                       <span className="inline-flex rounded-full px-3 py-1 text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
                         {paymentStatusLabels[order.paymentStatus]}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-sm text-gray-900">
+                    <td data-label="Production" className="px-4 py-4 text-sm text-gray-900">
                       <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium border ${order.productionApproved ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
                         {order.productionApproved ? 'Validée par admin' : 'En attente de validation'}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-sm text-gray-900">
+                    <td data-label="Articles" className="px-4 py-4 text-sm text-gray-900">
                       <ul className="space-y-1">
                         {order.items.map(item => {
                           const variety = catalogue.find(entry => entry.id === item.varietyId);
@@ -642,11 +642,11 @@ const OrdersPage: React.FC = () => {
                         })}
                       </ul>
                     </td>
-                    <td className="px-4 py-4 text-right text-sm">
-                      <div className="flex flex-col items-end gap-2">
+                     <td data-label="Actions" className="px-4 py-4 text-right text-sm">
+                      <div className="flex flex-col gap-2 items-stretch md:items-end">
                         {canManageOrders ? (
                           order.productionApproved ? (
-                            <span className="text-green-700 text-xs font-medium">Validation terminée</span>
+                           <span className="text-green-700 text-xs font-medium md:text-right">Validation terminée</span> 
                           ) : (
                             <button
                               type="button"
