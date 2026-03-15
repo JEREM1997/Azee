@@ -253,20 +253,32 @@ Deno.serve(async (req) => {
       storeProductionPatch.waste_reported = true;
     }
 
-    let storeProduction = currentStoreProduction;
+    let storeProduction = {
+      ...currentStoreProduction,
+      delivery_confirmed:
+        typeof updates.deliveryConfirmed === 'boolean'
+          ? updates.deliveryConfirmed
+          : currentStoreProduction.delivery_confirmed,
+      waste_reported:
+        updates.waste || updates.boxWaste
+          ? true
+          : currentStoreProduction.waste_reported,
+    };
+
     if (Object.keys(storeProductionPatch).length > 0) {
-      const { data: updatedStoreProduction, error: updateError } = await supabase
+      const { error: updateError } = await supabase
         .from('store_productions')
         .update(storeProductionPatch)
-        .eq('id', storeProductionId)
-        .select('id, plan_id, store_id, store_name, delivery_confirmed, waste_reported')
-        .single();
+        .eq('id', storeProductionId);
 
       if (updateError) throw updateError;
-      storeProduction = updatedStoreProduction;
+      storeProduction = {
+        ...storeProduction,
+        ...storeProductionPatch,
+      };
     }
 
-const receivedItems = summarizeMapQuantities(updates.received as Record<string, unknown> | undefined);
+    const receivedItems = summarizeMapQuantities(updates.received as Record<string, unknown> | undefined);
     const receivedBoxes = summarizeMapQuantities(updates.boxReceived as Record<string, unknown> | undefined);
     const wasteItems = summarizeMapQuantities(updates.waste as Record<string, unknown> | undefined);
     const wasteBoxes = summarizeMapQuantities(updates.boxWaste as Record<string, unknown> | undefined);
@@ -334,6 +346,8 @@ const receivedItems = summarizeMapQuantities(updates.received as Record<string, 
       }
     );
   } catch (error) {
+    console.error('[update-delivery-status] error', error);
+
     const message =
       error instanceof Error
         ? error.message
