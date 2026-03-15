@@ -162,8 +162,8 @@ const DashboardPage: React.FC = () => {
                 )}
               </div>
               
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+              <div className="overflow-hidden md:overflow-x-auto">
+                <table className="responsive-table min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -204,13 +204,13 @@ const DashboardPage: React.FC = () => {
                         
                         return (
                           <tr key={store.store_id}>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td data-label="Magasin" className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm font-medium text-gray-900">{store.store_name}</div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td data-label="Quantité" className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm text-gray-900">{store.total_quantity} doughnuts</div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td data-label="Livraison" className="px-6 py-4 whitespace-nowrap">
                               {store.delivery_confirmed ? (
                                 <div className="flex items-center">
                                   <Check className="h-5 w-5 text-green-500 mr-1.5" />
@@ -223,7 +223,7 @@ const DashboardPage: React.FC = () => {
                                 </div>
                               )}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td data-label="Déchets" className="px-6 py-4 whitespace-nowrap">
                               {store.waste_reported ? (
                                 <div className="flex items-center">
                                   <Check className="h-5 w-5 text-green-500 mr-1.5" />
@@ -236,7 +236,7 @@ const DashboardPage: React.FC = () => {
                                 </div>
                               )}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td data-label="Statut" className="px-6 py-4 whitespace-nowrap">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(store)}`}>
                                 {getStatusIcon(store)}
                                 {getStatusText(store)}
