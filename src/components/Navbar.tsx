@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { ChevronDown, Menu, X } from 'lucide-react';
+import { ChevronDown, ClipboardList, LayoutDashboard, Menu, MoreHorizontal, Package, Truck, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import krispyKremeLogo from '../assets/krispy-kreme-ops-logo.png';
 import { countPendingOrders, ORDERS_CHANGED_EVENT } from '../services/ordersService';
@@ -11,6 +11,11 @@ interface NavigationItem {
   name: string;
   href: string;
   visible: boolean;
+}
+
+interface MobilePrimaryItem {
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
 }
 
 const Navbar: React.FC = () => {
@@ -51,6 +56,25 @@ const Navbar: React.FC = () => {
     [navigation]
   );
 
+  const mobilePrimaryNavigation = useMemo(() => {
+    const definitions: MobilePrimaryItem[] = [
+      { href: '/dashboard', icon: LayoutDashboard },
+      ...(isProduction || isAdmin ? [{ href: '/production', icon: Package }] : []),
+      { href: '/orders', icon: ClipboardList },
+      { href: '/delivery', icon: Truck },
+    ];
+
+    return definitions
+      .map(definition => {
+        const item = mobileNavigation.find(entry => entry.href === definition.href);
+        return item ? { ...item, icon: definition.icon } : null;
+      })
+      .filter((item): item is NavigationItem & { icon: MobilePrimaryItem['icon'] } => !!item)
+      .slice(0, 4);
+  }, [isAdmin, isProduction, mobileNavigation]);
+
+  const mobileNavColumnCount = mobilePrimaryNavigation.length + 1;
+  
   const isActive = (path: string) => location.pathname === path;
 
   useEffect(() => {
@@ -231,7 +255,7 @@ const Navbar: React.FC = () => {
           </div>
         </div>
 
-        <div className={`${isOpen ? 'block' : 'hidden'} sm:hidden border-t border-gray-200 bg-white`}>
+        <div className="hidden">
           <div className="space-y-1 px-3 py-3">
             {mobileNavigation.map(item => (
               <Link
@@ -266,7 +290,100 @@ const Navbar: React.FC = () => {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+      {isOpen && (
+        <div className="fixed inset-0 z-40 sm:hidden">
+          <button
+            type="button"
+            aria-label="Fermer le menu"
+            onClick={() => setIsOpen(false)}
+            className="absolute inset-0 bg-slate-900/35"
+          />
+          <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-white px-4 pb-6 pt-4 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-gray-900">Navigation</div>
+                <div className="text-xs text-gray-500">{user?.fullName || user?.email}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="inline-flex items-center justify-center rounded-full border border-gray-200 p-2 text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {mobileNavigation.map(item => (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  onClick={() => setIsOpen(false)}
+                  className={`${
+                    isActive(item.href)
+                      ? 'border-krispy-green bg-krispy-green-light text-krispy-green'
+                      : 'border-gray-200 text-gray-700'
+                  } rounded-2xl border px-4 py-3 text-sm font-medium`}
+                >
+                  {renderNavLabel(item)}
+                </Link>
+              ))}
+            </div>
+
+            <button
+              onClick={() => {
+                void logout();
+                setIsOpen(false);
+              }}
+              className="mt-4 inline-flex w-full items-center justify-center rounded-xl border border-transparent bg-krispy-green px-4 py-3 text-sm font-medium text-white hover:bg-krispy-green-dark"
+            >
+              Se deconnecter
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 backdrop-blur sm:hidden">
+        <div
+          className="grid gap-1 px-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] pt-2"
+          style={{ gridTemplateColumns: `repeat(${mobileNavColumnCount}, minmax(0, 1fr))` }}
+        >
+          {mobilePrimaryNavigation.map(item => {
+            const Icon = item.icon;
+            const active = isActive(item.href);
+            return (
+              <Link
+                key={item.href}
+                to={item.href}
+                className={`${
+                  active ? 'text-krispy-green' : 'text-gray-500'
+                } flex flex-col items-center justify-center rounded-2xl px-2 py-2 text-[11px] font-medium`}
+              >
+                <div className="relative">
+                  <Icon className="h-5 w-5" />
+                  {item.href === '/orders' && canValidateOrders && pendingOrdersCount > 0 && (
+                    <span className="absolute -right-2 -top-2 inline-flex min-w-[1rem] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold leading-4 text-white">
+                      {pendingOrdersCount > 9 ? '9+' : pendingOrdersCount}
+                    </span>
+                  )}
+                </div>
+                <span className="mt-1 truncate">{item.name}</span>
+              </Link>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() => setIsOpen(true)}
+            className="flex flex-col items-center justify-center rounded-2xl px-2 py-2 text-[11px] font-medium text-gray-500"
+          >
+            <MoreHorizontal className="h-5 w-5" />
+            <span className="mt-1">Plus</span>
+          </button>
+        </div>
+      </div>
+
+      <main className="max-w-7xl mx-auto px-4 py-6 pb-24 sm:px-6 sm:pb-6 lg:px-8">
         <Outlet />
       </main>
     </>
