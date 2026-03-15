@@ -975,7 +975,7 @@ const DeliveryPage: React.FC = () => {
           
           {selectedStore && storeDetails ? (
             <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
+             <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between"> 
                 <div>
                   <h3 className="text-lg font-medium text-gray-900">{storeDetails.store_name}</h3>
                   <div className="mt-1 space-y-1">
@@ -1020,7 +1020,7 @@ const DeliveryPage: React.FC = () => {
                     </p>
                   </div>
                 </div>
-                <div className="space-x-2">
+                 <div className="flex flex-wrap gap-2">
                   {(isAdmin || isProduction || currentUser?.storeIds?.includes(storeDetails.store_id)) && (
                     <button
                       onClick={generateDeliveryBulletin}
@@ -1033,7 +1033,7 @@ const DeliveryPage: React.FC = () => {
                 </div>
               </div>
               
-              <div className="overflow-x-auto">
+             <div className="overflow-hidden md:overflow-x-auto">
                 {isOrderDelivery && (
                   <div className="mb-4 bg-blue-50 border-l-4 border-blue-400 p-4">
                     <div className="flex">
@@ -1064,7 +1064,7 @@ const DeliveryPage: React.FC = () => {
                     </div>
                   </div>
                 )}
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="responsive-table min-w-full divide-y divide-gray-200">
                   <thead>
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variété</th>
@@ -1077,16 +1077,16 @@ const DeliveryPage: React.FC = () => {
                   <tbody className="divide-y divide-gray-200">
                     {storeDetails.production_items?.slice().sort((a,b)=>a.variety_name.localeCompare(b.variety_name)).map((item) => (
                       <tr key={item.id}>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                       <td data-label="Variété" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> 
                           {item.variety_name}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                           {forms.find(form => form.id === item.form_id)?.name || item.form_name}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                        <td data-label="Prevu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                           {item.quantity}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                        <td data-label="Reçu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                           {!isOrderDelivery && !storeDetails.delivery_confirmed && canManageSelectedDelivery ? (
                             <input
                               type="number"
@@ -1119,7 +1119,7 @@ const DeliveryPage: React.FC = () => {
                               : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : '-')
                           )}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                        <td data-label="Déchets" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                           {!isOrderDelivery && !storeDetails.waste_reported && storeDetails.delivery_confirmed && canManageSelectedDelivery ? (
                             <input
                               type="number"
@@ -1194,8 +1194,8 @@ const DeliveryPage: React.FC = () => {
               {storeDetails.box_productions && storeDetails.box_productions.length > 0 && (
                 <div className="mt-8">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">BoÃ®tes</h3>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
+                  div className="overflow-hidden md:overflow-x-auto">
+                    <table className="responsive-table min-w-full divide-y divide-gray-200">
                       <thead>
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">BoÃ®te</th>
@@ -1207,13 +1207,13 @@ const DeliveryPage: React.FC = () => {
                       <tbody className="divide-y divide-gray-200">
                         {storeDetails.box_productions.slice().sort((a,b)=>a.box_name.localeCompare(b.box_name)).map((box) => (
                           <tr key={box.id}>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                           <td data-label="Boite" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> 
                               {box.box_name}
                             </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                            <td data-label="Prévu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                               {box.quantity}
                             </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                            <td data-label="Reçu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                               {!isOrderDelivery && !storeDetails.delivery_confirmed && canManageSelectedDelivery ? (
                                 <input
                                   type="number"
@@ -1246,7 +1246,7 @@ const DeliveryPage: React.FC = () => {
                                   : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : '-')
                               )}
                             </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                            <td data-label="Déchets" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                               {!isOrderDelivery && !storeDetails.waste_reported && storeDetails.delivery_confirmed && canManageSelectedDelivery ? (
                                 <input
                                   type="number"
