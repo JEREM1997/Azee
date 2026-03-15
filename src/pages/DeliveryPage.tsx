@@ -274,11 +274,10 @@ const DeliveryPage: React.FC = () => {
     setBoxWasteQuantities(newBoxWasteQuantities);
   };
   
-  const loadCurrentPlan = async (options: { silent?: boolean } = {}) => {
-    const isSilent = options.silent === true;
+  const loadCurrentPlan = async (silentMode: boolean = false) => {
     try {
       console.log('ðŸ”„ Loading current plan...');
-      if (!isSilent) {
+      if (!silentMode) {
         setLoading(true);
       }
       setError(null);
@@ -413,7 +412,7 @@ const DeliveryPage: React.FC = () => {
       console.error('âŒ Error loading production plan:', err);
       setError(err instanceof Error ? err.message : 'Error loading production plan');
     } finally {
-     if (!isSilent) {
+     if (!silentMode) {
         setLoading(false);
       } 
     }
@@ -664,14 +663,13 @@ const DeliveryPage: React.FC = () => {
           received: finalBoxReceivedQuantities[box.id] ?? box.received ?? box.quantity,
         })),
       }));
-      
-      await loadCurrentPlan({ silent: true });
+     await loadCurrentPlan(true); 
       // Add a small delay to ensure server has processed the update
       console.log('âœ… Delivery confirmed, reloading plan in 500ms...');
       setTimeout(async () => {
         try {
           console.log('ðŸ”„ Reloading plan after delivery confirmation...');
-          await loadCurrentPlan({ silent: true });
+          await loadCurrentPlan(true);
           console.log('âœ… Plan reloaded successfully');
         } catch (error) {
           console.error('Error reloading plan after delivery confirmation:', error);
@@ -780,15 +778,14 @@ const DeliveryPage: React.FC = () => {
           waste: currentStoreBoxWaste[box.id] ?? box.waste ?? 0,
         })),
       }));
-
-      await loadCurrentPlan({ silent: true });
+      await loadCurrentPlan(true);
 
       // Add a small delay to ensure server has processed the update
       console.log('âœ… Waste reported, reloading plan in 500ms...');
       setTimeout(async () => {
         try {
           console.log('ðŸ”„ Reloading plan after waste reporting...');
-          await loadCurrentPlan({ silent: true });
+          await loadCurrentPlan(true);
           console.log('âœ… Plan reloaded successfully');
         } catch (error) {
           console.error('Error reloading plan after waste reporting:', error);
@@ -802,7 +799,7 @@ const DeliveryPage: React.FC = () => {
       if (message === 'An unexpected server error occurred') {
         try {
           await wait(500);
-          await loadCurrentPlan({ silent: true });
+          await loadCurrentPlan(true);
           setError(null);
           return;
         } catch (reloadError) {
