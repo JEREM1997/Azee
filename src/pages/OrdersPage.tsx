@@ -33,11 +33,12 @@ const orderTypeLabels: Record<OrderType, string> = {
   b2b: 'B2B',
 };
 
-const conditioningOptions = ['Boite 6', 'Boite 12'];
+const conditioningOptions = ['Boite 6', 'Boite 12', 'Sachet individuel'];
 
 const formatConditioningLabel = (conditioning: string) => {
   if (conditioning === 'Boite 6') return 'Boîte 6';
   if (conditioning === 'Boite 12') return 'Boîte 12';
+  if (conditioning === 'Sachet individuel') return 'Sachet individuel';
   return conditioning;
 };
 
