@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { Edit, Check, Printer, FileText, TruckIcon, AlertTriangle, Truck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
@@ -144,6 +145,8 @@ const DeliveryPage: React.FC = () => {
       };
     });
   };
+
+  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
   
   // Function to initialize local state with current values from the plan
   const initializeLocalState = (stores: DeliveryStoreProduction[]) => {
@@ -605,8 +608,10 @@ const DeliveryPage: React.FC = () => {
     }
 
     try {
-      setSaving(true);
-      setError(null);
+       flushSync(() => {
+        setSaving(true);
+        setError(null);
+      });
 
       // Prepare received quantities - use entered values or default to planned quantities
       const finalReceivedQuantities: { [key: string]: number } = {};
@@ -697,8 +702,10 @@ const DeliveryPage: React.FC = () => {
     }
 
     try {
-      setSaving(true);
-      setError(null);
+      flushSync(() => {
+        setSaving(true);
+        setError(null);
+      });
 
       // Validate that for every item and box: planned = received + waste
       const validationErrors: string[] = [];
@@ -786,7 +793,20 @@ const DeliveryPage: React.FC = () => {
       }, 500);
     } catch (err) {
       console.error('Error reporting waste:', err);
-      setError(toUiErrorMessage(err, 'Erreur lors de la declaration des dechets.'));
+      const message = toUiErrorMessage(err, 'Erreur lors de la déclaration des déchets.');
+
+      if (message === 'An unexpected server error occurred') {
+        try {
+          await wait(500);
+          await loadCurrentPlan();
+          setError(null);
+          return;
+        } catch (reloadError) {
+          console.error('Error verifying waste update after generic error:', reloadError);
+        }
+      }
+
+      setError(message);
     } finally {
       setSaving(false);
     }
