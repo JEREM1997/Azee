@@ -108,6 +108,7 @@ const DeliveryPage: React.FC = () => {
   const [wasteQuantities, setWasteQuantities] = useState<{ [key: string]: number }>({});
   const [boxReceivedQuantities, setBoxReceivedQuantities] = useState<{ [key: string]: number }>({});
   const [boxWasteQuantities, setBoxWasteQuantities] = useState<{ [key: string]: number }>({});
+  const safeForms = Array.isArray(forms) ? (forms.filter(Boolean) as typeof forms) : [];
   const currentUserStoreIds = Array.isArray(currentUser?.storeIds)
     ? currentUser.storeIds.filter((storeId): storeId is string => typeof storeId === 'string')
     : [];
@@ -126,6 +127,53 @@ const DeliveryPage: React.FC = () => {
 
   const getBoxDisplayName = (box: Partial<DeliveryBoxProduction> | null | undefined) =>
     cleanText(box?.box_name, 'Boîte inconnue');
+
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null;
+
+  const normalizeOptionalNumber = (value: unknown): number | undefined => {
+    if (value === null || value === undefined || value === '') {
+      return undefined;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+  const normalizeRequiredNumber = (value: unknown) => normalizeOptionalNumber(value) ?? 0;
+
+  const normalizeProductionItems = (items: unknown): DeliveryProductionItem[] =>
+    Array.isArray(items)
+      ? items
+          .filter(isRecord)
+          .map((item) => ({
+            id: cleanText(item.id),
+            variety_id: cleanText(item.variety_id),
+            variety_name: cleanText(item.variety_name, 'Vari\u00e9t\u00e9 inconnue'),
+            form_id: cleanText(item.form_id),
+            form_name: cleanText(item.form_name),
+            quantity: normalizeRequiredNumber(item.quantity),
+            conditioning: typeof item.conditioning === 'string' ? item.conditioning : null,
+            received: normalizeOptionalNumber(item.received),
+            waste: normalizeOptionalNumber(item.waste),
+          }))
+          .filter((item) => item.id.length > 0)
+      : [];
+
+  const normalizeBoxProductions = (boxes: unknown): DeliveryBoxProduction[] =>
+    Array.isArray(boxes)
+      ? boxes
+          .filter(isRecord)
+          .map((box) => ({
+            id: cleanText(box.id),
+            box_id: cleanText(box.box_id),
+            box_name: cleanText(box.box_name, 'Bo\u00eete inconnue'),
+            quantity: normalizeRequiredNumber(box.quantity),
+            received: normalizeOptionalNumber(box.received),
+            waste: normalizeOptionalNumber(box.waste),
+          }))
+          .filter((box) => box.id.length > 0)
+      : [];
   
   const toUiErrorMessage = (err: unknown, fallback: string) => {
     if (err instanceof Error && err.message) {
@@ -297,8 +345,8 @@ const DeliveryPage: React.FC = () => {
               total_quantity: store.total_quantity || 0,
               delivery_confirmed: store.delivery_confirmed || false,
               waste_reported: store.waste_reported || false,
-              production_items: store.production_items || [],
-              box_productions: store.box_productions || [],
+              production_items: normalizeProductionItems(store.production_items),
+              box_productions: normalizeBoxProductions(store.box_productions),
               production_date: store.production_date || plan.date,
               source_type: store.source_type || 'plan',
               source_label: store.source_label || 'Plan habituel',
@@ -380,12 +428,16 @@ const DeliveryPage: React.FC = () => {
     }
   }, [currentPlan]);
 
+  const safeStoreProductions = Array.isArray(currentPlan?.store_productions)
+    ? currentPlan.store_productions.filter(Boolean)
+    : [];
+
   const allowedStoreIds = new Set(
      currentUserStoreIds.map((storeId) => cleanText(storeId).toLowerCase()) 
   );
 
   const userStoresUnsorted =
-    currentPlan?.store_productions?.filter((store) => {
+    safeStoreProductions.filter((store) => {
       if (isAdmin || isProduction) return true;
       if (showAllStores) return true;
       return allowedStoreIds.has(cleanText(store.store_id).toLowerCase());
@@ -396,7 +448,7 @@ const DeliveryPage: React.FC = () => {
   );
 
   const storeDetails = selectedStore 
-    ? currentPlan?.store_productions?.find(store => store.id === selectedStore)
+    ? safeStoreProductions.find(store => store.id === selectedStore)
     : null;
   const selectedConditionings = storeDetails
     ? [
@@ -1008,7 +1060,8 @@ const DeliveryPage: React.FC = () => {
                         {getVarietyDisplayName(item)} 
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                          {forms.find(form => form.id === item.form_id)?.name || item.form_name}
+                          {safeForms.find(form => form.id === item.form_id)?.name || item.form_name}
+                        </td>
                         </td>
                         <td data-label="Prévu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                           {item.quantity}
