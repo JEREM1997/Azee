@@ -26,6 +26,7 @@ interface FormValues {
 const AdminPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>('varieties');
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [formValues, setFormValues] = useState<FormValues>({
     id: '',
     name: '',
@@ -107,7 +108,7 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // Validate required fields based on the active tab
     if (activeTab === 'stores') {
       if (!formValues.name?.trim()) {
@@ -149,23 +150,32 @@ const AdminPage: React.FC = () => {
       id: formValues.id || '' // Keep existing ID or use empty string for new items
     };
 
-    switch (activeTab) {
-      case 'varieties':
-        updateVariety(updatedValues as DonutVariety);
-        break;
-      case 'forms':
-        updateForm(updatedValues as DonutForm);
-        break;
-      case 'stores':
-        updateStore(updatedValues as StoreType);
-        break;
-      case 'boxes':
-        updateBox(updatedValues as BoxConfiguration);
-        break;
-    }
+   try {
+      setIsSaving(true); 
 
-    setIsEditing(false);
-    resetForm();
+    switch (activeTab) {
+        case 'varieties':
+          await updateVariety(updatedValues as DonutVariety);
+          break;
+        case 'forms':
+          await updateForm(updatedValues as DonutForm);
+          break;
+        case 'stores':
+          await updateStore(updatedValues as StoreType);
+          break;
+        case 'boxes':
+          await updateBox(updatedValues as BoxConfiguration);
+          break;
+      }
+
+      setIsEditing(false);
+      resetForm();
+    } catch (err) {
+      console.error('AdminPage: save failed', err);
+      alert(err instanceof Error ? err.message : "Impossible d'enregistrer les modifications.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const resetForm = () => {
@@ -776,10 +786,11 @@ const AdminPage: React.FC = () => {
                 </button>
                 <button
                   onClick={handleSave}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
+                  disabled={isSaving}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-60"
                 >
                   <Save className="h-4 w-4 mr-2" />
-                  Enregistrer
+                  {isSaving ? 'Enregistrement...' : 'Enregistrer'}
                 </button>
               </div>
             </div>
