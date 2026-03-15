@@ -1,6 +1,8 @@
 import { supabase } from '../lib/supabase';
 import { Order, OrderLineItem, UserRole } from '../types';
 
+const ORDERS_CHANGED_EVENT = 'orders:changed';
+
 export interface CreateOrderPayload {
   storeId: string;
   storeName?: string;
@@ -76,11 +78,19 @@ export const fetchOrders = async (_options: FetchOrdersOptions = {}): Promise<Or
   return invokeManageOrders<Order[]>({ action: 'list' });
 };
 
+const emitOrdersChanged = () => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
+  }
+};
+
 export const createOrder = async (payload: CreateOrderPayload): Promise<Order> => {
-  return invokeManageOrders<Order>({
+  const order = await invokeManageOrders<Order>({
     action: 'create',
     ...payload,
   });
+  emitOrdersChanged();
+  return order;
 };
 
 export const updateOrderProduction = async (
@@ -88,12 +98,14 @@ export const updateOrderProduction = async (
   productionDate: string,
   productionApproved: boolean
 ): Promise<Order> => {
-  return invokeManageOrders<Order>({
+   const order = await invokeManageOrders<Order>({
     action: 'updateProduction',
     orderId,
     productionDate,
     productionApproved,
   });
+  emitOrdersChanged();
+  return order;
 };
 
 export const deleteOrder = async (orderId: string): Promise<void> => {
@@ -101,4 +113,15 @@ export const deleteOrder = async (orderId: string): Promise<void> => {
     action: 'delete',
     orderId,
   });
+  emitOrdersChanged();
 };
+
+export const countPendingOrders = async (): Promise<number> => {
+  const response = await invokeManageOrders<{ count: number }>({
+    action: 'countPending',
+  });
+
+  return Number(response?.count) || 0;
+};
+
+export { ORDERS_CHANGED_EVENT };
