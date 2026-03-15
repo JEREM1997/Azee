@@ -39,46 +39,72 @@ const extractErrorMessage = (value: unknown): string | null => {
   if (typeof value === 'object') {
     if ('error' in value && typeof value.error === 'string') return value.error;
     if ('message' in value && typeof value.message === 'string') return value.message;
+    if ('details' in value && typeof value.details === 'string') return value.details;
+    if ('description' in value && typeof value.description === 'string') return value.description;
+    if ('hint' in value && typeof value.hint === 'string') return value.hint;
   }
   return null;
 };
 
-const toReadableApiError = async (error: unknown): Promise<Error> => {
-  const errorWithContext = error as Error & {
-    context?: {
-      json?: () => Promise<unknown>;
-      text?: () => Promise<string>;
-    };
+const readErrorContextMessage = async (context: unknown): Promise<string | null> => {
+  if (!context || typeof context !== 'object') {
+    return null;
+  }
+
+  const responseLike = context as {
+    json?: () => Promise<unknown>;
+    text?: () => Promise<string>;
   };
 
-  const context = errorWithContext?.context;
-  if (context) {
-    try {
-      if (typeof context.json === 'function') {
-        const payload = await context.json();
-        const message = extractErrorMessage(payload);
-        if (message) {
-          return new Error(message);
-        }
+  try {
+    if (typeof responseLike.json === 'function') {
+      const payload = await responseLike.json();
+      const message = extractErrorMessage(payload);
+      if (message) {
+        return message;
       }
-    } catch (_) {}
+    }
+  } catch (_) {}
 
     try {
-      if (typeof context.text === 'function') {
-        const text = await context.text();
-        if (text) {
-          try {
-            const parsed = JSON.parse(text) as unknown;
-            const message = extractErrorMessage(parsed);
-            if (message) {
-              return new Error(message);
-            }
-          } catch (_) {
-            return new Error(text);
+    if (typeof responseLike.text === 'function') {
+      const text = await responseLike.text();
+      if (text) {
+        try {
+          const parsed = JSON.parse(text) as unknown;
+          const message = extractErrorMessage(parsed);
+          if (message) {
+            return message;
           }
-        }
+         } catch (_) {
+          return text;
       }
-    } catch (_) {}
+    }
+  }
+  } catch (_) {}
+
+  return null;
+};
+
+const toReadableApiError = async (error: unknown): Promise<Error> => {
+  const errorWithContext = error as Error & Record<string, unknown> & {
+    context?: unknown;
+    response?: unknown;
+    cause?: unknown;
+  };
+
+  const contextualMessage =
+    (await readErrorContextMessage(errorWithContext?.context)) ||
+    (await readErrorContextMessage(errorWithContext?.response));
+  if (contextualMessage) {
+    return new Error(contextualMessage);
+  }
+
+  const extractedMessage =
+    extractErrorMessage(errorWithContext) ||
+    extractErrorMessage(errorWithContext?.cause);
+  if (extractedMessage) {
+    return new Error(extractedMessage);
   }
 
   if (error instanceof Error && error.message) {
