@@ -672,7 +672,9 @@ const DeliveryPage: React.FC = () => {
           received: finalBoxReceivedQuantities[box.id] ?? box.received ?? box.quantity,
         })),
       }));
-      
+
+      if (false) {
+      if (false) {
       // Add a small delay to ensure server has processed the update
       console.log('âœ… Delivery confirmed, reloading plan in 500ms...');
       setTimeout(async () => {
@@ -685,6 +687,8 @@ const DeliveryPage: React.FC = () => {
           // Don't show error to user as the main operation succeeded
         }
       }, 500);
+      }
+      } 
     } catch (err) {
       console.error('Error confirming delivery:', err);
       setError(toUiErrorMessage(err, 'Erreur lors de la confirmation de réception.')); 
@@ -756,10 +760,19 @@ const DeliveryPage: React.FC = () => {
         return;
       }
 
-      // Only save waste quantities since delivery must be confirmed first
+      const currentStoreWaste: { [key: string]: number } = {};
+      storeDetails.production_items?.forEach((item) => {
+        currentStoreWaste[item.id] = wasteQuantities[item.id] ?? item.waste ?? 0;
+      });
+
+      const currentStoreBoxWaste: { [key: string]: number } = {};
+      storeDetails.box_productions?.forEach((box) => {
+        currentStoreBoxWaste[box.id] = boxWasteQuantities[box.id] ?? box.waste ?? 0;
+      });
+
       const updateData = {
-        waste: wasteQuantities,
-        boxWaste: boxWasteQuantities
+        waste: currentStoreWaste,
+        boxWaste: currentStoreBoxWaste
       };
 
       const { error } = await apiService.delivery.updateDeliveryStatus(storeDetails.id, updateData);
@@ -771,13 +784,15 @@ const DeliveryPage: React.FC = () => {
         waste_reported: true,
         production_items: store.production_items?.map(item => ({
           ...item,
-          waste: wasteQuantities[item.id] ?? item.waste ?? 0,
+          waste: currentStoreWaste[item.id] ?? item.waste ?? 0,
         })),
         box_productions: store.box_productions?.map(box => ({
           ...box,
-          waste: boxWasteQuantities[box.id] ?? box.waste ?? 0,
+          waste: currentStoreBoxWaste[box.id] ?? box.waste ?? 0,
         })),
       }));
+
+       if (false) {
 
       // Add a small delay to ensure server has processed the update
       console.log('âœ… Waste reported, reloading plan in 500ms...');
@@ -791,6 +806,7 @@ const DeliveryPage: React.FC = () => {
           // Don't show error to user as the main operation succeeded
         }
       }, 500);
+      }   
     } catch (err) {
       console.error('Error reporting waste:', err);
       const message = toUiErrorMessage(err, 'Erreur lors de la déclaration des déchets.');
