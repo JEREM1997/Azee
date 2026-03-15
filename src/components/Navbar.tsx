@@ -28,8 +28,8 @@ const Navbar: React.FC = () => {
 
   const navigation = useMemo<NavigationItem[]>(
     () => [
-      { name: 'Tableau de bord', href: '/dashboard', visible: true },
-      { name: 'Production', href: '/production', visible: isProduction || isAdmin },
+      { name: 'Tableau de bord', href: '/dashboard', visible: isAdmin },
+      { name: 'Production', href: '/production', visible: isAdmin },
       { name: 'Plans', href: '/plans', visible: isProduction || isAdmin },
       { name: 'Commandes', href: '/orders', visible: true },
       { name: 'Livraison', href: '/delivery', visible: true },
@@ -58,8 +58,8 @@ const Navbar: React.FC = () => {
 
   const mobilePrimaryNavigation = useMemo(() => {
     const definitions: MobilePrimaryItem[] = [
-      { href: '/dashboard', icon: LayoutDashboard },
-      ...(isProduction || isAdmin ? [{ href: '/production', icon: Package }] : []),
+      ...(isAdmin ? [{ href: '/dashboard', icon: LayoutDashboard }] : []),
+      ...(isAdmin ? [{ href: '/production', icon: Package }] : []),
       { href: '/orders', icon: ClipboardList },
       { href: '/delivery', icon: Truck },
     ];
