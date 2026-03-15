@@ -1,30 +1,62 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import { ChevronDown, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { Menu, X, LogOut, User, Settings, PieChart, FileText, Home, Users, Calendar, Truck } from 'lucide-react';
 import krispyKremeLogo from '../assets/krispy-kreme-ops-logo.png';
 import { countPendingOrders, ORDERS_CHANGED_EVENT } from '../services/ordersService';
 
+const ADMIN_MENU_PATHS = new Set(['/stats', '/audit', '/users', '/admin']);
+
+interface NavigationItem {
+  name: string;
+  href: string;
+  visible: boolean;
+}
+
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isManagementOpen, setIsManagementOpen] = useState(false);
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const { user, logout, isAdmin, isProduction } = useAuth();
   const location = useLocation();
   const canValidateOrders = isAdmin || isProduction;
 
-  const navigation = useMemo(() => [
-    { name: 'Tableau de bord', href: '/dashboard', visible: true },
-    { name: 'Production', href: '/production', visible: isProduction || isAdmin },
-    { name: 'Plans', href: '/plans', visible: isProduction || isAdmin },
-    { name: 'Commandes', href: '/orders', visible: true },
-    { name: 'Livraison', href: '/delivery', visible: true },
-    { name: 'Statistiques', href: '/stats', visible: isAdmin },
-    { name: 'Audit', href: '/audit', visible: isAdmin },
-    { name: 'Utilisateurs', href: '/users', visible: isAdmin },
-    { name: 'Admin', href: '/admin', visible: isAdmin },
-  ], [isAdmin, isProduction]);
+  const navigation = useMemo<NavigationItem[]>(
+    () => [
+      { name: 'Tableau de bord', href: '/dashboard', visible: true },
+      { name: 'Production', href: '/production', visible: isProduction || isAdmin },
+      { name: 'Plans', href: '/plans', visible: isProduction || isAdmin },
+      { name: 'Commandes', href: '/orders', visible: true },
+      { name: 'Livraison', href: '/delivery', visible: true },
+      { name: 'Statistiques', href: '/stats', visible: isAdmin },
+      { name: 'Audit', href: '/audit', visible: isAdmin },
+      { name: 'Utilisateurs', href: '/users', visible: isAdmin },
+      { name: 'Admin', href: '/admin', visible: isAdmin },
+    ],
+    [isAdmin, isProduction]
+  );
+
+  const desktopPrimaryNavigation = useMemo(
+    () => navigation.filter(item => item.visible && !ADMIN_MENU_PATHS.has(item.href)),
+    [navigation]
+  );
+
+  const desktopManagementNavigation = useMemo(
+    () => navigation.filter(item => item.visible && ADMIN_MENU_PATHS.has(item.href)),
+    [navigation]
+  );
+
+  const mobileNavigation = useMemo(
+    () => navigation.filter(item => item.visible),
+    [navigation]
+  );
 
   const isActive = (path: string) => location.pathname === path;
+
+  useEffect(() => {
+    setIsOpen(false);
+    setIsManagementOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     let isMounted = true;
@@ -47,12 +79,16 @@ const Navbar: React.FC = () => {
       }
     };
 
-    refreshPendingOrdersCount();
+    void refreshPendingOrdersCount();
 
-    const intervalId = window.setInterval(refreshPendingOrdersCount, 30000);
+    const intervalId = window.setInterval(() => {
+      void refreshPendingOrdersCount();
+    }, 30000);
+    
     const handleOrdersChanged = () => {
       void refreshPendingOrdersCount();
     };
+    
     const handleWindowFocus = () => {
       void refreshPendingOrdersCount();
     };
@@ -66,7 +102,7 @@ const Navbar: React.FC = () => {
       window.removeEventListener(ORDERS_CHANGED_EVENT, handleOrdersChanged);
       window.removeEventListener('focus', handleWindowFocus);
     };
-  }, [canValidateOrders, user, location.pathname]);
+    }, [canValidateOrders, user]);
 
   const renderOrdersBadge = () => {
     if (!canValidateOrders || pendingOrdersCount <= 0) {
@@ -82,149 +118,135 @@ const Navbar: React.FC = () => {
     );
   };
 
+  const renderNavLabel = (item: NavigationItem) => (
+    <span className="inline-flex items-center whitespace-nowrap">
+      {item.name}
+      {item.href === '/orders' && renderOrdersBadge()}
+    </span>
+  );
+ 
   return (
     <>
       <nav className="navbar-pattern shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <img
-                  className="h-18 w-auto sm:h-20"
-                  src={krispyKremeLogo}
-                  alt="Krispy Kreme Operations"
-                />
-              </div>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                {navigation
-                  .filter(item => item.visible)
-                  .map(item => (
-                    <Link
-                      key={item.name}
-                      to={item.href}
+          <div className="flex h-16 items-center gap-4">
+            <div className="flex flex-shrink-0 items-center">
+              <img
+                className="h-18 w-auto sm:h-20"
+                src={krispyKremeLogo}
+                alt="Krispy Kreme Operations"
+              />
+            </div>
+
+            <div className="hidden sm:flex min-w-0 flex-1 items-center">
+              <div className="ml-2 flex min-w-0 flex-1 items-center gap-4 overflow-x-auto lg:gap-6">
+                {desktopPrimaryNavigation.map(item => (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={`${
+                      isActive(item.href)
+                        ? 'border-krispy-green text-gray-900'
+                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                    } inline-flex flex-shrink-0 items-center border-b-2 px-1 pt-1 text-sm font-medium`}
+                  >
+                    {renderNavLabel(item)}
+                  </Link>
+                ))}
+
+                {desktopManagementNavigation.length > 0 && (
+                  <div className="relative flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsManagementOpen(prev => !prev)}
                       className={`${
-                        isActive(item.href)
+                        desktopManagementNavigation.some(item => isActive(item.href)) 
                           ? 'border-krispy-green text-gray-900'
                           : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                      } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium`}
+                       } inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium`}
                     >
-                      {item.name}
-                      {item.href === '/orders' && renderOrdersBadge()}
-                    </Link>
-                  ))}
+                    Gestion
+                      <ChevronDown className="ml-1 h-4 w-4" />
+                    </button>
+
+                    {isManagementOpen && (
+                      <div className="absolute right-0 z-20 mt-3 w-52 rounded-xl border border-gray-200 bg-white p-2 shadow-lg">
+                        {desktopManagementNavigation.map(item => (
+                          <Link
+                            key={item.name}
+                            to={item.href}
+                            onClick={() => setIsManagementOpen(false)}
+                            className={`${
+                              isActive(item.href)
+                                ? 'bg-krispy-green-light text-krispy-green'
+                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                            } block rounded-lg px-3 py-2 text-sm font-medium`}
+                          >
+                            {renderNavLabel(item)}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}  
               </div>
             </div>
 
-            <div className="hidden sm:ml-6 sm:flex sm:items-center">
-              <div className="ml-3 relative">
-                <div className="flex items-center">
-                  <span className="text-sm text-gray-500 mr-4">
-                    {user?.fullName || user?.email}
-                  </span>
-                  <button
-                    onClick={() => logout()}
-                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
-                  >
-                    Se déconnecter
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="-mr-2 flex items-center sm:hidden">
+            <div className="hidden sm:flex flex-shrink-0 items-center gap-3">
+              <span className="hidden xl:block max-w-[190px] truncate text-sm text-gray-500">
+                {user?.fullName || user?.email}
+              </span>
               <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-krispy-green"
+                onClick={() => logout()}
+                className="inline-flex items-center rounded-md border border-transparent bg-krispy-green px-3 py-2 text-sm font-medium text-white hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
               >
-                <span className="sr-only">Open main menu</span>
-                {!isOpen ? (
-                  <svg
-                    className="block h-6 w-6"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 6h16M4 12h16M4 18h16"
-                    />
-                  </svg>
-                ) : (
-                  <svg
-                    className="block h-6 w-6"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                )}
+                Se déconnecter
+              </button>
+            </div>
+
+            <div className="ml-auto flex items-center sm:hidden">
+              <button
+               onClick={() => setIsOpen(prev => !prev)}
+                className="inline-flex items-center justify-center rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-krispy-green"  
+              >
+               <span className="sr-only">Ouvrir le menu</span>
+                {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />} 
               </button>
             </div>
           </div>
         </div>
 
-        {/* Mobile menu */}
-        <div className={`${isOpen ? 'block' : 'hidden'} sm:hidden`}>
-          <div className="pt-2 pb-3 space-y-1">
-            {navigation
-              .filter(item => item.visible)
-              .map(item => (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`${
-                    isActive(item.href)
-                      ? 'bg-krispy-green-light border-krispy-green text-krispy-green'
-                      : 'border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700'
-                  } block pl-3 pr-4 py-2 border-l-4 text-base font-medium`}
-                  onClick={() => setIsOpen(false)}
-                >
-                 <span className="inline-flex items-center">
-                    {item.name}
-                    {item.href === '/orders' && renderOrdersBadge()}
-                  </span> 
-                </Link>
-              ))}
-          </div>
-          <div className="pt-4 pb-3 border-t border-gray-200">
-            <div className="flex items-center px-4">
-              <div className="flex-shrink-0">
-                <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                  <span className="text-gray-500 font-medium">
-                    {user?.fullName?.[0] || user?.email?.[0] || '?'}
-                  </span>
-                </div>
-              </div>
-              <div className="ml-3">
-                <div className="text-base font-medium text-gray-800">
-                  {user?.fullName || user?.email}
-                </div>
-                <div className="text-sm font-medium text-gray-500">
-                  {user?.role}
-                </div>
-              </div>
-            </div>
-            <div className="mt-3 space-y-1">
-              <button
-                onClick={() => {
-                  logout();
-                  setIsOpen(false);
-                }}
-                className="block w-full text-left px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+        <div className={`${isOpen ? 'block' : 'hidden'} sm:hidden border-t border-gray-200 bg-white`}>
+          <div className="space-y-1 px-3 py-3">
+            {mobileNavigation.map(item => (
+              <Link
+                key={item.name}
+                to={item.href}
+                onClick={() => setIsOpen(false)}
+                className={`${
+                  isActive(item.href)
+                    ? 'bg-krispy-green-light text-krispy-green'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                } block rounded-lg px-3 py-2 text-base font-medium`}
               >
-                Se déconnecter
-              </button>
+              {renderNavLabel(item)}
+              </Link>
+            ))}
+          </div>
+
+          <div className="border-t border-gray-200 px-4 py-4">
+            <div className="mb-3 text-sm text-gray-500">
+              {user?.fullName || user?.email}  
             </div>
+             <button
+              onClick={() => {
+                void logout();
+                setIsOpen(false);
+              }}
+              className="inline-flex items-center rounded-md border border-transparent bg-krispy-green px-3 py-2 text-sm font-medium text-white hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
+            >
+              Se déconnecter
+            </button>
           </div>
         </div>
       </nav>
