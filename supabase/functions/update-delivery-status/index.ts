@@ -148,18 +148,27 @@ Deno.serve(async (req) => {
       throw new Error('Insufficient permissions for this store');
     }
     
-    // Update store production status
-    const { data: storeProduction, error: updateError } = await supabase
-      .from('store_productions')
-      .update({ 
-        delivery_confirmed: updates.deliveryConfirmed,
-        waste_reported: updates.waste || updates.boxWaste ? true : undefined
-      })
-      .eq('id', storeProductionId)
-      .select()
-      .single();
+    // Update store production status without sending undefined fields.
+    const storeProductionPatch: Record<string, unknown> = {};
+    if (typeof updates.deliveryConfirmed === 'boolean') {
+      storeProductionPatch.delivery_confirmed = updates.deliveryConfirmed;
+    }
+    if (updates.waste || updates.boxWaste) {
+      storeProductionPatch.waste_reported = true;
+    }
 
-    if (updateError) throw updateError;
+    let storeProduction = currentStoreProduction;
+    if (Object.keys(storeProductionPatch).length > 0) {
+      const { data: updatedStoreProduction, error: updateError } = await supabase
+        .from('store_productions')
+        .update(storeProductionPatch)
+        .eq('id', storeProductionId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+      storeProduction = updatedStoreProduction;
+    }
 
     // Helper to fetch current received for waste validation
     async function getItemInfo(itemId: string) {
