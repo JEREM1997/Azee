@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
 
     // Récupérer les données de la variété
     const varietyData = await req.json()
-    const { id, name, description, form_id, production_cost, is_active } = varietyData
+    const { id, name, description, form_id, production_cost, is_active, is_orderable } = varietyData
 
     if (!id || !name || !form_id || production_cost === undefined) {
       throw new Error('ID, name, form_id, and production_cost are required')
@@ -76,6 +76,7 @@ Deno.serve(async (req) => {
         form_id,
         production_cost,
         is_active: is_active !== undefined ? is_active : true,
+        is_orderable: is_orderable !== undefined ? is_orderable : true,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
