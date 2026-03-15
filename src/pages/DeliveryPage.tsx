@@ -107,6 +107,19 @@ const DeliveryPage: React.FC = () => {
   const [wasteQuantities, setWasteQuantities] = useState<{ [key: string]: number }>({});
   const [boxReceivedQuantities, setBoxReceivedQuantities] = useState<{ [key: string]: number }>({});
   const [boxWasteQuantities, setBoxWasteQuantities] = useState<{ [key: string]: number }>({});
+
+  const toUiErrorMessage = (err: unknown, fallback: string) => {
+    if (err instanceof Error && err.message) {
+      return err.message;
+    }
+    if (typeof err === 'string' && err.trim().length > 0) {
+      return err;
+    }
+    if (err && typeof err === 'object' && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
+      return (err as { message: string }).message;
+    }
+    return fallback;
+  };
   
   // Function to initialize local state with current values from the plan
   const initializeLocalState = (stores: DeliveryStoreProduction[]) => {
@@ -664,7 +677,7 @@ const DeliveryPage: React.FC = () => {
       }, 500);
     } catch (err) {
       console.error('Error confirming delivery:', err);
-      setError(err instanceof Error ? err.message : 'Error confirming delivery');
+      setError(toUiErrorMessage(err, 'Erreur lors de la confirmation de réception.')); 
     } finally {
       setSaving(false);
     }
@@ -788,7 +801,7 @@ const DeliveryPage: React.FC = () => {
       }, 500);
     } catch (err) {
       console.error('Error reporting waste:', err);
-      setError(err instanceof Error ? err.message : 'Error reporting waste');
+      setError(toUiErrorMessage(err, 'Erreur lors de la declaration des dechets.'));
     } finally {
       setSaving(false);
     }
