@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { AdminProvider } from './context/AdminContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -20,6 +20,20 @@ const StatsPage = React.lazy(() => import('./pages/StatsPage'));
 const PlansPage = React.lazy(() => import('./pages/PlansPage'));
 const AuditPage = React.lazy(() => import('./pages/AuditPage'));
 
+function DefaultLanding() {
+  const { isAdmin, isProduction } = useAuth();
+
+  if (isAdmin) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (isProduction) {
+    return <Navigate to="/plans" replace />;
+  }
+
+  return <Navigate to="/orders" replace />;
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -33,7 +47,7 @@ export default function App() {
 
                   <Route element={<AuthGuard />}>
                     <Route element={<Navbar />}>
-                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                      <Route path="/" element={<DefaultLanding />} />
                       <Route path="/order" element={<Navigate to="/orders" replace />} />
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/production" element={<ProductionPage />} />
