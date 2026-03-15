@@ -1083,7 +1083,7 @@ const DeliveryPage: React.FC = () => {
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                           {forms.find(form => form.id === item.form_id)?.name || item.form_name}
                         </td>
-                        <td data-label="Prevu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                        <td data-label="Prévu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                           {item.quantity}
                         </td>
                         <td data-label="Reçu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
@@ -1194,7 +1194,7 @@ const DeliveryPage: React.FC = () => {
               {storeDetails.box_productions && storeDetails.box_productions.length > 0 && (
                 <div className="mt-8">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">BoÃ®tes</h3>
-                  div className="overflow-hidden md:overflow-x-auto">
+                  <div className="overflow-hidden md:overflow-x-auto">
                     <table className="responsive-table min-w-full divide-y divide-gray-200">
                       <thead>
                         <tr>
@@ -1207,7 +1207,7 @@ const DeliveryPage: React.FC = () => {
                       <tbody className="divide-y divide-gray-200">
                         {storeDetails.box_productions.slice().sort((a,b)=>a.box_name.localeCompare(b.box_name)).map((box) => (
                           <tr key={box.id}>
-                           <td data-label="Boite" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> 
+                           <td data-label="Boîte" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> 
                               {box.box_name}
                             </td>
                             <td data-label="Prévu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
