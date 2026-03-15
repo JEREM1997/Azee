@@ -251,70 +251,20 @@ const DeliveryPage: React.FC = () => {
     setBoxWasteQuantities({});
   };
   
-  // Function to initialize local state with current values from the plan
-  const initializeLocalState = (stores: DeliveryStoreProduction[]) => {
-    console.log('ðŸ”„ Initializing local state for', stores.length, 'stores');
-    
-    const newReceivedQuantities: { [key: string]: number } = {};
-    const newWasteQuantities: { [key: string]: number } = {};
-    const newBoxReceivedQuantities: { [key: string]: number } = {};
-    const newBoxWasteQuantities: { [key: string]: number } = {};
-    
-    stores.forEach(store => {
-      console.log(`ðŸª Store ${store.store_name}: delivery_confirmed=${store.delivery_confirmed}, waste_reported=${store.waste_reported}`);
-      
-      // Initialize production items
-      store.production_items?.forEach(item => {
-        if (item.received !== null && item.received !== undefined) {
-          newReceivedQuantities[item.id] = item.received;
-          console.log(`  ðŸ“¦ Item ${item.variety_name}: received=${item.received}`);
-        }
-        if (item.waste !== null && item.waste !== undefined) {
-          newWasteQuantities[item.id] = item.waste;
-          console.log(`  ðŸ—‘ï¸ Item ${item.variety_name}: waste=${item.waste}`);
-        }
-      });
-      
-      // Initialize box productions
-      store.box_productions?.forEach(box => {
-        if (box.received !== null && box.received !== undefined) {
-          newBoxReceivedQuantities[box.id] = box.received;
-          console.log(`  ðŸ“¦ Box ${box.box_name}: received=${box.received}`);
-        }
-        if (box.waste !== null && box.waste !== undefined) {
-          newBoxWasteQuantities[box.id] = box.waste;
-          console.log(`  ðŸ—‘ï¸ Box ${box.box_name}: waste=${box.waste}`);
-        }
-      });
-    });
-    
-    console.log('ðŸ“Š Setting local state:', {
-      receivedQuantities: Object.keys(newReceivedQuantities).length,
-      wasteQuantities: Object.keys(newWasteQuantities).length,
-      boxReceivedQuantities: Object.keys(newBoxReceivedQuantities).length,
-      boxWasteQuantities: Object.keys(newBoxWasteQuantities).length
-    });
-    
-    setReceivedQuantities(newReceivedQuantities);
-    setWasteQuantities(newWasteQuantities);
-    setBoxReceivedQuantities(newBoxReceivedQuantities);
-    setBoxWasteQuantities(newBoxWasteQuantities);
-  };
-  
   const loadCurrentPlan = async (silentMode: boolean = false) => {
     try {
-      console.log('ðŸ”„ Loading current plan...');
+      console.log('Loading current plan...');
       if (!silentMode) {
         setLoading(true);
       }
       setError(null);
       
-      // Charger uniquement une fenÃªtre autour de la date de livraison sÃ©lectionnÃ©e (Â±15 jours)
+      // Charger uniquement une fenêtre autour de la date de livraison sélectionnée (Â±15 jours)
       const rangeDays = 15;
 
       const selected = new Date(deliveryDate);
 
-      // SÃ©curitÃ© au cas oÃ¹ deliveryDate serait vide ou invalide
+      // Sécurité au cas où deliveryDate serait vide ou invalide
       if (isNaN(selected.getTime())) {
         throw new Error(`Invalid deliveryDate: ${deliveryDate}`);
       }
@@ -329,7 +279,7 @@ const DeliveryPage: React.FC = () => {
       const startDate = start.toISOString().split('T')[0];
       const endDate = end.toISOString().split('T')[0];
 
-      console.log('ðŸ“… Fetching plans from', startDate, 'to', endDate, 'for deliveryDate', deliveryDate);
+      console.log('Fetching plans from', startDate, 'to', endDate, 'for deliveryDate', deliveryDate);
 
       const { data: plans, error } = await apiService.production.getProductionPlans(
         startDate,
@@ -345,13 +295,13 @@ const DeliveryPage: React.FC = () => {
       }
       
       if (!plans || plans.length === 0) {
-        console.log('â„¹ï¸ No production plans found in the database');
+        console.log('No production plans found in the database');
         setCurrentPlan(null);
         resetLocalState();
         return;
       }
       
-      console.log(`ðŸ“‹ Found ${plans.length} plans from server`);
+      console.log(`Found ${plans.length} plans from server`);
       
       // Process all stores from all plans
       const allStores: DeliveryStoreProduction[] = [];
@@ -412,7 +362,7 @@ const DeliveryPage: React.FC = () => {
       });
       
       if (filteredStores.length > 0) {
-        console.log(`âœ… Found ${filteredStores.length} stores for delivery date ${deliveryDate}`);
+        console.log(`Found ${filteredStores.length} stores for delivery date ${deliveryDate}`);
         
         // Calculate total production
         const totalProduction = filteredStores.reduce((sum, store) => sum + (store.total_quantity || 0), 0);
@@ -435,12 +385,12 @@ const DeliveryPage: React.FC = () => {
         });
         
       } else {
-        console.log(`â„¹ï¸ No stores found for delivery date ${deliveryDate}`);
+        console.log(`No stores found for delivery date ${deliveryDate}`); 
         setCurrentPlan(null);
         resetLocalState();
       }
     } catch (err) {
-      console.error('âŒ Error loading production plan:', err);
+      console.error('Error loading production plan:', err);
       setError(err instanceof Error ? err.message : 'Error loading production plan');
     } finally {
      if (!silentMode) {
@@ -579,7 +529,7 @@ const DeliveryPage: React.FC = () => {
     // Add boxes table if there are any boxes
     if (storeDetails.box_productions && storeDetails.box_productions.length > 0) {
       const boxesTableHeaders = [
-        ['Boîte', 'Quantité Prévue (unitÃ©)', 'Quantités Reçue (unité)', 'Déchets (unité)']
+      ['Boîte', 'Quantité Prévue (unité)', 'Quantités Reçue (unité)', 'Déchets (unité)']  
       ];
 
       const boxesTableData = storeDetails.box_productions.slice().sort((a,b)=>compareText(a.box_name, b.box_name)).map(box => [
@@ -688,12 +638,12 @@ const DeliveryPage: React.FC = () => {
       }));
      await loadCurrentPlan(true); 
       // Add a small delay to ensure server has processed the update
-      console.log('âœ… Delivery confirmed, reloading plan in 500ms...');
+      console.log('Delivery confirmed, reloading plan in 500ms...');
       setTimeout(async () => {
         try {
-          console.log('ðŸ”„ Reloading plan after delivery confirmation...');
+          console.log('Reloading plan after delivery confirmation...');
           await loadCurrentPlan(true);
-          console.log('âœ… Plan reloaded successfully');
+          console.log('Plan reloaded successfully');
         } catch (error) {
           console.error('Error reloading plan after delivery confirmation:', error);
           // Don't show error to user as the main operation succeeded
@@ -804,12 +754,12 @@ const DeliveryPage: React.FC = () => {
       await loadCurrentPlan(true);
 
       // Add a small delay to ensure server has processed the update
-      console.log('âœ… Waste reported, reloading plan in 500ms...');
+      console.log('Waste reported, reloading plan in 500ms...');
       setTimeout(async () => {
         try {
-          console.log('ðŸ”„ Reloading plan after waste reporting...');
+          console.log('Reloading plan after waste reporting...');
           await loadCurrentPlan(true);
-          console.log('âœ… Plan reloaded successfully');
+          console.log('Plan reloaded successfully');
         } catch (error) {
           console.error('Error reloading plan after waste reporting:', error);
           // Don't show error to user as the main operation succeeded
@@ -961,10 +911,10 @@ const DeliveryPage: React.FC = () => {
               {userStores.length === 0 && (
                 <div className="text-center py-8 text-gray-500">
                   <div className="text-sm">
-                    Aucune livraison prÃ©vue pour le {formatDateSafe(deliveryDate)}
+                    Aucune livraison prévue pour le {formatDateSafe(deliveryDate)}
                   </div>
                   <div className="text-xs text-gray-400 mt-1">
-                    SÃ©lectionnez une autre date pour voir les livraisons
+                    Sélectionnez une autre date pour voir les livraisons
                   </div>
                 </div>
               )}
@@ -972,7 +922,7 @@ const DeliveryPage: React.FC = () => {
           </div>
         </div>
         
-        {/* DÃ©tails de livraison */}
+        {/* Détails de livraison */}
         <div className="lg:col-span-2 bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-800 flex items-center">
@@ -1023,7 +973,7 @@ const DeliveryPage: React.FC = () => {
                     )}
                     <p className="text-sm text-gray-600">
                       <span className="font-medium">Date de livraison:</span> {
-                        storeDetails.deliverydate ? formatDateSafe(storeDetails.deliverydate) : 'Non dÃ©finie'
+                        storeDetails.deliverydate ? formatDateSafe(storeDetails.deliverydate) : 'Non définie'
                       }
                     </p>
                   </div>
@@ -1237,15 +1187,15 @@ const DeliveryPage: React.FC = () => {
               {/* Box information */}
               {storeDetails.box_productions && storeDetails.box_productions.length > 0 && (
                 <div className="mt-8">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">BoÃ®tes</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Boîtes</h3>
                   <div className="overflow-hidden md:overflow-x-auto">
                     <table className="responsive-table min-w-full divide-y divide-gray-200">
                       <thead>
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">BoÃ®te</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">PrÃ©vu (unitÃ©)</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ReÃ§u (unitÃ©)</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">DÃ©chets (unitÃ©)</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîte</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Prévu (unitÃ©)</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Reçu (unitÃ©)</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Déchets (unitÃ©)</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -1269,7 +1219,7 @@ const DeliveryPage: React.FC = () => {
                                     [box.id]: parseInt(e.target.value) || 0
                                   })}
                                   className="w-20 text-center border-2 border-blue-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-blue-50 hover:bg-white transition-colors"
-                                  title={`QuantitÃ© prÃ©vue: ${box.quantity}. Ajustez si nécessaire.`}
+                                  title={`Quantité prévue: ${box.quantity}. Ajustez si nécessaire.`}
                                 />
                               ) : !isOrderDelivery && storeDetails.delivery_confirmed && canEditSelectedDelivery ? (
                                 <input
@@ -1317,7 +1267,7 @@ const DeliveryPage: React.FC = () => {
                                     box.received !== null && box.received !== undefined 
                                       ? box.received 
                                       : (boxReceivedQuantities[box.id] !== undefined ? boxReceivedQuantities[box.id] : box.quantity)
-                                  } boÃ®tes`}
+                                  } boîtes`}
                                 />
                               ) : !isOrderDelivery && storeDetails.waste_reported && canEditSelectedDelivery ? (
                                 <input
@@ -1350,7 +1300,7 @@ const DeliveryPage: React.FC = () => {
                               ) : isOrderDelivery ? (
                                 box.waste ?? 0
                               ) : !storeDetails.delivery_confirmed ? (
-                                <span className="text-gray-400 text-sm">Confirmez d'abord la rÃ©ception</span>
+                                <span className="text-gray-400 text-sm">Confirmez d'abord la réception</span>
                               ) : (
                                 boxWasteQuantities[box.id] !== undefined ? boxWasteQuantities[box.id] : (box.waste !== null && box.waste !== undefined ? box.waste : 0)
                               )}
@@ -1437,12 +1387,12 @@ const DeliveryPage: React.FC = () => {
                     {saving ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Mise Ã  jour en cours...
+                        Mise à jour en cours...
                       </>
                     ) : (
                       <>
                         <Edit className="h-4 w-4 mr-2" />
-                        Mettre Ã  jour les Quantités Reçues
+                        Mettre à jour les Quantités Reçues
                       </>
                     )}
                   </button>
@@ -1454,12 +1404,12 @@ const DeliveryPage: React.FC = () => {
                     {saving ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Mise Ã  jour en cours...
+                        Mise à jour en cours...
                       </>
                     ) : (
                       <>
                         <AlertTriangle className="h-4 w-4 mr-2" />
-                        Mettre Ã  jour les Déchets
+                        Mettre à jour les Déchets
                       </>
                     )}
                   </button>
