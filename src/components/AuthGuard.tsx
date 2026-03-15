@@ -6,6 +6,7 @@ import LoadingSpinner from './LoadingSpinner';
 const AuthGuard: React.FC = () => {
   const { user, loading, isAdmin, isProduction } = useAuth();
   const location = useLocation();
+  const fallbackRoute = isAdmin ? '/dashboard' : isProduction ? '/plans' : '/orders';
 
   if (loading) {
     return <LoadingSpinner fullScreen message="Checking authentication..." />;
@@ -17,18 +18,18 @@ const AuthGuard: React.FC = () => {
   }
 
   // Role-based route protection
-  const adminOnlyRoutes = ['/admin', '/users', '/users/create', '/stats', '/audit'];
-  const productionRoutes = ['/production', '/plans'];
+  const adminOnlyRoutes = ['/dashboard', '/production', '/admin', '/users', '/users/create', '/stats', '/audit'];
+  const productionRoutes = ['/plans'];
 
   const isAdminRoute = adminOnlyRoutes.some(route => location.pathname.startsWith(route));
   const isProductionRoute = productionRoutes.some(route => location.pathname.startsWith(route));
 
   if (isAdminRoute && !isAdmin) {
-    return <Navigate to="/dashboard" replace />;
+   return <Navigate to={fallbackRoute} replace />; 
   }
 
   if (isProductionRoute && !isProduction && !isAdmin) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={fallbackRoute} replace />;
   }
 
   return <Outlet />;
