@@ -1062,120 +1062,155 @@ const DeliveryPage: React.FC = () => {
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Déchets (unité)</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {sortedProductionItems.map((item) => (
-                      <tr key={item.id}>
-                       <td data-label="Variété" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> 
-                        {getVarietyDisplayName(item)} 
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                         {getFormDisplayName(item.form_id, item.form_name)}
-                        </td>
-                        </td>
-                        <td data-label="Prévu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                          {item.quantity}
-                        </td>
-                        <td data-label="Reçu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                          {!isOrderDelivery && !storeDetails.delivery_confirmed && canManageSelectedDelivery ? (
-                            <input
-                              type="number"
-                              min="0"
-                              placeholder={item.quantity.toString()}
-                              value={receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : ''}
-                              onChange={(e) => setReceivedQuantities({
-                                ...receivedQuantities,
-                                [item.id]: parseInt(e.target.value) || 0
-                              })}
-                              className="w-20 text-center border-2 border-blue-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-blue-50 hover:bg-white transition-colors"
-                              title={`Quantité prévue: ${item.quantity}. Ajustez si nécessaire.`}
-                            />
-                          ) : !isOrderDelivery && storeDetails.delivery_confirmed && canEditSelectedDelivery ? (
-                            <input
-                              type="number"
-                              min="0"
-                              placeholder={item.quantity.toString()}
-                              value={receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : (item.received !== null && item.received !== undefined ? item.received : '')}
-                              onChange={(e) => setReceivedQuantities({
-                                ...receivedQuantities,
-                                [item.id]: parseInt(e.target.value) || 0
-                              })}
-                              className="w-20 text-center border-2 border-green-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-green-50 hover:bg-white transition-colors"
-                              title={`Admin: Modifier la quantité reçue. Quantité prévue: ${item.quantity}.`}
-                            />
-                          ) : (
-                            item.received !== null && item.received !== undefined 
-                              ? item.received 
-                              : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : '-')
-                          )}
-                        </td>
-                        <td data-label="Déchets" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
-                          {!isOrderDelivery && !storeDetails.waste_reported && storeDetails.delivery_confirmed && canManageSelectedDelivery ? (
-                            <input
-                              type="number"
-                              min="0"
-                              max={
-                                item.received !== null && item.received !== undefined 
-                                  ? item.received 
-                                  : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity)
-                              }
-                              placeholder="0"
-                              value={wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : ''}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value) || 0;
-                                const maxAllowed = item.received !== null && item.received !== undefined
-                                  ? item.received
-                                  : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity);
-                                setWasteQuantities({
-                                  ...wasteQuantities,
-                                  [item.id]: Math.min(val, maxAllowed)
-                                });
-                              }}
-                              className="w-20 text-center border-2 border-orange-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-orange-50 hover:bg-white transition-colors"
-                              title={`Maximum: ${
-                                item.received !== null && item.received !== undefined 
-                                  ? item.received 
-                                  : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity)
-                              } doughnuts`}
-                            />
-                          ) : !isOrderDelivery && storeDetails.waste_reported && canEditSelectedDelivery ? (
-                            <input
-                              type="number"
-                              min="0"
-                              max={
-                                item.received !== null && item.received !== undefined 
-                                  ? item.received 
-                                  : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity)
-                              }
-                              placeholder="0"
-                              value={wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : (item.waste !== null && item.waste !== undefined ? item.waste : '')}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value) || 0;
-                                const maxAllowed = item.received !== null && item.received !== undefined
-                                  ? item.received
-                                  : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity);
-                                setWasteQuantities({
-                                  ...wasteQuantities,
-                                  [item.id]: Math.min(val, maxAllowed)
-                                });
-                              }}
-                              className="w-20 text-center border-2 border-red-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-red-50 hover:bg-white transition-colors"
-                              title={`Admin: Modifier les déchets. Maximum: ${
-                                item.received !== null && item.received !== undefined 
-                                  ? item.received 
-                                  : (receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : item.quantity)
-                              } doughnuts`}
-                            />
-                          ) : isOrderDelivery ? (
-                            item.waste ?? 0
-                          ) : !storeDetails.delivery_confirmed ? (
-                            <span className="text-gray-400 text-sm">Confirmez d'abord la réception</span>
-                          ) : (
-                            wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : (item.waste !== null && item.waste !== undefined ? item.waste : 0)
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
+                 <tbody className="divide-y divide-gray-200">
+  {sortedProductionItems.map((item) => (
+    <tr key={item.id}>
+      <td data-label="Variete" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+        {getVarietyDisplayName(item)}
+      </td>
+      <td data-label="Forme" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+        {getFormDisplayName(item.form_id, item.form_name)}
+      </td>
+      <td data-label="Prevu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+        {item.quantity}
+      </td>
+      <td data-label="Recu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+        {!isOrderDelivery && !storeDetails.delivery_confirmed && canManageSelectedDelivery ? (
+          <input
+            type="number"
+            min="0"
+            placeholder={item.quantity.toString()}
+            value={receivedQuantities[item.id] !== undefined ? receivedQuantities[item.id] : ''}
+            onChange={(e) =>
+              setReceivedQuantities({
+                ...receivedQuantities,
+                [item.id]: parseInt(e.target.value, 10) || 0,
+              })
+            }
+            className="w-20 text-center border-2 border-blue-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-blue-50 hover:bg-white transition-colors"
+            title={`Quantite prevue: ${item.quantity}. Ajustez si necessaire.`}
+          />
+        ) : !isOrderDelivery && storeDetails.delivery_confirmed && canEditSelectedDelivery ? (
+          <input
+            type="number"
+            min="0"
+            placeholder={item.quantity.toString()}
+            value={
+              receivedQuantities[item.id] !== undefined
+                ? receivedQuantities[item.id]
+                : item.received !== null && item.received !== undefined
+                  ? item.received
+                  : ''
+            }
+            onChange={(e) =>
+              setReceivedQuantities({
+                ...receivedQuantities,
+                [item.id]: parseInt(e.target.value, 10) || 0,
+              })
+            }
+            className="w-20 text-center border-2 border-green-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-green-50 hover:bg-white transition-colors"
+            title={`Admin: Modifier la quantite recue. Quantite prevue: ${item.quantity}.`}
+          />
+        ) : item.received !== null && item.received !== undefined ? (
+          item.received
+        ) : receivedQuantities[item.id] !== undefined ? (
+          receivedQuantities[item.id]
+        ) : (
+          '-'
+        )}
+      </td>
+      <td data-label="Dechets" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+        {!isOrderDelivery && !storeDetails.waste_reported && storeDetails.delivery_confirmed && canManageSelectedDelivery ? (
+          <input
+            type="number"
+            min="0"
+            max={
+              item.received !== null && item.received !== undefined
+                ? item.received
+                : receivedQuantities[item.id] !== undefined
+                  ? receivedQuantities[item.id]
+                  : item.quantity
+            }
+            placeholder="0"
+            value={wasteQuantities[item.id] !== undefined ? wasteQuantities[item.id] : ''}
+            onChange={(e) => {
+              const value = parseInt(e.target.value, 10) || 0;
+              const maxAllowed =
+                item.received !== null && item.received !== undefined
+                  ? item.received
+                  : receivedQuantities[item.id] !== undefined
+                    ? receivedQuantities[item.id]
+                    : item.quantity;
+              setWasteQuantities({
+                ...wasteQuantities,
+                [item.id]: Math.min(value, maxAllowed),
+              });
+            }}
+            className="w-20 text-center border-2 border-orange-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-orange-50 hover:bg-white transition-colors"
+            title={`Maximum: ${
+              item.received !== null && item.received !== undefined
+                ? item.received
+                : receivedQuantities[item.id] !== undefined
+                  ? receivedQuantities[item.id]
+                  : item.quantity
+            } doughnuts`}
+          />
+        ) : !isOrderDelivery && storeDetails.waste_reported && canEditSelectedDelivery ? (
+          <input
+            type="number"
+            min="0"
+            max={
+              item.received !== null && item.received !== undefined
+                ? item.received
+                : receivedQuantities[item.id] !== undefined
+                  ? receivedQuantities[item.id]
+                  : item.quantity
+            }
+            placeholder="0"
+            value={
+              wasteQuantities[item.id] !== undefined
+                ? wasteQuantities[item.id]
+                : item.waste !== null && item.waste !== undefined
+                  ? item.waste
+                  : ''
+            }
+            onChange={(e) => {
+              const value = parseInt(e.target.value, 10) || 0;
+              const maxAllowed =
+                item.received !== null && item.received !== undefined
+                  ? item.received
+                  : receivedQuantities[item.id] !== undefined
+                    ? receivedQuantities[item.id]
+                    : item.quantity;
+              setWasteQuantities({
+                ...wasteQuantities,
+                [item.id]: Math.min(value, maxAllowed),
+              });
+            }}
+            className="w-20 text-center border-2 border-red-300 rounded-md shadow-sm focus:ring-krispy-green focus:border-krispy-green sm:text-sm bg-red-50 hover:bg-white transition-colors"
+            title={`Admin: Modifier les dechets. Maximum: ${
+              item.received !== null && item.received !== undefined
+                ? item.received
+                : receivedQuantities[item.id] !== undefined
+                  ? receivedQuantities[item.id]
+                  : item.quantity
+            } doughnuts`}
+          />
+        ) : isOrderDelivery ? (
+          item.waste ?? 0
+        ) : !storeDetails.delivery_confirmed ? (
+          <span className="text-gray-400 text-sm">Confirmez d'abord la reception</span>
+        ) : wasteQuantities[item.id] !== undefined ? (
+          wasteQuantities[item.id]
+        ) : item.waste !== null && item.waste !== undefined ? (
+          item.waste
+        ) : (
+          0
+        )}
+      </td>
+    </tr>
+  ))}
+</tbody> 
                 </table>
               </div>
 
