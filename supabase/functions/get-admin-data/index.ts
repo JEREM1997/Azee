@@ -108,6 +108,7 @@ Deno.serve(async (req) => {
       name: variety.name,
       description: variety.description,
       isActive: variety.is_active,
+      isOrderable: variety.is_orderable ?? true,
       formId: variety.form_id,
       productionCost: parseFloat(variety.production_cost || '0'),
       createdAt: variety.created_at,
