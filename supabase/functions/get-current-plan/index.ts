@@ -54,7 +54,7 @@ async function fetchApprovedOrdersForRange(
 ) {
   const { data: ordersData, error: ordersError } = await supabaseClient
     .from('orders')
-    .select('id, store_id, store_name, delivery_date, production_date')
+    .select('id, store_id, store_name, delivery_date, production_date, conditioning')
     .eq('production_approved', true)
     .gte('production_date', startDate)
     .lte('production_date', endDate);
