@@ -54,7 +54,7 @@ async function fetchApprovedOrdersForRange(
 ) {
   const { data: ordersData, error: ordersError } = await supabaseClient
     .from('orders')
-    .select('id, store_id, store_name, delivery_date, production_date, customer_name, company_name, customer_phone, handled_by, delivered_by, comments')
+    .select('id, store_id, store_name, delivery_date, production_date, conditioning, customer_name, company_name, customer_phone, handled_by, delivered_by, comments')
     .eq('production_approved', true)
     .gte('production_date', startDate)
     .lte('production_date', endDate);
@@ -74,9 +74,9 @@ async function fetchApprovedOrdersForRange(
 
   const orderItemsQuery = supabaseClient.from('order_items');
   const { data: itemsData, error: itemsError } = await orderItemsQuery
-    
-    .in('order_id', orderIds);
     .select('order_id, variety_id, quantity, conditioning')
+    .in('order_id', orderIds);
+  
   if (itemsError) {
     if (isMissingTableError(itemsError)) {
       return [];
@@ -158,7 +158,7 @@ function createDeliveryEntryFromOrder(order: any) {
     waste_reported: true,
     production_items: (order.items || []).map((item: any) => ({
       ...item,
-      id: `order-item:${order.id}:${item.variety_id}`,
+      id: `order-item:${order.id}:${item.variety_id}:${item.conditioning || 'sans-conditionnement'}`,
       received: Number(item.quantity) || 0,
       waste: 0,
     })),
