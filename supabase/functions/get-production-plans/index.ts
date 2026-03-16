@@ -115,9 +115,7 @@ async function fetchApprovedOrdersForRange(
         form_id: variety?.form_id || '',
         form_name: formsById.get(variety?.form_id) || 'Commande',
         quantity: Number(item.quantity) || 0,
-        conditioning: item.conditioning ?? null,
-        received: Number(item.quantity) || 0,
-        waste: 0,
+        conditioning: item.conditioning ?? order.conditioning ?? null,
         received: null,
         waste: null,
       };
