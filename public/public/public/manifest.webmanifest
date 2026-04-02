@@ -1,0 +1,19 @@
+{
+  "name": "KKOPS",
+  "short_name": "KKOPS",
+  "description": "KKOPS - Krispy Kreme Operations",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#0f6a36",
+  "icons": [
+    {
+      "src": "/kkops-logo-500.png",
+      "sizes": "500x500",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
