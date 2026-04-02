@@ -2117,7 +2117,7 @@ const StatsPage: React.FC = () => {
         </div>
         <div className="p-6">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+             <table className="responsive-table min-w-full divide-y divide-gray-200">
               <thead>
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Magasin</th>
@@ -2137,33 +2137,33 @@ const StatsPage: React.FC = () => {
                   
                   return (
                     <tr key={store.id}>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td data-label="Magasin" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                         {store.name}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                      <td data-label="Production Totale" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                         {formatNum(store.production)}
                         <div className="text-xs text-gray-400">({productionPercent}%)</div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                      <td data-label="Reçu" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                         {formatNum(store.received)}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                      <td data-label="Ventes (Reçu - Déchets)" className="px-4 py-3 whitespace-nowrap text-sm text-center">
                         <span className="font-medium text-krispy-green">{formatNum(sales)}</span>
                         <div className="text-xs text-gray-400">doughnuts vendus</div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                      <td data-label="% Déchets" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                         <span className={`${store.wastePercent > 10 ? 'text-red-600 font-medium' : store.wastePercent > 5 ? 'text-orange-600' : 'text-green-600'}`}>
                         {store.wastePercent.toFixed(1)}%
                         </span>
                         <div className="text-xs text-gray-400">{formatNum(store.waste)} déchets</div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                      <td data-label="Coût Production" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                         CHF {store.cost.toFixed(2)}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                      <td data-label="Coût des Déchets" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                         CHF {store.wasteCost.toFixed(2)}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                      <td data-label="Actions" className="px-4 py-3 whitespace-nowrap text-sm text-center">
                         <button
                           onClick={() => generateStoreReport(store.id)}
                           className="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
