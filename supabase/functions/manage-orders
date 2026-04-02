@@ -158,6 +158,29 @@ Deno.serve(async req => {
       });
     }
 
+    if (action === 'countPending') {
+      if (!['admin', 'production'].includes(userRole)) {
+        return new Response(JSON.stringify({ count: 0 }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { count, error: countError } = await supabaseClient
+        .from('orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('production_approved', false);
+
+      if (countError) {
+        throw new Error(`Pending orders count failed: ${countError.message}`);
+      }
+
+      return new Response(JSON.stringify({ count: count ?? 0 }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'create') {
       const storeId = String(requestBody?.storeId || '').trim();
       if (!storeId) {
@@ -230,6 +253,69 @@ Deno.serve(async req => {
       });
     }
 
+    if (action === 'delete') {
+      const orderId = String(requestBody?.orderId || '').trim();
+      if (!orderId) {
+        throw new Error('Missing orderId');
+      }
+
+      const { data: existingOrder, error: existingOrderError } = await supabaseClient
+        .from('orders')
+        .select('id, store_id, production_approved')
+        .eq('id', orderId)
+        .maybeSingle();
+
+      if (existingOrderError) {
+        throw new Error(`Unable to load order before deletion: ${existingOrderError.message}`);
+      }
+
+      if (!existingOrder) {
+        return new Response(JSON.stringify({ error: 'Order not found.' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (!['admin', 'production'].includes(userRole)) {
+        if (userRole !== 'store' || !storeIds.includes(existingOrder.store_id)) {
+          return new Response(JSON.stringify({ error: 'Insufficient permissions.' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (existingOrder.production_approved) {
+          return new Response(JSON.stringify({ error: 'A store account cannot delete an approved order.' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      const { error: deleteItemsError } = await supabaseClient
+        .from('order_items')
+        .delete()
+        .eq('order_id', orderId);
+
+      if (deleteItemsError && !isMissingTableError(deleteItemsError)) {
+        throw new Error(`Unable to delete order items: ${deleteItemsError.message}`);
+      }
+
+      const { error: deleteOrderError } = await supabaseClient
+        .from('orders')
+        .delete()
+        .eq('id', orderId);
+
+      if (deleteOrderError) {
+        throw new Error(`Unable to delete order: ${deleteOrderError.message}`);
+      }
+
+      return new Response(JSON.stringify({ id: orderId, deleted: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'updateProduction') {
       if (!['admin', 'production'].includes(userRole)) {
         return new Response(JSON.stringify({ error: 'Insufficient permissions.' }), {
@@ -279,129 +365,6 @@ Deno.serve(async req => {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
-    }
-
-if (action === 'update') {
-      const orderId = String(requestBody?.orderId || '').trim();
-      const storeId = String(requestBody?.storeId || '').trim();
-
-      if (!orderId || !storeId) {
-        throw new Error('Missing orderId or storeId');
-      }
-
-      const { data: existingOrder, error: existingOrderError } = await supabaseClient
-        .from('orders')
-        .select('id, store_id, production_approved')
-        .eq('id', orderId)
-        .maybeSingle();
-
-      if (existingOrderError) {
-        throw new Error(`Unable to load order before update: ${existingOrderError.message}`);
-      }
-
-      if (!existingOrder) {
-        throw new Error('Order not found');
-      }
-
-      const userCanManageAll = ['admin', 'production'].includes(userRole);
-      const userCanManageStoreOrder = userRole === 'store' && storeIds.includes(existingOrder.store_id);
-
-      if (!userCanManageAll && !userCanManageStoreOrder) {
-        return new Response(JSON.stringify({ error: 'Insufficient permissions.' }), {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      if (userRole === 'store' && existingOrder.production_approved) {
-        return new Response(JSON.stringify({ error: 'Impossible de modifier une commande déjà validée.' }), {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      if (userRole === 'store' && !storeIds.includes(storeId)) {
-        return new Response(JSON.stringify({ error: 'Insufficient permissions for this store.' }), {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      const safeProductionApproved =
-        userCanManageAll ? !!requestBody?.productionApproved : !!existingOrder.production_approved;
-      const safeProductionDate =
-        userCanManageAll
-          ? String(requestBody?.productionDate || '').trim() || getSuggestedProductionDate(String(requestBody?.deliveryDate || ''))
-          : getSuggestedProductionDate(String(requestBody?.deliveryDate || ''));
-
-      const { data: updatedOrder, error: updateError } = await supabaseClient
-        .from('orders')
-        .update({
-          store_id: storeId,
-          store_name: requestBody?.storeName,
-          customer_name: requestBody?.customerName,
-          customer_phone: requestBody?.customerPhone,
-          company_name: requestBody?.companyName,
-          delivery_address: requestBody?.deliveryAddress,
-          billing_address: requestBody?.billingAddress,
-          delivery_date: requestBody?.deliveryDate,
-          production_date: safeProductionDate,
-          production_approved: safeProductionApproved,
-          order_type: requestBody?.orderType,
-          payment_status: requestBody?.paymentStatus,
-          handled_by: requestBody?.handledBy,
-          delivered_by: requestBody?.deliveredBy,
-          conditioning: requestBody?.conditioning,
-          comments: requestBody?.comments,
-        })
-        .eq('id', orderId)
-        .select()
-        .single();
-
-      if (updateError) {
-        throw new Error(`Order update failed: ${updateError.message}`);
-      }
-
-      const items = Array.isArray(requestBody?.items) ? requestBody.items : [];
-
-      const { error: deleteItemsError } = await supabaseClient
-        .from('order_items')
-        .delete()
-        .eq('order_id', orderId);
-
-      if (deleteItemsError) {
-        throw new Error(`Unable to reset order items: ${deleteItemsError.message}`);
-      }
-
-      const { error: insertItemsError } = await supabaseClient.from('order_items').insert(
-        items.map((item: any) => ({
-          order_id: orderId,
-          variety_id: item.varietyId,
-          quantity: item.quantity,
-          conditioning: item.conditioning,
-        }))
-      );
-
-      if (insertItemsError) {
-        throw new Error(`Unable to save order items: ${insertItemsError.message}`);
-      }
-
-      return new Response(
-        JSON.stringify(
-          mapOrderRowToOrder(
-            {
-              ...updatedOrder,
-              production_date: safeProductionDate,
-              production_approved: safeProductionApproved,
-            },
-            { [orderId]: items }
-          )
-        ),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
     }
 
     throw new Error(`Unsupported action: ${action}`);
