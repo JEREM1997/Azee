@@ -23,6 +23,10 @@ export interface CreateOrderPayload {
   items: OrderLineItem[];
 }
 
+export interface UpdateOrderPayload extends CreateOrderPayload {
+  orderId: string;
+}
+
 export interface FetchOrdersOptions {
   role?: UserRole;
   storeIds?: string[];
@@ -103,6 +107,15 @@ export const updateOrderProduction = async (
     orderId,
     productionDate,
     productionApproved,
+  });
+  emitOrdersChanged();
+  return order;
+};
+
+export const updateOrder = async (payload: UpdateOrderPayload): Promise<Order> => {
+  const order = await invokeManageOrders<Order>({
+    action: 'update',
+    ...payload,
   });
   emitOrdersChanged();
   return order;
