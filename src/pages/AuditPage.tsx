@@ -223,7 +223,7 @@ const AuditPage: React.FC = () => {
         )}
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+           <table className="responsive-table min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Date</th>
@@ -245,26 +245,26 @@ const AuditPage: React.FC = () => {
 
               {logs.map((log) => (
                 <tr key={log.id}>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
+                  <td data-label="Date" className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
                     {formatDateTime(log.created_at)}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-700">
+                  <td data-label="Utilisateur" className="px-4 py-3 text-sm text-gray-700">
                     <div className="font-medium text-gray-900">{log.actor_email || 'Inconnu'}</div>
                     <div className="text-xs text-gray-500">{log.actor_user_id || ''}</div>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
+                  <td data-label="Role" className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
                     {log.actor_role || '-'}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
+                  <td data-label="Action" className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
                     {formatAction(log.action)}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-700">
+                  <td data-label="Cible" className="px-4 py-3 text-sm text-gray-700">
                     <div>{log.entity_type}</div>
                     <div className="text-xs text-gray-500">
                       {log.plan_id || log.store_production_id || log.entity_id || '-'}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-700">
+                  <td data-label="Details" className="px-4 py-3 text-sm text-gray-700">
                     <div className="max-w-xl whitespace-normal break-words text-sm text-gray-600">
                       {formatDetails(log)}
                     </div>
