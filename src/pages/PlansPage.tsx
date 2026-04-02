@@ -796,7 +796,7 @@ const PlansPage: React.FC = () => {
               <div className="space-y-6">
                 {selectedPlan.stores?.map((store) => (
                   <div key={store.store_id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-4">
+                    <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <h4 className="text-lg font-medium text-gray-900">{store.store_name}</h4>
                         {/* Show delivery date only if manually set */}
@@ -816,7 +816,7 @@ const PlansPage: React.FC = () => {
                       <div className="mb-6">
                         <h5 className="text-lg font-medium text-gray-700 mb-3">Variétés</h5>
                         <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-gray-200">
+                           <table className="responsive-table min-w-full divide-y divide-gray-200">
                             <thead>
                               <tr>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variété</th>
@@ -830,13 +830,13 @@ const PlansPage: React.FC = () => {
                                 const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
                                 return (
                                   <tr key={index}>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    <td data-label="Variété" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                                       {item.variety_name}
                                     </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                    <td data-label="Forme" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                                       {form ? form.name : 'Non définie'}
                                     </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                                    <td data-label="Quantité" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                                       {item.quantity}
                                     </td>
                                   </tr>
@@ -853,7 +853,7 @@ const PlansPage: React.FC = () => {
                       <div>
                         <h5 className="text-lg font-medium text-gray-700 mb-3">Boîtes Disponibles</h5>
                         <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-gray-200">
+                          <table className="responsive-table min-w-full divide-y divide-gray-200">
                             <thead>
                               <tr>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîte</th>
@@ -884,13 +884,13 @@ const PlansPage: React.FC = () => {
                                 
                                 return (
                                   <tr key={index}>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    <td data-label="Boîte" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                                       {boxProd.box_name}
                                     </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                                    <td data-label="Taille" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                                       {box ? `${box.size} doughnuts` : 'N/A'}
                                     </td>
-                                    <td className="px-4 py-3 text-sm text-gray-500">
+                                    <td data-label="Variétés Configurées" className="px-4 py-3 text-sm text-gray-500">
                                       {box?.varieties && box.varieties.length > 0 ? (
                                         <div className="space-y-1">
                                           {box.varieties.map((boxVariety, vIndex) => {
@@ -906,7 +906,7 @@ const PlansPage: React.FC = () => {
                                         <span className="text-xs text-gray-400 italic">Aucune variété configurée</span>
                                       )}
                                     </td>
-                                    <td className="px-4 py-3 text-sm text-gray-500">
+                                    <td data-label="Formes de Doughnuts" className="px-4 py-3 text-sm text-gray-500">
                                       {boxForms.length > 0 ? (
                                         <div className="space-y-1">
                                           {boxForms.map((formId, fIndex) => {
@@ -922,10 +922,10 @@ const PlansPage: React.FC = () => {
                                         <span className="text-xs text-gray-400 italic">Aucune forme définie</span>
                                       )}
                                     </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                                    <td data-label="Quantité de Boîtes" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                                       {boxProd.quantity}
                                     </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                                    <td data-label="Quantité Totale" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                                       {totalDoughnuts} doughnuts
                                     </td>
                                   </tr>
