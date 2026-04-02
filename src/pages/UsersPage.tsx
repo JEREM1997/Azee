@@ -676,7 +676,7 @@ const UsersPage: React.FC = () => {
 
       <div className="bg-white shadow rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="responsive-table min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
@@ -691,25 +691,25 @@ const UsersPage: React.FC = () => {
                 const userStores = stores.filter(s => user.storeIds?.includes(s.id));
                 return (
                   <tr key={user.id}>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td data-label="Nom" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                       {user.fullName}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                    <td data-label="Email" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                       {user.email}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 capitalize">
+                    <td data-label="Rôle" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 capitalize">
                       {user.role === 'admin' ? 'Administrateur' :
                        user.role === 'production' ? 'Production' :
                        'Magasin'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                    <td data-label="Magasins" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                       {user.role === 'store' ? (
                         userStores.length > 0 ? 
                           userStores.map(s => s.name).join(', ') : 
                           'Aucun magasin assigné'
                       ) : '-'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+                    <td data-label="Actions" className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
                       <button
                         onClick={() => handleChangePassword(user.id)}
                         className="text-blue-600 hover:text-blue-900 mr-3"
