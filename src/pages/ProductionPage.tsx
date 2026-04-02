@@ -974,7 +974,7 @@ const ProductionPage: React.FC = () => {
               <div className="mb-8">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Variétés</h3>
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="responsive-table min-w-full divide-y divide-gray-200">
                   <thead>
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variété</th>
@@ -993,13 +993,13 @@ const ProductionPage: React.FC = () => {
                           const form = variety.formId ? forms.find(f => f.id === variety.formId) : null;
                           return (
                         <tr key={variety.id}>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                         <td data-label="Variété" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> 
                             {variety.name}
                           </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                           <td data-label="Forme" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">   
                                 {form ? form.name : 'Non définie'}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                          <td data-label="Quantité" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                             <div className="flex items-center justify-center">
                                   {canEdit ? (
                                     <>
@@ -1067,7 +1067,7 @@ const ProductionPage: React.FC = () => {
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Boîtes Disponibles</h3>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
+                 <table className="responsive-table min-w-full divide-y divide-gray-200"> 
                     <thead>
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boîte</th>
@@ -1089,13 +1089,13 @@ const ProductionPage: React.FC = () => {
                           
                           return (
                             <tr key={box.id}>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                             <td data-label="Boîte" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> 
                                 {box.name}
                               </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                              <td data-label="Taille" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                                 {box.size} doughnuts
                               </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                              <td data-label="Quantité de Boîtes" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                                 <div className="flex items-center justify-center">
                                   {canEdit ? (
                                     <>
@@ -1151,7 +1151,7 @@ const ProductionPage: React.FC = () => {
                                   )}
                                 </div>
                               </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                              <td data-label="Quantité Totale" className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                                 {totalDoughnuts} doughnuts
                               </td>
                             </tr>
@@ -1243,9 +1243,9 @@ const ProductionPage: React.FC = () => {
                 {aiForecasts.map((forecast) => (
                   <div key={forecast.storeId} className="mb-6 border border-gray-200 rounded-lg p-4">
                     {/* Store Header */}
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                       <h4 className="font-semibold text-gray-900 text-lg">{forecast.storeName}</h4>
-                      <div className="flex space-x-4 text-sm">
+                      <div className="flex flex-wrap gap-2 text-sm">
                         <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded">
                           Ventes prédites: {forecast.totalPredictedSales}
                         </span>
@@ -1267,7 +1267,7 @@ const ProductionPage: React.FC = () => {
                       <div className="mb-4">
                         <h5 className="font-medium text-gray-800 mb-2">Variétés Individuelles</h5>
                         <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-gray-200">
+                          <table className="responsive-table min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                               <tr>
                                 <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Variété</th>
@@ -1280,19 +1280,19 @@ const ProductionPage: React.FC = () => {
                             <tbody className="bg-white divide-y divide-gray-200">
                               {forecast.predictions.map((prediction) => (
                                 <tr key={prediction.varietyId}>
-                                  <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  <td data-label="Variété" className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
                                     {prediction.varietyName}
                                   </td>
-                                  <td className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">
+                                   <td data-label="Ventes Prédites" className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">
                                     {prediction.predictedSales}
                                   </td>
-                                  <td className="px-3 py-2 whitespace-nowrap text-sm text-center font-medium text-green-600">
+                                  <td data-label="Recommandation" className="px-3 py-2 whitespace-nowrap text-sm text-center font-medium text-green-600">
                                     {prediction.recommendedProduction}
                                   </td>
-                                  <td className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">
+                                  <td data-label="Sécurité" className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">
                                     {(prediction.confidence * 100).toFixed(0)}%
                                   </td>
-                                  <td className="px-3 py-2 text-xs text-gray-600 max-w-xs">
+                                  <td data-label="Raisonnement" className="px-3 py-2 text-xs text-gray-600 max-w-xs">
                                     {prediction.reasoning}
                                   </td>
                                 </tr>
@@ -1308,7 +1308,7 @@ const ProductionPage: React.FC = () => {
                       <div>
                         <h5 className="font-medium text-gray-800 mb-2">Boîtes</h5>
                         <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-gray-200">
+                          <table className="responsive-table min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                               <tr>
                                 <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Boîte</th>
@@ -1321,19 +1321,19 @@ const ProductionPage: React.FC = () => {
                             <tbody className="bg-white divide-y divide-gray-200">
                               {forecast.boxPredictions.map((boxPrediction) => (
                                 <tr key={boxPrediction.boxId}>
-                                  <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  <td data-label="Boîte" className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
                                     {boxPrediction.boxName}
                                   </td>
-                                  <td className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">
+                                   <td data-label="Ventes Prédites" className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">
                                     {boxPrediction.predictedSales}
                                   </td>
-                                  <td className="px-3 py-2 whitespace-nowrap text-sm text-center font-medium text-green-600">
+                                   <td data-label="Recommandation" className="px-3 py-2 whitespace-nowrap text-sm text-center font-medium text-green-600">
                                     {boxPrediction.recommendedProduction}
                                   </td>
-                                  <td className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">
+                                  <td data-label="Sécurité" className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">
                                     {(boxPrediction.confidence * 100).toFixed(0)}%
                                   </td>
-                                  <td className="px-3 py-2 text-xs text-gray-600 max-w-xs">
+                                  <td data-label="Raisonnement" className="px-3 py-2 text-xs text-gray-600 max-w-xs">
                                     {boxPrediction.reasoning}
                                   </td>
                                 </tr>
