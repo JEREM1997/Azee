@@ -480,17 +480,17 @@ const PlansPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Plans de Production</h1>
             <p className="text-gray-600 mt-1">Historique des plans de production sauvegardés</p>
           </div>
-          <div className="flex space-x-2">
-            <div className="flex items-center space-x-2">
+          <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <select
                 value={filterMode}
                 onChange={e => setFilterMode(e.target.value as any)}
-                className="border border-gray-300 rounded-md px-2 py-2 text-sm"
+                className="w-full border border-gray-300 rounded-md px-2 py-2 text-sm sm:w-auto"
                 title="Filtrer par période"
               >
                 <option value="last7">7 derniers jours</option>
@@ -500,20 +500,20 @@ const PlansPage: React.FC = () => {
                 <option value="custom">Plage personnalisée…</option>
               </select>
               {filterMode === 'custom' && (
-                <div className="flex items-center space-x-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
                     type="date"
                     value={customStart}
                     onChange={e => setCustomStart(e.target.value)}
-                    className="border border-gray-300 rounded-md px-2 py-2 text-sm"
+                    className="w-full border border-gray-300 rounded-md px-2 py-2 text-sm sm:w-auto"
                     placeholder="Début"
                   />
-                  <span className="text-gray-500">→</span>
+                  <span className="hidden text-gray-500 sm:inline">→</span>
                   <input
                     type="date"
                     value={customEnd}
                     onChange={e => setCustomEnd(e.target.value)}
-                    className="border border-gray-300 rounded-md px-2 py-2 text-sm"
+                    className="w-full border border-gray-300 rounded-md px-2 py-2 text-sm sm:w-auto"
                     placeholder="Fin"
                   />
                 </div>
@@ -521,7 +521,7 @@ const PlansPage: React.FC = () => {
             </div>
             <button
               onClick={openCreateModal}
-              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50 sm:w-auto"
               disabled={creating}
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -530,7 +530,7 @@ const PlansPage: React.FC = () => {
             <button
               onClick={refreshPlans}
               disabled={loading || refreshing}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50 sm:w-auto"
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${loading || refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? 'Actualisation...' : 'Actualiser'}
@@ -570,7 +570,7 @@ const PlansPage: React.FC = () => {
                     ? 'bg-green-50 border-l-4 border-green-400 shadow-md' 
                     : ''
                 }`}>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
                         <Calendar className={`h-6 w-6 ${
@@ -602,11 +602,11 @@ const PlansPage: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center">
-                      <div className="flex space-x-2">
+                    <div className="flex w-full items-center sm:w-auto">
+                      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:space-x-2">
                         <button
                           onClick={() => handleViewPlan(plan)}
-                          className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
+                          className="inline-flex w-full items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green sm:w-auto"
                         >
                           <Eye className="h-4 w-4 mr-2" />
                           Voir détails
@@ -615,7 +615,7 @@ const PlansPage: React.FC = () => {
                           <>
                             <button
                               onClick={() => handleEditPlan(plan)}
-                              className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
+                              className="inline-flex w-full items-center justify-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green sm:w-auto"
                             >
                               <Edit className="h-4 w-4 mr-2" />
                               Modifier
@@ -623,7 +623,7 @@ const PlansPage: React.FC = () => {
                             <button
                               onClick={() => handleDeletePlan(plan)}
                               disabled={!plan.id || deleting === plan.id}
-                              className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="inline-flex w-full items-center justify-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
                               title={plan.id ? 'Supprimer ce plan de production' : 'Enregistrez ce plan avant suppression'}
                             >
                               {deleting === plan.id ? (
