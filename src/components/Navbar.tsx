@@ -156,7 +156,7 @@ const Navbar: React.FC = () => {
           <div className="flex h-16 items-center gap-4">
             <div className="flex flex-shrink-0 items-center">
               <img
-                className="h-18 w-auto sm:h-20"
+               className="h-12 w-auto sm:h-16 lg:h-20" 
                 src={krispyKremeLogo}
                 alt="Krispy Kreme Operations"
               />
