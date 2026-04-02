@@ -691,7 +691,7 @@ const ProductionPage: React.FC = () => {
               )}
             </div>
 
-            <div className="mt-4 md:mt-0 flex items-center space-x-4">
+            <div className="mt-4 md:mt-0 flex w-full flex-col gap-4 md:w-auto md:flex-row md:items-end">
               <div className="w-full md:w-auto">
                 <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
                   Date de Production
@@ -718,11 +718,11 @@ const ProductionPage: React.FC = () => {
               </div>
           
           {canEdit && (
-          <div className="flex space-x-4 items-end">
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:gap-4 md:w-auto">
             <button
               onClick={generateAIForecast}
               disabled={aiLoading || saving}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex w-full items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
               title="Générer des prévisions IA basées sur l'historique des ventes"
             >
               {aiLoading ? (
@@ -740,7 +740,7 @@ const ProductionPage: React.FC = () => {
             <button
               onClick={resetAllQuantities}
               disabled={saving}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50 sm:w-auto"
               title="Remettre toutes les quantités à zéro"
             >
               <Minus className="h-4 w-4 mr-2" />
@@ -749,7 +749,7 @@ const ProductionPage: React.FC = () => {
             <button
               onClick={handleSavePlan}
               disabled={!isPlanValid || !allDeliveryDatesSet || saving}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50 sm:w-auto"
               title={!allDeliveryDatesSet ? `Dates de livraison manquantes pour: ${storesNeedingDates.map(s => s.name).join(', ')}` : ''}
             >
               {saving ? (
