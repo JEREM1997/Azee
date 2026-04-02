@@ -2,7 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { createOrder, deleteOrder, fetchOrders, updateOrderProduction } from '../services/ordersService';
+import {
+  createOrder,
+  deleteOrder,
+  fetchOrders,
+  updateOrder,
+  updateOrderProduction,
+} from '../services/ordersService';
 import { DonutVariety, Order, OrderLineItem, OrderPaymentStatus, OrderType, Store } from '../types';
 
 interface OrderFormState {
@@ -67,6 +73,23 @@ const buildInitialForm = (storeId: string, catalogue: DonutVariety[]): OrderForm
   };
 };
 
+const ORDERS_DRAFT_STORAGE_KEY = 'orders-form-draft-v1';
+
+const sanitizeItems = (items: OrderLineItem[], catalogue: DonutVariety[]): OrderLineItem[] => {
+  if (!catalogue.length) return [];
+
+  const defaultVarietyId = catalogue[0].id;
+  const allowedVarietyIds = new Set(catalogue.map((entry) => entry.id));
+
+  return items
+    .filter((item) => Number(item.quantity) > 0)
+    .map((item) => ({
+      varietyId: allowedVarietyIds.has(item.varietyId) ? item.varietyId : defaultVarietyId,
+      quantity: Number(item.quantity) > 0 ? Number(item.quantity) : 1,
+      conditioning: item.conditioning || conditioningOptions[0],
+    }));
+};
+
 const OrdersPage: React.FC = () => {
   const { user, isAdmin, isProduction } = useAuth();
   const { stores, varieties, loading: adminLoading, error: adminError, refresh } = useAdmin();
@@ -79,6 +102,7 @@ const OrdersPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [successMessage, setSuccessMessage] = useState('');
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
 
   const isStoreUser = user?.role === 'store';
   const canManageOrders = isAdmin || isProduction;
@@ -114,8 +138,66 @@ const OrdersPage: React.FC = () => {
       return;
     }
 
-    setForm(buildInitialForm(preferredStoreId, catalogue));
+    const initialForm = buildInitialForm(preferredStoreId, catalogue);
+    const storedDraft = window.sessionStorage.getItem(ORDERS_DRAFT_STORAGE_KEY);
+
+    if (!storedDraft) {
+      setForm(initialForm);
+      return;
+    }
+
+    try {
+      const parsedDraft = JSON.parse(storedDraft) as Partial<OrderFormState> & {
+        editingOrderId?: string | null;
+      };
+      const allowedStoreIds = new Set(storeOptions.map((store) => store.id));
+      const safeStoreId =
+        typeof parsedDraft.storeId === 'string' && allowedStoreIds.has(parsedDraft.storeId)
+          ? parsedDraft.storeId
+          : preferredStoreId;
+      const safeOrderType = parsedDraft.orderType === 'b2b' ? 'b2b' : 'retail';
+      const safePaymentStatus =
+        parsedDraft.paymentStatus === 'deja_paye' ||
+        parsedDraft.paymentStatus === 'a_la_livraison'
+          ? parsedDraft.paymentStatus
+          : 'a_facturer';
+      const safeItems = sanitizeItems(
+        Array.isArray(parsedDraft.items) ? parsedDraft.items : [],
+        catalogue
+      );
+
+      setForm({
+        ...initialForm,
+        customerName: parsedDraft.customerName || '',
+        customerPhone: parsedDraft.customerPhone || '',
+        companyName: parsedDraft.companyName || '',
+        deliveryAddress: parsedDraft.deliveryAddress || '',
+        billingAddress: parsedDraft.billingAddress || '',
+        deliveryDate: parsedDraft.deliveryDate || initialForm.deliveryDate,
+        storeId: safeStoreId,
+        orderType: safeOrderType,
+        paymentStatus: safePaymentStatus,
+        conditioning: parsedDraft.conditioning || initialForm.conditioning,
+        handledBy: parsedDraft.handledBy || '',
+        deliveredBy: parsedDraft.deliveredBy || '',
+        comments: parsedDraft.comments || '',
+        items: safeItems.length ? safeItems : initialForm.items,
+      });
+      setEditingOrderId(parsedDraft.editingOrderId || null);
+    } catch (error) {
+      console.warn('Impossible de restaurer le brouillon de commande.', error);
+      setForm(initialForm);
+    }
   }, [adminLoading, catalogue, preferredStoreId, storeOptions]);
+
+  useEffect(() => {
+    if (!form) return;
+
+    window.sessionStorage.setItem(
+      ORDERS_DRAFT_STORAGE_KEY,
+      JSON.stringify({ ...form, editingOrderId })
+    );
+  }, [editingOrderId, form]);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -196,6 +278,30 @@ const OrdersPage: React.FC = () => {
     return errors;
   };
 
+  const buildFormFromOrder = (order: Order): OrderFormState => ({
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    companyName: order.companyName || '',
+    deliveryAddress: order.deliveryAddress || '',
+    billingAddress: order.billingAddress || '',
+    deliveryDate: order.deliveryDate,
+    storeId: order.storeId,
+    orderType: order.orderType,
+    paymentStatus: order.paymentStatus,
+    conditioning: order.conditioning || conditioningOptions[1],
+    handledBy: order.handledBy || '',
+    deliveredBy: order.deliveredBy || '',
+    comments: order.comments || '',
+    items: sanitizeItems(order.items, catalogue),
+  });
+
+  const resetForm = (storeId: string) => {
+    setForm(buildInitialForm(storeId, catalogue));
+    setEditingOrderId(null);
+    setFormErrors([]);
+    window.sessionStorage.removeItem(ORDERS_DRAFT_STORAGE_KEY);
+  };
+  
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!form || submitting) return;
@@ -211,7 +317,7 @@ const OrdersPage: React.FC = () => {
     try {
       setSubmitting(true);
 
-      const savedOrder = await createOrder({
+    const payload = {  
         storeId: form.storeId,
         storeName: store?.name,
         customerName: form.customerName,
@@ -228,14 +334,26 @@ const OrdersPage: React.FC = () => {
         conditioning: form.conditioning,
         comments: form.comments || undefined,
         items: form.items,
-      });
+      };
 
-      setOrders((prev) => [savedOrder, ...prev]);
-      setForm(buildInitialForm(form.storeId, catalogue));
-      setFormErrors([]);
-      setSuccessMessage(
-        'Commande enregistrée. Un admin doit encore fixer puis valider la date de production.'
-      );
+    if (editingOrderId) {
+        const updatedOrder = await updateOrder({
+          orderId: editingOrderId,
+          ...payload,
+          productionApproved: false,
+        });
+
+        setOrders((prev) => prev.map((order) => (order.id === editingOrderId ? updatedOrder : order)));
+        resetForm(updatedOrder.storeId);
+        setSuccessMessage('Commande modifiée avec succès.');
+      } else {
+        const savedOrder = await createOrder(payload);
+        setOrders((prev) => [savedOrder, ...prev]);
+        resetForm(savedOrder.storeId);
+        setSuccessMessage(
+          'Commande enregistrée. Un admin doit encore fixer puis valider la date de production.'
+        );
+      }  
     } catch (error) {
       console.error('Error while creating order:', error);
       setFormErrors([
@@ -260,6 +378,34 @@ const OrdersPage: React.FC = () => {
       !order.productionApproved &&
       !!user?.storeIds?.includes(order.storeId));
 
+  const canEditOrder = (order: Order) =>
+    canManageOrders ||
+    (!!isStoreUser &&
+      !order.productionApproved &&
+      !!user?.storeIds?.includes(order.storeId));
+
+  const handleDuplicateOrder = (order: Order) => {
+    setForm(buildFormFromOrder(order));
+    setEditingOrderId(null);
+    setFormErrors([]);
+    setSuccessMessage('Commande dupliquée dans le formulaire. Vous pouvez ajuster puis enregistrer.');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleEditOrder = (order: Order) => {
+    setForm(buildFormFromOrder(order));
+    setEditingOrderId(order.id);
+    setFormErrors([]);
+    setSuccessMessage('Mode modification activé.');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdition = () => {
+    if (!form) return;
+    resetForm(form.storeId);
+    setSuccessMessage('Modification annulée.');
+  };
+  
   const saveAdminDate = async (orderId: string) => {
     const order = orders.find((item) => item.id === orderId);
 
@@ -401,6 +547,11 @@ const OrdersPage: React.FC = () => {
 
         {isFormReady && form && (
           <form onSubmit={handleSubmit} className="space-y-6">
+            {editingOrderId && (
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+                Modification en cours. Les changements seront appliqués à la commande existante.
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div>
@@ -676,12 +827,25 @@ const OrdersPage: React.FC = () => {
             )}
 
             <div className="flex justify-end">
+              {editingOrderId && (
+                <button
+                  type="button"
+                  onClick={handleCancelEdition}
+                  className="mr-3 px-6 py-3 text-sm font-semibold rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
+                  Annuler la modification
+                </button>
+              )}
               <button
                 type="submit"
                 disabled={submitting}
                 className="px-6 py-3 text-sm font-semibold rounded-md text-white bg-krispy-green hover:bg-krispy-green-dark disabled:opacity-60"
               >
-                {submitting ? 'Enregistrement...' : 'Enregistrer la commande'}
+                {submitting
+                  ? 'Enregistrement...'
+                  : editingOrderId
+                    ? 'Enregistrer les modifications'
+                    : 'Enregistrer la commande'}
               </button>
             </div>
           </form>
@@ -864,6 +1028,24 @@ const OrdersPage: React.FC = () => {
                               {isSavingThisOrder
                                 ? 'Validation...'
                                 : 'Valider et ajouter au plan'}
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateOrder(order)}
+                            className="inline-flex items-center px-3 py-2 text-xs font-medium rounded-md border border-blue-200 text-blue-700 hover:bg-blue-50"
+                          >
+                            Dupliquer
+                          </button>
+
+                          {canEditOrder(order) && (
+                            <button
+                              type="button"
+                              onClick={() => handleEditOrder(order)}
+                              className="inline-flex items-center px-3 py-2 text-xs font-medium rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                            >
+                              Modifier
                             </button>
                           )}
 
