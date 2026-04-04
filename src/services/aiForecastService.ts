@@ -236,7 +236,7 @@ export class AIForecastService {
         // Try to get historical data if available
         if (storeHistoricalData.length > 0) {
           const dayData = storeHistoricalData[0];
-          const bItem = dayData.boxes.find((b: any) => b.boxName === box.name);
+          const bItem = dayData.boxes.find((b: any) => b.boxId === boxId || b.boxName === box.name);
           
           if (bItem && bItem.received != null && bItem.waste != null) {
             hasBoxHistoricalData = true;
@@ -543,7 +543,7 @@ export class AIForecastService {
       const box = boxes.find(b => b.id === boxId && b.isActive);
       if (!box) continue;
 
-      const pattern = this.analyzeBoxPattern(historicalData, box.name, targetDayOfWeek);
+      const pattern = this.analyzeBoxPattern(historicalData, box.name, targetDayOfWeek, boxId);
       
       if (pattern.dataPoints === 0) {
         // Skip boxes without weekday-matched history
@@ -619,6 +619,7 @@ export class AIForecastService {
         sales: number;
       }>;
       boxes: Array<{
+        boxId: string;
         boxName: string;
         planned: number;
         received: number;
@@ -644,6 +645,7 @@ export class AIForecastService {
           sales: number;
         }>,
         boxes: [] as Array<{
+          boxId: string;
           boxName: string;
           planned: number;
           received: number;
@@ -707,6 +709,7 @@ export class AIForecastService {
           const sales = Math.max(0, received - waste);
 
           dayData.boxes.push({
+            boxId: boxProd.box_id,
             boxName: boxProd.box_name,
             planned: boxProd.quantity,
             received: received,
@@ -799,7 +802,7 @@ export class AIForecastService {
   /**
    * Analyze historical pattern for boxes
    */
-  private analyzeBoxPattern(historicalData: any[], boxName: string, targetSalesDayOfWeek: number) {
+  private analyzeBoxPattern(historicalData: any[], boxName: string, targetSalesDayOfWeek: number, boxId?: string) {
     const boxData: any[] = [];
 
     for (const day of historicalData) {
@@ -808,7 +811,7 @@ export class AIForecastService {
       
       // Only include data if this historical production was sold on the same day of week as our target
       if (historicalSalesDay === targetSalesDayOfWeek) {
-        const boxItem = day.boxes.find((b: any) => b.boxName === boxName);
+        const boxItem = day.boxes.find((b: any) => (boxId && b.boxId === boxId) || b.boxName === boxName);
         if (boxItem && boxItem.sales >= 0) {
           boxData.push({
             date: day.date,
