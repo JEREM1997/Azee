@@ -54,7 +54,7 @@ async function fetchApprovedOrdersForRange(
 ) {
   const { data: ordersData, error: ordersError } = await supabaseClient
     .from('orders')
-    .select('id, store_id, store_name, delivery_date, production_date, conditioning, customer_name, company_name, customer_phone, handled_by, delivered_by, comments')
+    .select('id, store_id, store_name, delivery_date, production_date, conditioning, customer_name, company_name, customer_phone, delivery_address, billing_address, order_type, payment_status, handled_by, delivered_by, comments')
     .eq('production_approved', true)
     .gte('production_date', startDate)
     .lte('production_date', endDate);
@@ -170,6 +170,10 @@ function createDeliveryEntryFromOrder(order: any) {
     customer_name: order.customer_name || null,
     company_name: order.company_name || null,
     customer_phone: order.customer_phone || null,
+    delivery_address: order.delivery_address || null,
+    billing_address: order.billing_address || null,
+    order_type: order.order_type || null,
+    payment_status: order.payment_status || null,
     handled_by: order.handled_by || null,
     delivered_by: order.delivered_by || null,
     comments: order.comments || null,
