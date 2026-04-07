@@ -46,6 +46,10 @@ interface DeliveryStoreProduction {
   customer_name?: string | null;
   company_name?: string | null;
   customer_phone?: string | null;
+  delivery_address?: string | null;
+  billing_address?: string | null;
+  order_type?: string | null;
+  payment_status?: string | null;
   handledBy?: string | null;
   deliveredBy?: string | null;
   comments?: string | null;
@@ -154,6 +158,19 @@ const DeliveryPage: React.FC = () => {
 
   const getBoxDisplayName = (box: Partial<DeliveryBoxProduction> | null | undefined) =>
     cleanText(box?.box_name, 'Bo\u00eete inconnue');
+
+  const getOrderTypeLabel = (orderType?: string | null) => {
+    if (orderType === 'b2b') return 'B2B';
+    if (orderType === 'retail') return 'Retail';
+    return cleanText(orderType);
+  };
+
+  const getPaymentStatusLabel = (paymentStatus?: string | null) => {
+    if (paymentStatus === 'deja_paye') return 'Déjà payé';
+    if (paymentStatus === 'a_facturer') return 'À facturer';
+    if (paymentStatus === 'a_la_livraison') return 'À la livraison';
+    return cleanText(paymentStatus);
+  };
 
   const getFormDisplayName = (formId: string, fallback: string) =>
     safeForms.find((form) => form.id === formId)?.name || fallback;
@@ -333,6 +350,10 @@ const DeliveryPage: React.FC = () => {
               customer_name: store.customer_name || null,
               company_name: store.company_name || null,
               customer_phone: store.customer_phone || null,
+              delivery_address: store.delivery_address || null,
+              billing_address: store.billing_address || null,
+              order_type: store.order_type || null,
+              payment_status: store.payment_status || null,
               handledBy: store.handled_by || store.handledBy || null,
               deliveredBy: store.delivered_by || store.deliveredBy || null,
               comments: store.comments || null,
@@ -483,6 +504,18 @@ const DeliveryPage: React.FC = () => {
     }
     if (storeDetails.customer_phone) {
       headers.push(['Télephone', storeDetails.customer_phone]);
+    }
+    if (storeDetails.delivery_address) {
+      headers.push(['Adresse de livraison', storeDetails.delivery_address]);
+    }
+    if (storeDetails.billing_address) {
+      headers.push(['Adresse de facturation', storeDetails.billing_address]);
+    }
+    if (storeDetails.order_type) {
+      headers.push(['Type de commande', getOrderTypeLabel(storeDetails.order_type)]);
+    }
+    if (storeDetails.payment_status) {
+      headers.push(['Paiement', getPaymentStatusLabel(storeDetails.payment_status)]);
     }
     if (storeDetails.handledBy) {
       headers.push(['Traitée par', storeDetails.handledBy]);
@@ -959,6 +992,31 @@ const DeliveryPage: React.FC = () => {
                     {storeDetails.handledBy && (
                       <p className="text-sm text-gray-600">
                       <span className="font-medium">Traitée par:</span> {storeDetails.handledBy}  
+                      </p>
+                    )}
+                    {storeDetails.customer_phone && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Téléphone:</span> {storeDetails.customer_phone}
+                      </p>
+                    )}
+                    {storeDetails.delivery_address && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Adresse de livraison:</span> {storeDetails.delivery_address}
+                      </p>
+                    )}
+                    {storeDetails.billing_address && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Adresse de facturation:</span> {storeDetails.billing_address}
+                      </p>
+                    )}
+                    {storeDetails.order_type && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Type de commande:</span> {getOrderTypeLabel(storeDetails.order_type)}
+                      </p>
+                    )}
+                    {storeDetails.payment_status && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Paiement:</span> {getPaymentStatusLabel(storeDetails.payment_status)}
                       </p>
                     )}
                     {storeDetails.deliveredBy && (
