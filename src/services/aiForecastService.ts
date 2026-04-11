@@ -38,6 +38,19 @@ export interface HistoricalPattern {
   seasonalFactor: number;
 }
 
+export type ForecastMode = 'simple' | 'advanced';
+
+export interface StoreExternalFeatures {
+  rainMm?: number;
+  isHoliday?: boolean;
+  promoIntensity?: number; // 0..1
+}
+
+export interface ForecastOptions {
+  mode?: ForecastMode;
+  featuresByStoreId?: Record<string, StoreExternalFeatures | undefined>;
+}
+
 export class AIForecastService {
   // Minimum production safeguards
   private readonly MIN_VAR_PRODUCTION = 4; // At least 4 doughnuts per variety
@@ -70,6 +83,34 @@ export class AIForecastService {
    */
   private applyBoxMinimumRules(quantity: number): number {
     return Math.max(this.MIN_BOX_PRODUCTION, Math.round(quantity));
+  }
+
+  /**
+   * Build a multiplicative factor from weather/holiday/promo context.
+   * Kept intentionally bounded for safe rollout.
+   */
+  private getExternalFactor(features?: StoreExternalFeatures): number {
+    if (!features) return 1;
+
+    let factor = 1;
+    if ((features.rainMm ?? 0) >= 10) factor -= 0.05; // rain: slight downshift
+    if (features.isHoliday) factor += 0.08; // holiday uplift
+
+    const promoIntensity = Math.max(0, Math.min(1, features.promoIntensity ?? 0));
+    factor += promoIntensity * 0.12; // up to +12% for strong promo
+
+    return Math.max(0.85, Math.min(1.20, factor));
+  }
+
+  private appendExternalReasoning(baseReasoning: string, features?: StoreExternalFeatures): string {
+    if (!features) return baseReasoning;
+
+    const notes: string[] = [];
+    if ((features.rainMm ?? 0) >= 10) notes.push(`météo(pluie=${features.rainMm}mm)`);
+    if (features.isHoliday) notes.push('jour férié');
+    if ((features.promoIntensity ?? 0) > 0) notes.push(`promo(${Math.round((features.promoIntensity ?? 0) * 100)}%)`);
+
+    return notes.length > 0 ? `${baseReasoning} | Ajustements externes: ${notes.join(', ')}` : baseReasoning;
   }
   
   /**
@@ -115,7 +156,17 @@ export class AIForecastService {
   /**
    * Generate AI-powered production forecasts for a specific date
    */
-  async generateForecast(targetDate: string, stores: any[], varieties: any[], boxes: any[]): Promise<AIForecastResult[]> {
+   async generateForecast(
+    targetDate: string,
+    stores: any[],
+    varieties: any[],
+    boxes: any[],
+    options: ForecastOptions = {}
+  ): Promise<AIForecastResult[]> {
+    if (options.mode === 'advanced') {
+      return this.generateForecastAdvanced(targetDate, stores, varieties, boxes, options);
+    }
+
     // Simplified logic per request: only use last week's same weekday
     console.log('🤖 AI Forecast (simple): Starting last-week analysis for', targetDate);
 
@@ -140,7 +191,8 @@ export class AIForecastService {
 
     for (const store of stores.filter((s: any) => s.isActive !== false)) {
       const storeHistoricalData = this.extractStoreHistoricalData(weekdayFilteredPlans as any, store.id);
-
+      const externalFactor = this.getExternalFactor(options.featuresByStoreId?.[store.id]);
+      
       // Defensive defaults to prevent crashes if legacy data lacks availability arrays
       const storeVarieties = Array.isArray(store.availableVarieties) ? store.availableVarieties : [];
       const storeBoxes = Array.isArray(store.availableBoxes) ? store.availableBoxes : [];
@@ -192,7 +244,7 @@ export class AIForecastService {
           
           // Apply higher security multiplier for stockout scenarios (when waste = 0)
           const securityMultiplier = isStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
-          const recommended = this.applyVarietyPackingRules(baselineSales * securityMultiplier);
+          const recommended = this.applyVarietyPackingRules(baselineSales * securityMultiplier * externalFactor);
 
           reasoning = isStockout
             ? `Rupture détectée (reçu=${historicalReceived}, déchet=0, vendu=${lastWeekSales}) → +50% sécurité`
@@ -204,12 +256,12 @@ export class AIForecastService {
             predictedSales: Math.round(baselineSales),
             recommendedProduction: recommended,
             confidence: 0.30,
-            reasoning: reasoning
+            reasoning: this.appendExternalReasoning(reasoning, options.featuresByStoreId?.[store.id])
           });
         } else if (currentQuantity !== null && currentQuantity > 0) {
           // No historical data but current plan exists - use it as baseline with conservative approach
           baselineSales = Math.round(currentQuantity * 0.8); // Assume 80% sales rate
-          const recommended = this.applyVarietyPackingRules(currentQuantity * 1.10); // 10% increase
+          const recommended = this.applyVarietyPackingRules(currentQuantity * 1.10 * externalFactor); // 10% increase
           
           reasoning = `Pas de données historiques. Basé sur plan actuel (${currentQuantity}) → +10% sécurité`;
 
@@ -219,7 +271,7 @@ export class AIForecastService {
             predictedSales: baselineSales,
             recommendedProduction: recommended,
             confidence: 0.15, // Lower confidence without historical data
-            reasoning: reasoning
+            reasoning: this.appendExternalReasoning(reasoning, options.featuresByStoreId?.[store.id])
           });
         } else {
           // No historical data and no current plan - use minimum production as fallback
@@ -234,7 +286,7 @@ export class AIForecastService {
             predictedSales: baselineSales,
             recommendedProduction: recommended,
             confidence: 0.10, // Very low confidence
-            reasoning: reasoning
+            reasoning: this.appendExternalReasoning(reasoning, options.featuresByStoreId?.[store.id])
           });
         }
       }
@@ -277,7 +329,7 @@ export class AIForecastService {
           
           // Apply higher security multiplier for stockout scenarios (when waste = 0)
           const securityMultiplier = isBoxStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
-          const recommendedBoxes = this.applyBoxMinimumRules(baselineBoxSales * securityMultiplier);
+          const recommendedBoxes = this.applyBoxMinimumRules(baselineBoxSales * securityMultiplier * externalFactor);
 
           boxReasoning = isBoxStockout
             ? `Rupture détectée (reçu=${boxHistoricalReceived}, déchet=0, vendu=${lastWeekBoxSales}) → +50% sécurité`
@@ -289,12 +341,12 @@ export class AIForecastService {
             predictedSales: Math.round(baselineBoxSales),
             recommendedProduction: recommendedBoxes,
             confidence: 0.30,
-            reasoning: boxReasoning
+            reasoning: this.appendExternalReasoning(boxReasoning, options.featuresByStoreId?.[store.id])
           });
         } else if (currentBoxQuantity !== null && currentBoxQuantity > 0) {
           // No historical data but current plan exists - use it as baseline with conservative approach
           baselineBoxSales = Math.round(currentBoxQuantity * 0.8); // Assume 80% sales rate
-          const recommendedBoxes = this.applyBoxMinimumRules(currentBoxQuantity * 1.10); // 10% increase
+          const recommendedBoxes = this.applyBoxMinimumRules(currentBoxQuantity * 1.10 * externalFactor); // 10% increase
           
           boxReasoning = `Pas de données historiques. Basé sur plan actuel (${currentBoxQuantity}) → +10% sécurité`;
 
@@ -304,7 +356,7 @@ export class AIForecastService {
             predictedSales: baselineBoxSales,
             recommendedProduction: recommendedBoxes,
             confidence: 0.15, // Lower confidence without historical data
-            reasoning: boxReasoning
+            reasoning: this.appendExternalReasoning(boxReasoning, options.featuresByStoreId?.[store.id])
           });
         } else {
           // No historical data and no current plan - use minimum production as fallback
@@ -319,7 +371,7 @@ export class AIForecastService {
             predictedSales: baselineBoxSales,
             recommendedProduction: recommendedBoxes,
             confidence: 0.10, // Very low confidence
-            reasoning: boxReasoning
+            reasoning: this.appendExternalReasoning(boxReasoning, options.featuresByStoreId?.[store.id])
           });
         }
       }
@@ -361,6 +413,21 @@ export class AIForecastService {
     return results;
   }
 
+  /**
+   * Advanced mode entrypoint.
+   * For now, reuse simple logic with mode marker to keep behavior stable.
+   */
+  private async generateForecastAdvanced(
+    targetDate: string,
+    stores: any[],
+    varieties: any[],
+    boxes: any[],
+    options: ForecastOptions = {}
+  ): Promise<AIForecastResult[]> {
+    console.log('🤖 AI Forecast (advanced): using safe fallback to simple core');
+    return this.generateForecast(targetDate, stores, varieties, boxes, { ...options, mode: 'simple' });
+  }
+  
   /**
    * Convert the response from the `generate-production` Edge Function
    * to the local `AIForecastResult[]` structure so the rest of the UI
