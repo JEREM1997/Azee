@@ -303,8 +303,28 @@ export const apiService = {
         }>;
         storesCount: number;
       }>('forecast-backtest', { startDate, endDate });
+      },
+
+    async runForecastMaintenance(date?: string) {
+      return apiService.invoke<{
+        ok: boolean;
+        targetDate: string;
+        sync: unknown;
+        backtestSummary: {
+          range: { startDate: string; endDate: string };
+          global: {
+            wape: number;
+            bias: number;
+            wasteRate: number;
+            stockoutRate: number;
+            observedCount: number;
+          };
+          storesCount: number;
+        };
+      }>('run-forecast-maintenance', { date });
     }
   },
+
 
   /**
    * Delivery Management Functions
