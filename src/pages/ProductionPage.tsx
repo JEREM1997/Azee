@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAdmin } from '../context/AdminContext';
 import { useAuth } from '../context/AuthContext';
 import { aiForecastService, AIForecastResult } from '../services/aiForecastService';
+import { apiService } from '../services/apiService';
 import { productionService } from '../services/productionService';
 import { ProductionPlan, Store as StoreType, DonutVariety, BoxConfiguration } from '../types';
 
@@ -601,6 +602,19 @@ const ProductionPage: React.FC = () => {
       const activeStores = stores.filter((s: StoreType) => s.isActive);
       const activeVarieties = varieties.filter((v: DonutVariety) => v.isActive);
       const activeBoxes = boxes.filter((b: BoxConfiguration) => b.isActive);
+
+      const featuresResponse = await apiService.production.getStoreDailyFeatures(
+        date,
+        activeStores.map(store => store.id)
+      );
+      const featuresByStoreId = (featuresResponse.data || []).reduce((acc, row) => {
+        acc[row.store_id] = {
+          rainMm: row.rain_mm ?? undefined,
+          isHoliday: row.is_holiday ?? undefined,
+          promoIntensity: row.promo_intensity ?? undefined
+        };
+        return acc;
+      }, {} as Record<string, { rainMm?: number; isHoliday?: boolean; promoIntensity?: number }>);
       
       const forecasts = await aiForecastService.generateForecast(
         date,
