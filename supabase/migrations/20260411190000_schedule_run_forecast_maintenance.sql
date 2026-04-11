@@ -38,6 +38,6 @@ BEGIN
   PERFORM cron.schedule(
     'run-forecast-maintenance-daily',
     '30 4 * * *',
-    $$SELECT public.trigger_run_forecast_maintenance();$$
+    'SELECT public.trigger_run_forecast_maintenance();'
   );
 END $$;
