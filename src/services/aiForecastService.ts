@@ -64,6 +64,13 @@ export class AIForecastService {
     const withMinimum = Math.max(this.MIN_VAR_PRODUCTION, Math.round(quantity));
     return withMinimum % 2 === 0 ? withMinimum : withMinimum + 1;
   }
+
+  /**
+   * Business rule for boxes: keep at least 2 boxes.
+   */
+  private applyBoxMinimumRules(quantity: number): number {
+    return Math.max(this.MIN_BOX_PRODUCTION, Math.round(quantity));
+  }
   
   /**
    * Map production day to sales day
@@ -270,7 +277,7 @@ export class AIForecastService {
           
           // Apply higher security multiplier for stockout scenarios (when waste = 0)
           const securityMultiplier = isBoxStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
-          const recommendedBoxes = Math.max(this.MIN_BOX_PRODUCTION, Math.round(baselineBoxSales * securityMultiplier));
+          const recommendedBoxes = this.applyBoxMinimumRules(baselineBoxSales * securityMultiplier);
 
           boxReasoning = isBoxStockout
             ? `Rupture détectée (reçu=${boxHistoricalReceived}, déchet=0, vendu=${lastWeekBoxSales}) → +50% sécurité`
@@ -287,7 +294,7 @@ export class AIForecastService {
         } else if (currentBoxQuantity !== null && currentBoxQuantity > 0) {
           // No historical data but current plan exists - use it as baseline with conservative approach
           baselineBoxSales = Math.round(currentBoxQuantity * 0.8); // Assume 80% sales rate
-          const recommendedBoxes = Math.max(this.MIN_BOX_PRODUCTION, Math.round(currentBoxQuantity * 1.10)); // 10% increase
+          const recommendedBoxes = this.applyBoxMinimumRules(currentBoxQuantity * 1.10); // 10% increase
           
           boxReasoning = `Pas de données historiques. Basé sur plan actuel (${currentBoxQuantity}) → +10% sécurité`;
 
@@ -301,7 +308,7 @@ export class AIForecastService {
           });
         } else {
           // No historical data and no current plan - use minimum production as fallback
-          const recommendedBoxes = this.MIN_BOX_PRODUCTION;
+          const recommendedBoxes = this.applyBoxMinimumRules(this.MIN_BOX_PRODUCTION);
           baselineBoxSales = Math.round(recommendedBoxes * 0.7); // Assume 70% will be sold
           
           boxReasoning = `Pas de données disponibles → Production minimale (${recommendedBoxes})`;
@@ -407,7 +414,7 @@ export class AIForecastService {
           boxId: item.product,
           boxName: box?.name || 'Boîte inconnue',
           predictedSales: baseSales,
-          recommendedProduction: Math.max(item.quantity, this.MIN_BOX_PRODUCTION),
+          recommendedProduction: this.applyBoxMinimumRules(item.quantity),
           confidence: finalBuffer,
           reasoning: 'Prévision générée par le backend'
         });
@@ -598,7 +605,7 @@ export class AIForecastService {
       }
 
       // Enforce minimum threshold for boxes
-      const recommendedProduction = Math.max(recommendedProductionCalc, this.MIN_BOX_PRODUCTION);
+      const recommendedProduction = this.applyBoxMinimumRules(recommendedProductionCalc);
 
       predictions.push({
         boxId,
@@ -1112,7 +1119,7 @@ export class AIForecastService {
         boxId,
         boxName: box.name,
         predictedSales: Math.round(baseEstimate),
-        recommendedProduction: Math.round(baseEstimate * 1.3), // 30% safety stock
+        recommendedProduction: this.applyBoxMinimumRules(baseEstimate * 1.3), // 30% safety stock
         confidence: 0.20, // Low confidence
         reasoning: `Conservative box estimate - no historical data. Base: ${Math.round(baseEstimate)} + 30% safety stock. ${isWeekendProduction ? `Weekend production (${this.getDayName(targetDayOfWeek)}) pattern applied. ` : ''}Review and adjust as needed.`
       });
