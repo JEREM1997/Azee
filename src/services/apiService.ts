@@ -11,6 +11,14 @@ interface ValidationResponse {
   isValid: boolean;
 }
 
+export interface StoreDailyFeatureRow {
+  store_id: string;
+  date: string;
+  rain_mm: number | null;
+  is_holiday: boolean | null;
+  promo_intensity: number | null;
+}
+
 interface CreateUserData {
   email: string;
   password: string;
@@ -251,6 +259,28 @@ export const apiService = {
 
     async deleteProductionPlan(planId: string) {
       return apiService.invoke<void>('delete-production-plan', { planId });
+      },
+
+    async getStoreDailyFeatures(date: string, storeIds: string[]) {
+      if (!storeIds.length) {
+        return { data: [], error: null } as ApiResponse<StoreDailyFeatureRow[]>;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('store_daily_features')
+          .select('store_id, date, rain_mm, is_holiday, promo_intensity')
+          .eq('date', date)
+          .in('store_id', storeIds);
+
+        if (error) {
+          throw error;
+        }
+
+        return { data: (data || []) as StoreDailyFeatureRow[], error: null };
+      } catch (error) {
+        return { data: null, error: await toReadableApiError(error) };
+      }
     }
   },
 
