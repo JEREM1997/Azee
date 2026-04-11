@@ -57,6 +57,15 @@ export class AIForecastService {
   private readonly ZERO_SALES_UPPER_BOUND = 8; // when last observed sales were 0
 
   /**
+   * Business packing rule: doughnuts are filled 2-by-2.
+   * Keep a minimum of 4 and always return an even number.
+   */
+  private applyVarietyPackingRules(quantity: number): number {
+    const withMinimum = Math.max(this.MIN_VAR_PRODUCTION, Math.round(quantity));
+    return withMinimum % 2 === 0 ? withMinimum : withMinimum + 1;
+  }
+  
+  /**
    * Map production day to sales day
    * Friday production (5) → Saturday sales (6)
    * Other days: production day = sales day
@@ -176,7 +185,7 @@ export class AIForecastService {
           
           // Apply higher security multiplier for stockout scenarios (when waste = 0)
           const securityMultiplier = isStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
-          const recommended = Math.max(this.MIN_VAR_PRODUCTION, Math.round(baselineSales * securityMultiplier));
+          const recommended = this.applyVarietyPackingRules(baselineSales * securityMultiplier);
 
           reasoning = isStockout
             ? `Rupture détectée (reçu=${historicalReceived}, déchet=0, vendu=${lastWeekSales}) → +50% sécurité`
@@ -193,7 +202,7 @@ export class AIForecastService {
         } else if (currentQuantity !== null && currentQuantity > 0) {
           // No historical data but current plan exists - use it as baseline with conservative approach
           baselineSales = Math.round(currentQuantity * 0.8); // Assume 80% sales rate
-          const recommended = Math.max(this.MIN_VAR_PRODUCTION, Math.round(currentQuantity * 1.10)); // 10% increase
+          const recommended = this.applyVarietyPackingRules(currentQuantity * 1.10); // 10% increase
           
           reasoning = `Pas de données historiques. Basé sur plan actuel (${currentQuantity}) → +10% sécurité`;
 
@@ -207,7 +216,7 @@ export class AIForecastService {
           });
         } else {
           // No historical data and no current plan - use minimum production as fallback
-          const recommended = this.MIN_VAR_PRODUCTION;
+          const recommended = this.applyVarietyPackingRules(this.MIN_VAR_PRODUCTION);
           baselineSales = Math.round(recommended * 0.7); // Assume 70% will be sold
           
           reasoning = `Pas de données disponibles → Production minimale (${recommended})`;
@@ -386,7 +395,7 @@ export class AIForecastService {
           varietyId: item.product,
           varietyName: variety?.name || 'Inconnu',
           predictedSales: baseSales,
-          recommendedProduction: Math.max(item.quantity, this.MIN_VAR_PRODUCTION),
+          recommendedProduction: this.applyVarietyPackingRules(item.quantity),
           confidence: finalBuffer,
           reasoning: 'Prévision générée par le backend'
         });
@@ -507,7 +516,7 @@ export class AIForecastService {
         impliedWaste = (recommendedProductionRaw - basePrediction) / recommendedProductionRaw;
       }
 
-      const finalRecommended = Math.max(recommendedProductionRaw, this.MIN_VAR_PRODUCTION);
+      const finalRecommended = this.applyVarietyPackingRules(recommendedProductionRaw);
 
       predictions.push({
         varietyId,
@@ -1077,7 +1086,7 @@ export class AIForecastService {
         varietyId,
         varietyName: variety.name,
         predictedSales: Math.round(baseEstimate),
-        recommendedProduction: Math.round(baseEstimate * 1.25), // 25% safety stock
+        recommendedProduction: this.applyVarietyPackingRules(baseEstimate * 1.25), // 25% safety stock
         confidence: 0.15, // Low confidence
         reasoning: `Conservative estimate - no historical data. Base: ${Math.round(baseEstimate)} + 25% safety stock. ${isWeekendProduction ? `Weekend production (${this.getDayName(targetDayOfWeek)}) pattern applied. ` : ''}Adjust manually based on local knowledge.`
       });
