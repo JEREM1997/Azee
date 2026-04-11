@@ -322,10 +322,55 @@ export const apiService = {
           storesCount: number;
         };
       }>('run-forecast-maintenance', { date });
-    }
   },
 
+async getLatestForecastKpiSnapshot() {
+      try {
+        const { data, error } = await supabase
+          .from('forecast_kpi_snapshots')
+          .select('snapshot_date, range_start, range_end, wape, bias, waste_rate, stockout_rate, observed_count')
+          .order('snapshot_date', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
+        if (error) {
+          throw error;
+        }
+
+        return { data, error: null } as ApiResponse<{
+          snapshot_date: string;
+          range_start: string;
+          range_end: string;
+          wape: number | null;
+          bias: number | null;
+          waste_rate: number | null;
+          stockout_rate: number | null;
+          observed_count: number | null;
+        }>;
+      } catch (error) {
+        return { data: null, error: await toReadableApiError(error) };
+      }
+    },
+
+    async runForecastAlerts() {
+      return apiService.invoke<{
+        ok: boolean;
+        snapshot?: {
+          snapshot_date: string;
+          wape: number;
+          stockout_rate: number;
+          waste_rate: number;
+          bias: number;
+          observed_count: number;
+        };
+        thresholds?: { maxWape: number; maxStockout: number };
+        breaches?: string[];
+        webhookConfigured?: boolean;
+        webhookSent?: boolean;
+      }>('forecast-alerts');
+      }
+  },
+  
   /**
    * Delivery Management Functions
    */
