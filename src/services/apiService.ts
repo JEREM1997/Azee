@@ -281,6 +281,28 @@ export const apiService = {
       } catch (error) {
         return { data: null, error: await toReadableApiError(error) };
       }
+       },
+
+    async getForecastBacktest(startDate?: string, endDate?: string) {
+      return apiService.invoke<{
+        range: { startDate: string; endDate: string };
+        global: {
+          wape: number;
+          bias: number;
+          wasteRate: number;
+          stockoutRate: number;
+          observedCount: number;
+        };
+        stores: Array<{
+          storeId: string;
+          wape: number;
+          bias: number;
+          wasteRate: number;
+          stockoutRate: number;
+          observedCount: number;
+        }>;
+        storesCount: number;
+      }>('forecast-backtest', { startDate, endDate });
     }
   },
 
