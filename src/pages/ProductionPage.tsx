@@ -606,7 +606,10 @@ const ProductionPage: React.FC = () => {
         date,
         activeStores,
         activeVarieties,
-        activeBoxes
+        activeBoxes,
+        {
+          mode: (localStorage.getItem('forecast_mode') as 'simple' | 'advanced' | null) || 'simple'
+        }
       );
       
       setAiForecasts(forecasts);
