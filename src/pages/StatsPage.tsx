@@ -1,6 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { BarChart2, PieChart, TrendingUp, DollarSign, Store, Target, Package, Printer } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
+import { apiService } from '../services/apiService';
 import { productionService } from '../services/productionService';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -78,6 +79,16 @@ const StatsPage: React.FC = () => {
   const [selectedStores, setSelectedStores] = useState<string[]>([]); // Add store filter
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [kpiSnapshot, setKpiSnapshot] = useState<{
+    snapshot_date: string;
+    range_start: string;
+    range_end: string;
+    wape: number | null;
+    bias: number | null;
+    waste_rate: number | null;
+    stockout_rate: number | null;
+    observed_count: number | null;
+  } | null>(null);
 
   const getPlanEntries = (plan: any): any[] => {
     if (Array.isArray(plan?.delivery_entries) && plan.delivery_entries.length > 0) {
@@ -243,6 +254,15 @@ const StatsPage: React.FC = () => {
     selectedEndDate,
     selectedStores
   ]);
+  
+  useEffect(() => {
+    const loadKpiSnapshot = async () => {
+      const { data } = await apiService.production.getLatestForecastKpiSnapshot();
+      setKpiSnapshot(data || null);
+    };
+
+    loadKpiSnapshot();
+  }, []);
   
   const getFilteredData = (): ProductionData[] => {
     if (!productionData || productionData.length === 0) return [];
@@ -1581,6 +1601,23 @@ const StatsPage: React.FC = () => {
             <div className="ml-3">
               <p className="text-sm text-red-700">{error}</p>
             </div>
+          </div>
+        </div>
+      )}
+
+       {kpiSnapshot && (
+        <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-emerald-900">KPI Forecast (dernier snapshot)</h2>
+            <span className="text-xs text-emerald-700">
+              {kpiSnapshot.snapshot_date} • {kpiSnapshot.range_start} → {kpiSnapshot.range_end}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded bg-white p-3 text-sm"><span className="text-gray-500">WAPE</span><div className="font-semibold">{(kpiSnapshot.wape ?? 0).toFixed(2)}%</div></div>
+            <div className="rounded bg-white p-3 text-sm"><span className="text-gray-500">Biais</span><div className="font-semibold">{(kpiSnapshot.bias ?? 0).toFixed(2)}%</div></div>
+            <div className="rounded bg-white p-3 text-sm"><span className="text-gray-500">Déchet</span><div className="font-semibold">{(kpiSnapshot.waste_rate ?? 0).toFixed(2)}%</div></div>
+            <div className="rounded bg-white p-3 text-sm"><span className="text-gray-500">Rupture</span><div className="font-semibold">{(kpiSnapshot.stockout_rate ?? 0).toFixed(2)}%</div></div>
           </div>
         </div>
       )}
