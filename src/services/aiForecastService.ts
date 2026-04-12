@@ -167,24 +167,29 @@ export class AIForecastService {
       return this.generateForecastAdvanced(targetDate, stores, varieties, boxes, options);
     }
 
-    // Simplified logic per request: only use last week's same weekday
-    console.log('🤖 AI Forecast (simple): Starting last-week analysis for', targetDate);
+    // Simple mode now uses a rolling 5-week same-weekday window (not only last week)
+    console.log('🤖 AI Forecast (simple): Starting multi-week analysis for', targetDate);
 
     const targetDateObj = new Date(targetDate);
-    const lastWeekDateObj = new Date(targetDateObj);
-    lastWeekDateObj.setDate(targetDateObj.getDate() - 7);
-    const lastWeekDate = lastWeekDateObj.toISOString().slice(0, 10);
+    const targetProductionDay = targetDateObj.getDay();
+    const targetSalesDay = this.getCorrespondingSalesDay(targetProductionDay);
+    const horizonStartObj = new Date(targetDateObj);
+    horizonStartObj.setDate(targetDateObj.getDate() - 35); // ~5 weeks
+    const horizonStart = horizonStartObj.toISOString().slice(0, 10);
 
     // Check if there's an existing plan for the target date (to use as baseline)
     const currentPlan = await productionService.getProductionPlan(targetDate);
     console.log('📋 Current plan for target date:', currentPlan ? 'Found' : 'Not found');
 
-    // Fetch exactly the plan from last week's same weekday (for waste data)
-    const lastWeekPlan = await productionService.getProductionPlan(lastWeekDate);
-    console.log('📊 Last week plan for', lastWeekDate, ':', lastWeekPlan ? 'Found' : 'Not found');
-
-    // Build store data from that single plan (if available)
-    const weekdayFilteredPlans = lastWeekPlan ? [lastWeekPlan] : [];
+    // Fetch historical plans and keep only plans mapped to the same sales weekday
+    const historicalPlans = await productionService.getProductionPlans(horizonStart, targetDate);
+    const weekdayFilteredPlans = historicalPlans.filter((plan: any) => {
+      if (!plan?.date || plan.date >= targetDate) return false;
+      const planProductionDay = new Date(plan.date).getDay();
+      const planSalesDay = this.getCorrespondingSalesDay(planProductionDay);
+      return planSalesDay === targetSalesDay;
+    });
+    console.log(`📊 Historical plans used: ${weekdayFilteredPlans.length} (window starts ${horizonStart})`);
 
     const results: AIForecastResult[] = [];
     let storesWithData = 0;
@@ -209,25 +214,38 @@ export class AIForecastService {
         const variety = varieties.find(v => v.id === varietyId && v.isActive);
         if (!variety) continue;
 
-        let lastWeekSales = 0;
+        let avgSales = 0;
+        let recentSales = 0;
         let isStockout = false;
         let hasHistoricalData = false;
-        let historicalReceived = 0;
-        let historicalWaste = 0;
+        let recentReceived = 0;
 
-        // Try to get historical data if available
+        // Aggregate matching history across all retained weeks
         if (storeHistoricalData.length > 0) {
-          const dayData = storeHistoricalData[0];
-          const vItem = dayData.varieties.find((v: any) => v.varietyId === varietyId);
-          
-          if (vItem && vItem.received != null && vItem.waste != null) {
+          const varietyHistory = storeHistoricalData
+            .map((dayData: any) => {
+              const vItem = dayData.varieties.find((v: any) => v.varietyId === varietyId);
+              if (!vItem || vItem.received == null || vItem.waste == null) return null;
+              return {
+                date: dayData.date,
+                received: vItem.received,
+                waste: vItem.waste,
+                sales: Math.max(0, vItem.received - vItem.waste)
+              };
+            })
+            .filter(Boolean) as Array<{ date: string; received: number; waste: number; sales: number }>;
+
+          if (varietyHistory.length >= this.MIN_DATA_POINTS) {
             hasHistoricalData = true;
-            historicalReceived = vItem.received;
-            historicalWaste = vItem.waste;
-            // Calculate sales from last week: received - waste = sales
-            lastWeekSales = Math.max(0, vItem.received - vItem.waste);
-            // Handle stockout detection: if waste = 0, it indicates stockout (everything sold)
-            isStockout = vItem.received > 0 && vItem.waste === 0;
+           avgSales = varietyHistory.reduce((sum, row) => sum + row.sales, 0) / varietyHistory.length;
+
+            const recent = varietyHistory
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+            recentReceived = recent?.received ?? 0;
+            recentSales = recent?.sales ?? 0;
+
+            const stockoutRate = varietyHistory.filter((row) => row.received > 0 && row.waste === 0).length / varietyHistory.length;
+            isStockout = stockoutRate >= 0.5 || (recent?.received ?? 0) > 0 && (recent?.waste ?? 1) === 0;
           }
         }
 
@@ -240,15 +258,15 @@ export class AIForecastService {
         
         if (hasHistoricalData) {
           // Use historical data as primary source
-          baselineSales = isStockout ? Math.max(lastWeekSales, historicalReceived) : lastWeekSales;
+          baselineSales = isStockout ? Math.max(avgSales, recentReceived) : avgSales;
           
           // Apply higher security multiplier for stockout scenarios (when waste = 0)
           const securityMultiplier = isStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
           const recommended = this.applyVarietyPackingRules(baselineSales * securityMultiplier * externalFactor);
 
           reasoning = isStockout
-            ? `Rupture détectée (reçu=${historicalReceived}, déchet=0, vendu=${lastWeekSales}) → +50% sécurité`
-            : `Ventes semaine dernière: ${lastWeekSales} → +30% sécurité`;
+           ? `Rupture fréquente détectée (récent: reçu=${recentReceived}, vendu=${recentSales}) sur plusieurs semaines → +50% sécurité`
+            : `Moyenne des semaines comparables: ${Math.round(avgSales)} → +30% sécurité`; 
 
           varietyPredictions.push({
             varietyId,
@@ -296,23 +314,38 @@ export class AIForecastService {
         const box = boxes.find(b => b.id === boxId && b.isActive);
         if (!box) continue;
 
-        let lastWeekBoxSales = 0;
+        let avgBoxSales = 0;
+        let recentBoxSales = 0;
         let isBoxStockout = false;
         let hasBoxHistoricalData = false;
-        let boxHistoricalReceived = 0;
+        let recentBoxReceived = 0;
 
-        // Try to get historical data if available
+        // Aggregate matching history across all retained weeks
         if (storeHistoricalData.length > 0) {
-          const dayData = storeHistoricalData[0];
-          const bItem = dayData.boxes.find((b: any) => b.boxId === boxId || b.boxName === box.name);
-          
-          if (bItem && bItem.received != null && bItem.waste != null) {
+          const boxHistory = storeHistoricalData
+            .map((dayData: any) => {
+              const bItem = dayData.boxes.find((b: any) => b.boxId === boxId || b.boxName === box.name);
+              if (!bItem || bItem.received == null || bItem.waste == null) return null;
+              return {
+                date: dayData.date,
+                received: bItem.received,
+                waste: bItem.waste,
+                sales: Math.max(0, bItem.received - bItem.waste)
+              };
+            })
+            .filter(Boolean) as Array<{ date: string; received: number; waste: number; sales: number }>;
+
+          if (boxHistory.length >= this.MIN_DATA_POINTS) {
             hasBoxHistoricalData = true;
-            boxHistoricalReceived = bItem.received;
-            // Calculate box sales from last week: received - waste = sales
-            lastWeekBoxSales = Math.max(0, bItem.received - bItem.waste);
-            // Handle stockout detection: if waste = 0, it indicates stockout (everything sold)
-            isBoxStockout = bItem.received > 0 && bItem.waste === 0;
+            avgBoxSales = boxHistory.reduce((sum, row) => sum + row.sales, 0) / boxHistory.length;
+
+            const recent = boxHistory
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+            recentBoxReceived = recent?.received ?? 0;
+            recentBoxSales = recent?.sales ?? 0;
+
+            const stockoutRate = boxHistory.filter((row) => row.received > 0 && row.waste === 0).length / boxHistory.length;
+            isBoxStockout = stockoutRate >= 0.5 || (recent?.received ?? 0) > 0 && (recent?.waste ?? 1) === 0;
           }
         }
 
@@ -325,15 +358,15 @@ export class AIForecastService {
         
         if (hasBoxHistoricalData) {
           // Use historical data as primary source
-          baselineBoxSales = isBoxStockout ? Math.max(lastWeekBoxSales, boxHistoricalReceived) : lastWeekBoxSales;
+         baselineBoxSales = isBoxStockout ? Math.max(avgBoxSales, recentBoxReceived) : avgBoxSales; 
           
           // Apply higher security multiplier for stockout scenarios (when waste = 0)
           const securityMultiplier = isBoxStockout ? 1.50 : 1.30; // 50% buffer for stockouts, 30% for normal sales
           const recommendedBoxes = this.applyBoxMinimumRules(baselineBoxSales * securityMultiplier * externalFactor);
 
           boxReasoning = isBoxStockout
-            ? `Rupture détectée (reçu=${boxHistoricalReceived}, déchet=0, vendu=${lastWeekBoxSales}) → +50% sécurité`
-            : `Ventes semaine dernière: ${lastWeekBoxSales} → +30% sécurité`;
+           ? `Rupture fréquente détectée (récent: reçu=${recentBoxReceived}, vendu=${recentBoxSales}) sur plusieurs semaines → +50% sécurité`
+            : `Moyenne des semaines comparables: ${Math.round(avgBoxSales)} → +30% sécurité`; 
 
           boxPredictions.push({
             boxId,
