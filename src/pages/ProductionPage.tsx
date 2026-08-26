@@ -8,6 +8,7 @@ import { aiForecastService, AIForecastResult } from '../services/aiForecastServi
 import { apiService } from '../services/apiService';
 import { productionService } from '../services/productionService';
 import { ProductionPlan, Store as StoreType, DonutVariety, BoxConfiguration } from '../types';
+import { MetricStrip, PageHeader } from '../components/PageExperience';
 
 const ProductionPage: React.FC = () => {
   // Get date from URL params or use today's date
@@ -691,21 +692,12 @@ const ProductionPage: React.FC = () => {
   return (
       <div className="app-background min-h-screen bg-no-repeat bg-center bg-[length:auto,cover]">
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Plan de Production</h1>
-              <p className="text-gray-600 mt-1">
-                {existingPlanId ? 'Modifier le plan de production existant' : 'Créer et gérer le plan de production'}
-              </p>
-              {existingPlanId && (
+        <PageHeader eyebrow="Atelier de production" title={existingPlanId ? 'Ajuster le plan du jour' : 'Composer le plan du jour'} description="Saisissez les volumes par magasin, contrôlez les conditionnements puis validez le plan en une seule fois." icon={Sparkles} meta={existingPlanId && (
                 <div className="mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                   <Edit className="h-3 w-3 mr-1" />
                   Plan existant en cours de modification
                 </div>
-              )}
-            </div>
-
-            <div className="mt-4 md:mt-0 flex w-full flex-col gap-4 md:w-auto md:flex-row md:items-end">
+              )} actions={<div className="flex w-full flex-col gap-4 md:w-auto md:flex-row md:items-end">
               <div className="w-full md:w-auto">
                 <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
                   Date de Production
@@ -780,8 +772,12 @@ const ProductionPage: React.FC = () => {
             </button>
           </div>
           )}
-        </div>
-      </div>
+        </div>} />
+        <MetricStrip items={[
+          { label: 'Magasins', value: stores.length, detail: 'points de livraison' },
+          { label: 'Doughnuts', value: totals.grandTotal.toLocaleString('fr-FR'), detail: 'volume planifié', tone: 'blue' },
+          { label: 'Dates prêtes', value: `${stores.length - storesNeedingDates.length}/${stores.length}`, detail: 'livraisons renseignées', tone: allDeliveryDatesSet ? 'green' : 'amber' }
+        ]} />
 
       {/* Validation Messages */}
       {!allDeliveryDatesSet && totals.grandTotal > 0 && (

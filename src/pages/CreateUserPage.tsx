@@ -5,6 +5,7 @@ import { UserPlus, User, Shield, Eye, EyeOff, AlertTriangle, Check, ArrowLeft } 
 import { useAuth } from '../context/AuthContext';
 import { createUser } from '../services/userService';
 import { supabase } from '../lib/supabase';
+import { PageError, PageHeader } from '../components/PageExperience';
 
 interface Store {
   id: string;
@@ -32,7 +33,7 @@ const CreateUserPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
-  
+
   const [formValues, setFormValues] = useState<CreateUserFormValues>({
     username: '',
     password: '',
@@ -57,10 +58,10 @@ const CreateUserPage: React.FC = () => {
       try {
         console.log('Loading stores...');
         setLoadingStores(true);
-        
+
         // Use the same method as AdminPage to get stores
         const { data: { session } } = await supabase.auth.getSession();
-        
+
         if (!session) {
           console.error('No authenticated session found');
           setError('Session non authentifiée');
@@ -68,7 +69,7 @@ const CreateUserPage: React.FC = () => {
         }
 
         const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-admin-data`;
-        
+
         const response = await fetch(apiUrl, {
           method: 'GET',
           headers: {
@@ -185,13 +186,13 @@ const CreateUserPage: React.FC = () => {
     const newStoreIds = formValues.storeIds.includes(storeId)
       ? formValues.storeIds.filter(id => id !== storeId)
       : [...formValues.storeIds, storeId];
-    
+
     handleStoreIdsChange(newStoreIds);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       setError('Veuillez corriger les erreurs dans le formulaire');
       return;
@@ -211,7 +212,7 @@ const CreateUserPage: React.FC = () => {
       );
 
       setSuccess(`Utilisateur "${formValues.fullName}" créé avec succès !`);
-      
+
       // Reset form
       setFormValues({
         username: '',
@@ -255,34 +256,17 @@ const CreateUserPage: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <button
+      <PageHeader eyebrow="Nouvel accès" title="Créer un utilisateur" description="Renseignez l’identité, choisissez le niveau d’accès puis limitez précisément le périmètre magasin." icon={UserPlus} meta={<button
           onClick={() => navigate('/users')}
           className="inline-flex items-center text-krispy-green hover:text-krispy-green-dark mb-4 transition-colors"
         >
           <ArrowLeft className="h-5 w-5 mr-2" />
           Retour à la liste des utilisateurs
-        </button>
-        
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center">
-          <UserPlus className="h-8 w-8 mr-3 text-krispy-green" />
-          Créer un Nouvel Utilisateur
-        </h1>
-        <p className="text-gray-600 mt-2">
-          Créez un nouveau compte utilisateur avec les permissions appropriées
-        </p>
-      </div>
+        </button>} />
 
       {/* Messages d'erreur et de succès */}
       {error && (
-        <div className="mb-6 bg-red-50 border-l-4 border-red-400 p-4 rounded-md">
-          <div className="flex">
-            <AlertTriangle className="h-5 w-5 text-red-400" />
-            <div className="ml-3">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          </div>
-        </div>
+        <PageError message={error} />
       )}
 
       {success && (
@@ -305,7 +289,7 @@ const CreateUserPage: React.FC = () => {
               <User className="h-5 w-5 mr-2 text-krispy-green" />
               Informations Personnelles
             </h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Full Name */}
               <div>
@@ -362,7 +346,7 @@ const CreateUserPage: React.FC = () => {
             <h3 className="text-lg font-medium text-gray-900 mb-4">
               Mot de Passe
             </h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Password */}
               <div>
@@ -461,7 +445,7 @@ const CreateUserPage: React.FC = () => {
               <Shield className="h-5 w-5 mr-2 text-krispy-green" />
               Rôle et Permissions
             </h3>
-            
+
             <div>
               <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
                 Rôle *
@@ -554,7 +538,7 @@ const CreateUserPage: React.FC = () => {
                 </>
               )}
             </button>
-            
+
             <button
               type="button"
               onClick={() => navigate('/users')}
@@ -569,4 +553,4 @@ const CreateUserPage: React.FC = () => {
   );
 };
 
-export default CreateUserPage; 
+export default CreateUserPage;

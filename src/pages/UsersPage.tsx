@@ -6,6 +6,7 @@ import { createUser, updateUser, deleteUser, getUsers, updateUserPassword, updat
 import { getAllStoreData } from '../services/storeManagementService';
 import { User, Store } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { MetricStrip, PageError, PageHeader } from '../components/PageExperience';
 
 interface UserFormValues {
   id: string;
@@ -474,13 +475,7 @@ const UsersPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Gestion des Utilisateurs</h1>
-        <p className="text-gray-600 mt-1">Gérer les accès et permissions utilisateurs</p>
-      </div>
-
-      <div className="mb-6 flex justify-between items-center">
-        {!isEditing && (
+      <PageHeader eyebrow="Sécurité & accès" title="Équipe et permissions" description="Visualisez les accès, attribuez les magasins et gardez le contrôle sur les rôles de chaque collaborateur." icon={Users} actions={!isEditing && (
           <Link
             to="/users/create"
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green transition-colors"
@@ -488,22 +483,11 @@ const UsersPage: React.FC = () => {
             <Plus className="h-4 w-4 mr-2" />
             Créer un Nouvel Utilisateur
           </Link>
-        )}
-      </div>
+        )} />
+      <MetricStrip items={[{ label: 'Utilisateurs', value: users.length, detail: 'comptes enregistrés' }, { label: 'Administrateurs', value: users.filter(user => user.role === 'admin').length, detail: 'accès complets', tone: 'blue' }, { label: 'Production', value: users.filter(user => user.role === 'production').length, detail: 'accès atelier' }, { label: 'Magasins', value: users.filter(user => user.role === 'store').length, detail: 'comptes terrain', tone: 'amber' }]} />
 
       {error && (
-        <div className="mb-6 bg-red-50 border-l-4 border-red-400 p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          </div>
-        </div>
+        <PageError message={error} onRetry={loadUsers} />
       )}
 
       {isChangingPassword && (

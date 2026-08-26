@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Edit, Trash2, Save, X, Coffee, ShoppingBag, Store as StoreIcon, Donut, Box } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
 import { Store as StoreType, DonutVariety, DonutForm, BoxConfiguration } from '../types';
+import { MetricStrip, PageHeader } from '../components/PageExperience';
 
 type AdminTab = 'stores' | 'varieties' | 'forms' | 'boxes';
 
@@ -679,10 +680,8 @@ const AdminPage: React.FC = () => {
         </div>
       )}
       
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Tableau de Bord Administrateur</h1>
-        <p className="text-gray-600 mt-1">Gérer les magasins, les variétés, les formes et les boîtes</p>
-      </div>
+      <PageHeader eyebrow="Configuration du réseau" title="Catalogue & magasins" description="Structurez l’offre de production et les points de vente depuis un espace de configuration centralisé." icon={StoreIcon} />
+      <MetricStrip items={[{ label: 'Magasins', value: stores.length, detail: 'points de vente' }, { label: 'Variétés', value: varieties.length, detail: 'recettes configurées', tone: 'blue' }, { label: 'Formes', value: forms.length, detail: 'formats disponibles' }, { label: 'Boîtes', value: boxes.length, detail: 'conditionnements', tone: 'amber' }]} />
       
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">

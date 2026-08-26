@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import LoadingSpinner from './components/LoadingSpinner';
 import AuthGuard from './components/AuthGuard';
 import Navbar from './components/Navbar';
+import { ArrowLeft, MapPinOff } from 'lucide-react';
 
 // Lazy load pages
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
@@ -65,18 +66,13 @@ export default function App() {
                   <Route
                     path="*"
                     element={
-                      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                        <div className="text-center">
-                          <h1 className="text-4xl font-bold text-gray-900">404</h1>
-                          <p className="mt-2 text-lg text-gray-600">Page not found</p>
-                          <div className="mt-6">
-                            <a
-                              href="/"
-                              className="text-base font-medium text-krispy-green hover:text-krispy-green-dark"
-                            >
-                              Go back home<span aria-hidden="true"> &rarr;</span>
-                            </a>
-                          </div>
+                      <div className="min-h-screen flex items-center justify-center bg-[#f3f7f4] p-5">
+                        <div className="surface-card max-w-lg px-7 py-14 text-center sm:px-14">
+                          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50 text-krispy-green"><MapPinOff className="h-8 w-8" /></span>
+                          <p className="eyebrow mt-6">Erreur 404</p>
+                          <h1 className="page-heading mt-2">Cette page n’existe pas</h1>
+                          <p className="page-description mx-auto">Le lien a peut-être changé. Revenez à votre espace pour poursuivre vos opérations.</p>
+                          <a href="/" className="btn-primary mt-7"><ArrowLeft className="h-4 w-4" />Retour à mon espace</a>
                         </div>
                       </div>
                     }

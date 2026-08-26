@@ -5,6 +5,7 @@ import { productionService } from '../services/productionService';
 import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
 import { ProductionPlan, StorePlan, ProductionItem, BoxProduction } from '../types';
+import { EmptyState, PageError, PageHeader } from '../components/PageExperience';
 
 const PlansPage: React.FC = () => {
   const [plans, setPlans] = useState<ProductionPlan[]>([]);
@@ -476,13 +477,8 @@ const PlansPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Plans de Production</h1>
-            <p className="text-gray-600 mt-1">Historique des plans de production sauvegardés</p>
-          </div>
-          <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row">
+      <PageHeader eyebrow="Pilotage de la production" title="Plans de production" description="Retrouvez, comparez et préparez chaque journée de production depuis un historique unique."
+        icon={Calendar} actions={<div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <select
                 value={filterMode}
@@ -532,31 +528,14 @@ const PlansPage: React.FC = () => {
               <RefreshCw className={`h-4 w-4 mr-2 ${loading || refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? 'Actualisation...' : 'Actualiser'}
             </button>
-          </div>
-        </div>
-      </div>
+          </div>} />
 
       {error && (
-        <div className="mb-8 bg-red-50 border-l-4 border-red-400 p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <AlertTriangle className="h-5 w-5 text-red-400" />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          </div>
-        </div>
+        <PageError message={error} onRetry={refreshPlans} />
       )}
 
       {plans.length === 0 ? (
-        <div className="text-center py-12">
-          <FileText className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun plan de production</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Aucun plan de production n'a été sauvegardé pour le moment.
-          </p>
-        </div>
+        <div className="surface-card"><EmptyState icon={FileText} title="Aucun plan sur cette période" description="Élargissez la période ou préparez dès maintenant le prochain plan de production." action={canEdit ? 'Créer un plan' : undefined} onAction={canEdit ? openCreateModal : undefined} /></div>
       ) : (
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
           <ul className="divide-y divide-gray-200">
