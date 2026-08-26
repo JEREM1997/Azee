@@ -144,6 +144,10 @@
   .purpose-empty { display: flex; min-height: 290px; flex-direction: column; align-items: center; justify-content: center; padding: 36px 20px; text-align: center; }
   .purpose-empty > span { display: flex; width: 58px; height: 58px; align-items: center; justify-content: center; border-radius: 18px; background: #edf7f1; color: var(--brand-green); }
   .purpose-empty > span svg { width: 26px; } .purpose-empty h3 { margin-top: 17px; color: #1b2b22; font-size: 17px; font-weight: 750; } .purpose-empty p { max-width: 430px; margin: 6px auto 18px; color: #718078; font-size: 13px; }
+  .daily-signal { display:flex; min-width:0; align-items:center; gap:13px; border:1px solid #e1e7e3; border-radius:15px; padding:14px 16px; background:#fff; box-shadow:0 1px 2px rgba(15,23,42,.025); }
+  .daily-signal > span { display:flex; width:34px; height:34px; flex:none; align-items:center; justify-content:center; border-radius:10px; background:var(--info-soft); color:var(--info); }
+  .daily-signal > div { min-width:0; flex:1; } .daily-signal p { color:#68766f; font-size:11px; font-weight:750; text-transform:uppercase; letter-spacing:.045em; } .daily-signal strong { float:right; margin-top:-18px; color:#17251d; font-size:1.25rem; font-variant-numeric:tabular-nums; } .daily-signal small { display:block; overflow:hidden; margin-top:3px; color:#7c8882; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+  .daily-signal--warning > span { background:var(--warning-soft); color:var(--warning); } .daily-signal--danger > span { background:var(--negative-soft); color:var(--negative); } .daily-signal--success > span { background:var(--positive-soft); color:var(--positive); }
 
   /* A consistent surface language without changing existing component behavior. */
   main > div > .bg-white,
@@ -153,6 +157,7 @@
   main th { color: #526059; font-size: .72rem; letter-spacing: .055em; }
   main tbody tr { transition: background-color 140ms ease; }
   main tbody tr:hover { background: #fafcfb; }
+  main td { font-variant-numeric: tabular-nums; }
   main input, main select, main textarea { border-radius: 11px !important; border-color: #d6dfda !important; background-color: #fff; transition: 150ms ease; }
   main input:hover, main select:hover, main textarea:hover { border-color: #aebdb5 !important; }
   main input:focus, main select:focus, main textarea:focus { border-color: var(--brand-green) !important; box-shadow: 0 0 0 3px rgba(4,106,56,.11) !important; }
@@ -194,6 +199,8 @@
 .analytics-kpi > div { position:relative; z-index:1; }
 .analytics-panel { overflow:hidden; border:1px solid #e0e7e3; border-radius:20px; background:#fff; box-shadow:0 8px 30px rgba(23,44,33,.05); }
 .analytics-panel > div:first-child { background:linear-gradient(90deg,#fbfdfc,#fff); }
+.donut-center { position:absolute; left:50%; top:50%; display:flex; width:92px; height:92px; transform:translate(-50%,-50%); flex-direction:column; align-items:center; justify-content:center; border-radius:50%; pointer-events:none; }
+.donut-center strong { color:#17251d; font-size:1.35rem; font-variant-numeric:tabular-nums; line-height:1; }.donut-center span { margin-top:5px; color:#7b8881; font-size:10px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
 
 /* Functional status colours stay readable without colour alone: existing icons
    and labels remain visible while the tone becomes consistent application-wide. */
@@ -305,6 +312,7 @@ body {
 
 @media (min-width: 1024px) {
   .page-enter > div[class*='max-w-7xl'], .page-enter > div[class*='max-w-4xl'] { padding: 0; }
+  main .overflow-x-auto thead { position: sticky; top: 0; z-index: 1; }
 }
 
 #root {

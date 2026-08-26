@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { productionService } from '../services/productionService';
 import { ProductionPlan, StorePlan } from '../types';
-import { Calendar, Check, AlertTriangle, FileText, Truck, X, Store, Factory, CheckCircle2, Clock3, ArrowUpRight } from 'lucide-react';
+import { Calendar, Check, AlertTriangle, FileText, Truck, X, Store, Factory, CheckCircle2, Clock3, ArrowUpRight, ClipboardCheck } from 'lucide-react';
 import ContentSkeleton from '../components/ContentSkeleton';
 
 const DashboardPage: React.FC = () => {
@@ -99,11 +99,20 @@ const DashboardPage: React.FC = () => {
   const completed = visibleStores.filter(store => store.delivery_confirmed && store.waste_reported).length;
   const deliveries = visibleStores.filter(store => store.delivery_confirmed).length;
   const progress = visibleStores.length ? Math.round((completed / visibleStores.length) * 100) : 0;
+  const awaitingDelivery = visibleStores.filter(store => !store.delivery_confirmed).length;
+  const awaitingWaste = visibleStores.filter(store => store.delivery_confirmed && !store.waste_reported).length;
+  const attentionStores = visibleStores.filter(store => !store.confirmed || !store.delivery_confirmed || !store.waste_reported);
+  const firstName = user?.fullName?.trim().split(/\s+/)[0];
+  const daySummary = !visibleStores.length
+    ? 'Aucune opération n’est planifiée pour cette journée.'
+    : attentionStores.length
+      ? `${attentionStores.length} magasin${attentionStores.length > 1 ? 's demandent' : ' demande'} encore votre attention aujourd’hui.`
+      : 'Tout le réseau est à jour : aucune action restante aujourd’hui.';
 
   return (
     <div>
       <header className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-        <div><p className="eyebrow">Centre des opérations</p><h1 className="page-heading mt-2">Bonjour {user?.fullName?.split(' ')[0] || 'à vous'} <span aria-hidden="true">👋</span></h1><p className="page-description">Suivez la production, les livraisons et l’avancement du réseau en un coup d’œil.</p></div>
+        <div><p className="eyebrow">Situation du jour</p><h1 className="page-heading mt-2">Bonjour {firstName || 'à vous'}</h1><p className="page-description">{daySummary}</p></div>
         <div className="surface-card flex items-center gap-3 p-2.5 pl-4">
             <Calendar className="h-4 w-4 text-krispy-green" />
             <label htmlFor="date-selector" className="sr-only">Date d’activité</label>
@@ -137,6 +146,21 @@ const DashboardPage: React.FC = () => {
           { label: 'Livraisons reçues', value: `${deliveries}/${visibleStores.length}`, unit: deliveries === visibleStores.length && visibleStores.length ? 'toutes reçues' : 'à contrôler', icon: Truck },
           { label: 'Journée complétée', value: `${progress}%`, unit: `${completed} magasin${completed > 1 ? 's' : ''} finalisé${completed > 1 ? 's' : ''}`, icon: CheckCircle2 },
         ].map(({label,value,unit,icon: Icon}, index) => <article className="kpi-card" key={label}><div className="mb-5 flex items-start justify-between"><span className="kpi-icon"><Icon className="h-5 w-5" /></span>{index === 0 && <span className="status-pill bg-emerald-50 text-emerald-700"><ArrowUpRight className="h-3 w-3" />Plan actif</span>}</div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{value}</p><p className="mt-1 text-xs text-slate-500">{unit}</p></article>)}
+      </section>
+
+      <section className="mb-7 grid gap-3 md:grid-cols-3" aria-label="Actions restantes aujourd’hui">
+        <article className="daily-signal daily-signal--info">
+          <span><Truck className="h-4 w-4" /></span>
+          <div><p>Livraisons à confirmer</p><strong>{awaitingDelivery}</strong><small>sur {visibleStores.length} magasins suivis</small></div>
+        </article>
+        <article className="daily-signal daily-signal--warning">
+          <span><ClipboardCheck className="h-4 w-4" /></span>
+          <div><p>Déchets à renseigner</p><strong>{awaitingWaste}</strong><small>après réception confirmée</small></div>
+        </article>
+        <article className={`daily-signal ${attentionStores.length ? 'daily-signal--danger' : 'daily-signal--success'}`}>
+          <span>{attentionStores.length ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}</span>
+          <div><p>Magasins à surveiller</p><strong>{attentionStores.length}</strong><small>{attentionStores.length ? attentionStores.slice(0, 2).map(store => store.store_name).join(' · ') : 'aucune anomalie opérationnelle'}</small></div>
+        </article>
       </section>
 
       <section className="surface-card overflow-hidden">
