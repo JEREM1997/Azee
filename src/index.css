@@ -7,6 +7,18 @@
   --brand-green: #046a38;
   --brand-green-dark: #03552e;
   --brand-red: #c8102e;
+  /* Semantic colour language: one meaning, everywhere. Large surfaces use the
+     palest step; compact markers and typography use the strongest step. */
+  --positive: #168151;
+  --positive-soft: #edf8f2;
+  --negative: #d33d56;
+  --negative-soft: #fff1f3;
+  --warning: #c47a10;
+  --warning-soft: #fff7e7;
+  --info: #3679b8;
+  --info-soft: #eef6fc;
+  --insight: #7756b3;
+  --insight-soft: #f5f1fb;
   --surface: #ffffff;
   --canvas: #f6f8f7;
   --ink: #17201c;
@@ -102,6 +114,12 @@
 
   .page-hero { position: relative; display: flex; min-height: 184px; align-items: flex-end; justify-content: space-between; gap: 32px; overflow: hidden; margin-bottom: 24px; border: 1px solid #dce7e1; border-radius: 24px; padding: 30px 32px; background: linear-gradient(122deg,#fff 0%,#f7fbf8 68%,#eaf5ee 100%); box-shadow: 0 16px 44px rgba(23,50,35,.065); }
   .page-hero::after { position: absolute; right: -54px; top: -96px; width: 260px; height: 260px; border: 45px solid rgba(4,106,56,.045); border-radius: 50%; content: ''; pointer-events: none; }
+  .page-hero::before { position:absolute; inset:0 auto 0 0; width:4px; background:var(--hero-accent,var(--brand-green)); content:''; }
+  .page-hero--operations { --hero-accent:var(--positive); background:linear-gradient(122deg,#fff 0%,#f4faf6 68%,#e8f5ed 100%); }
+  .page-hero--logistics { --hero-accent:var(--info); background:linear-gradient(122deg,#fff 0%,#f5f9fc 68%,#eaf3fa 100%); }
+  .page-hero--commerce { --hero-accent:var(--warning); background:linear-gradient(122deg,#fff 0%,#fdfaf4 68%,#fbf2df 100%); }
+  .page-hero--reporting { --hero-accent:var(--insight); background:linear-gradient(122deg,#fff 0%,#faf8fd 68%,#f0ebf8 100%); }
+  .page-hero--administration { --hero-accent:#8a9690; background:linear-gradient(122deg,#fff 0%,#f8faf9 68%,#f0f3f1 100%); }
   .page-hero__copy { position: relative; z-index: 1; max-width: 720px; }
   .page-hero__eyebrow { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; color: var(--brand-green); font-size: 11px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
   .page-hero__eyebrow svg { width: 15px; height: 15px; }
@@ -115,6 +133,7 @@
   .metric-strip__item:last-child { border-right: 0; }
   .metric-strip__marker { width: 4px; height: 42px; flex: none; border-radius: 99px; background: #168151; }
   .metric-strip__marker--red { background: #d33d56; } .metric-strip__marker--amber { background: #d58a16; } .metric-strip__marker--blue { background: #3679b8; }
+  .metric-strip__marker--violet { background: var(--insight); }
   .metric-strip p { color: #738078; font-size: 11px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
   .metric-strip strong { display: block; margin-top: 2px; color: #17251d; font-size: 1.5rem; letter-spacing: -.03em; }
   .metric-strip small { display: block; color: #87928c; font-size: 11px; }
@@ -138,6 +157,56 @@
   main input:hover, main select:hover, main textarea:hover { border-color: #aebdb5 !important; }
   main input:focus, main select:focus, main textarea:focus { border-color: var(--brand-green) !important; box-shadow: 0 0 0 3px rgba(4,106,56,.11) !important; }
 }
+
+/* Statistics is deliberately more expressive than administrative pages. The
+   colour remains semantic: green=sales, coral=waste, blue=volume,
+   violet=analysis and amber=attention. */
+.stats-page { --chart-grid: #e8eeeb; }
+.stats-hero {
+  position: relative; display: grid; grid-template-columns: minmax(0,1fr) minmax(320px,.8fr);
+  gap: 36px; align-items: end; overflow: hidden; margin-bottom: 24px; padding: 30px 32px;
+  border: 1px solid #dce7e1; border-radius: 24px;
+  background: radial-gradient(circle at 88% 10%,rgba(119,86,179,.11),transparent 33%),linear-gradient(125deg,#f7fbf8,#fff 58%,#f7f4fc);
+  box-shadow: 0 18px 50px rgba(24,47,34,.07);
+}
+.stats-hero::before { position:absolute; inset:0 auto 0 0; width:5px; background:linear-gradient(var(--positive),var(--info),var(--insight)); content:''; }
+.stats-hero__copy { position:relative; z-index:1; max-width:690px; }
+.stats-hero__eyebrow { display:flex; align-items:center; gap:7px; color:var(--insight); font-size:11px; font-weight:850; letter-spacing:.12em; text-transform:uppercase; }
+.stats-hero__eyebrow svg { width:15px; }
+.stats-hero h1 { margin-top:10px; color:#13251b; font-size:clamp(1.85rem,3.3vw,2.7rem); font-weight:790; line-height:1.05; }
+.stats-hero__copy > p:last-child { max-width:650px; margin-top:11px; color:#617068; font-size:14px; }
+.stats-filters { position:relative; z-index:1; border:1px solid rgba(217,225,221,.9); border-radius:17px; padding:14px; background:rgba(255,255,255,.78); box-shadow:0 8px 24px rgba(30,47,38,.05); backdrop-filter:blur(10px); }
+.stats-filters__label { display:flex; align-items:center; gap:6px; margin-bottom:9px; color:#68766f; font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
+.stats-filters__label svg { width:14px; color:var(--insight); }
+.stats-page .metric-strip { border:0; box-shadow:0 12px 35px rgba(29,51,39,.065); }
+.stats-page .metric-strip__item { position:relative; background:linear-gradient(135deg,#fff,rgba(246,249,247,.75)); }
+.stats-page .metric-strip strong { font-size:clamp(1.55rem,2.5vw,2rem); font-variant-numeric:tabular-nums; }
+.forecast-panel { border:1px solid #ddd3ef; background:linear-gradient(110deg,var(--insight-soft),#fff); }
+.analytics-kpi { position:relative; min-height:202px; overflow:hidden; border:1px solid; border-radius:19px; padding:22px; box-shadow:0 7px 24px rgba(27,43,34,.045); transition:180ms var(--ease-out); }
+.analytics-kpi::after { position:absolute; right:-36px; bottom:-45px; width:125px; height:125px; border:24px solid currentColor; border-radius:50%; opacity:.035; content:''; }
+.analytics-kpi:hover { transform:translateY(-2px); box-shadow:0 16px 34px rgba(27,43,34,.08); }
+.analytics-kpi--sales,.analytics-kpi--success { border-color:#cfe7da; background:linear-gradient(145deg,var(--positive-soft),#fff 72%); color:var(--positive); }
+.analytics-kpi--danger { border-color:#f0ccd2; background:linear-gradient(145deg,var(--negative-soft),#fff 72%); color:var(--negative); }
+.analytics-kpi--warning { border-color:#efdcb7; background:linear-gradient(145deg,var(--warning-soft),#fff 72%); color:var(--warning); }
+.analytics-kpi--volume { border-color:#d1e3f1; background:linear-gradient(145deg,var(--info-soft),#fff 72%); color:var(--info); }
+.analytics-kpi--insight { border-color:#dfd6ef; background:linear-gradient(145deg,var(--insight-soft),#fff 72%); color:var(--insight); }
+.analytics-kpi p,.analytics-kpi span { font-variant-numeric:tabular-nums; }
+.analytics-kpi > div { position:relative; z-index:1; }
+.analytics-panel { overflow:hidden; border:1px solid #e0e7e3; border-radius:20px; background:#fff; box-shadow:0 8px 30px rgba(23,44,33,.05); }
+.analytics-panel > div:first-child { background:linear-gradient(90deg,#fbfdfc,#fff); }
+
+/* Functional status colours stay readable without colour alone: existing icons
+   and labels remain visible while the tone becomes consistent application-wide. */
+main .bg-green-50 { background-color:var(--positive-soft); }
+main .text-green-600, main .text-green-700, main .text-green-800 { color:var(--positive); }
+main .bg-red-50 { background-color:var(--negative-soft); }
+main .text-red-600, main .text-red-700, main .text-red-800 { color:var(--negative); }
+main .bg-yellow-50, main .bg-orange-50 { background-color:var(--warning-soft); }
+main .text-yellow-600, main .text-yellow-700, main .text-yellow-800, main .text-orange-600 { color:var(--warning); }
+main .bg-blue-50 { background-color:var(--info-soft); }
+main .text-blue-600, main .text-blue-700, main .text-blue-800 { color:var(--info); }
+main .bg-purple-50, main .bg-violet-50 { background-color:var(--insight-soft); }
+main .text-purple-600, main .text-purple-700, main .text-violet-700 { color:var(--insight); }
 
 .kk-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #64716a; }
 .kk-loader--inline { display: inline-flex; min-width: 0; flex-direction: row; gap: 8px; }
@@ -208,6 +277,13 @@ body {
   .metric-strip__item:nth-child(2n) { border-right: 0; }
   .metric-strip strong { font-size: 1.25rem; }
   .page-alert { align-items: flex-start; flex-wrap: wrap; } .page-alert button { width: 100%; margin-left: 0; justify-content: center; }
+  .stats-hero { grid-template-columns:1fr; gap:18px; padding:22px 18px; border-radius:20px; }
+  .stats-hero h1 { font-size:1.8rem !important; }
+  .stats-filters { margin-top:0; padding:12px; }
+  .stats-filters .flex { flex-wrap:wrap; gap:8px; }
+  .stats-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .analytics-kpi { min-height:178px; padding:16px; }
+  .analytics-kpi .text-2xl { font-size:1.35rem; }
   /* Existing full-screen dialogs inherit one native, safe mobile presentation. */
   .page-enter > div > .fixed.inset-0 { z-index: var(--z-modal); align-items: flex-end; padding: 0; background: rgba(15,23,42,.4); backdrop-filter: blur(3px); animation: backdrop-in 180ms ease-out both; }
   .page-enter > div > .fixed.inset-0 > div { max-height: min(88dvh, 760px); width: 100%; max-width: none; overflow-y: auto; border-radius: 24px 24px 0 0; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); box-shadow: var(--shadow-float); animation: sheet-in 240ms var(--ease-out) both; overscroll-behavior: contain; }
