@@ -365,7 +365,7 @@ const DeliveryPage: React.FC = () => {
       // Filter stores based on the selected delivery date and user permissions
       const selectedDeliveryDateKey = normalizeDateKey(deliveryDate);
       const filteredStores = allStores.filter(store => {
-      if (!selectedDeliveryDateKey) {
+        if (!selectedDeliveryDateKey) {
           return false;
         }
 
@@ -494,7 +494,7 @@ const DeliveryPage: React.FC = () => {
     ];
 
     if (storeDetails.source_order_id) {
-      headers.push(['Commande', storeDetails.source_order_id]);
+      headers.push(['Référence commande', storeDetails.source_order_id]);
     }
     if (storeDetails.company_name) {
       headers.push(['Société', storeDetails.company_name]); 
@@ -517,8 +517,8 @@ const DeliveryPage: React.FC = () => {
     if (storeDetails.payment_status) {
       headers.push(['Paiement', getPaymentStatusLabel(storeDetails.payment_status)]);
     }
-    if (storeDetails.handledBy) {
-      headers.push(['Traitée par', storeDetails.handledBy]);
+    if (isOrderDelivery) {
+      headers.push(['Commande saisie par', storeDetails.handledBy || 'Non renseigné']);
     }
     if (storeDetails.deliveredBy) {
       headers.push(['Livrée par', storeDetails.deliveredBy]); 
@@ -976,7 +976,7 @@ const DeliveryPage: React.FC = () => {
                     </p>
                     {storeDetails.source_order_id && (
                       <p className="text-sm text-gray-600">
-                        <span className="font-medium">Commande:</span> {storeDetails.source_order_id}
+                        <span className="font-medium">Référence commande:</span> {storeDetails.source_order_id}
                       </p>
                     )}
                     {storeDetails.company_name && (
@@ -989,9 +989,9 @@ const DeliveryPage: React.FC = () => {
                         <span className="font-medium">Client:</span> {storeDetails.customer_name}
                       </p>
                     )}
-                    {storeDetails.handledBy && (
+                    {isOrderDelivery && (
                       <p className="text-sm text-gray-600">
-                      <span className="font-medium">Traitée par:</span> {storeDetails.handledBy}  
+                      <span className="font-medium">Commande saisie par:</span> {storeDetails.handledBy || 'Non renseigné'}
                       </p>
                     )}
                     {storeDetails.customer_phone && (
