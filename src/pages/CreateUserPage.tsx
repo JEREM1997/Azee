@@ -1,3 +1,4 @@
+import ContentSkeleton from '../components/ContentSkeleton';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserPlus, User, Shield, Eye, EyeOff, AlertTriangle, Check, ArrowLeft } from 'lucide-react';
@@ -249,11 +250,7 @@ const CreateUserPage: React.FC = () => {
   }
 
   if (loadingStores) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-krispy-green"></div>
-      </div>
-    );
+    return <ContentSkeleton variant="form" label="Préparation du formulaire utilisateur…" />;
   }
 
   return (

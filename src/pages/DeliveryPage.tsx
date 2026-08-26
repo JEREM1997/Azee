@@ -1,3 +1,4 @@
+import ContentSkeleton from '../components/ContentSkeleton';
 import React, { useState, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { Edit, Check, Printer, FileText, TruckIcon, AlertTriangle, Truck } from 'lucide-react';
@@ -820,11 +821,7 @@ const DeliveryPage: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-krispy-green"></div>
-      </div>
-    );
+    return <ContentSkeleton variant="table" label="Chargement des livraisons…" />;
   }
 
   return (

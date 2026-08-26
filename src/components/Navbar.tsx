@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import {
   BarChart3, ChevronRight, ClipboardCheck, ClipboardList, Factory, LayoutDashboard,
-  LogOut, Menu, MoreHorizontal, Settings2, ShieldCheck, Truck,
+  LogOut, MoreHorizontal, Settings2, ShieldCheck, Truck,
   UserRound, Users, X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -21,6 +21,8 @@ interface NavigationItem {
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+  const sheetRef = useRef<HTMLElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
   const { user, logout, isAdmin, isProduction } = useAuth();
   const location = useLocation();
   const canValidateOrders = isAdmin || isProduction;
@@ -43,9 +45,21 @@ const Navbar: React.FC = () => {
   useEffect(() => setIsOpen(false), [location.pathname]);
   useEffect(() => {
     if (!isOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => event.key === 'Escape' && setIsOpen(false);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const focusable = () => Array.from(sheetRef.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])') || []);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0]; const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    requestAnimationFrame(() => focusable()[0]?.focus());
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener('keydown', onKeyDown); moreButtonRef.current?.focus(); };
   }, [isOpen]);
 
   useEffect(() => {
@@ -96,6 +110,7 @@ const Navbar: React.FC = () => {
   );
 
   const primaryMobile = visibleNavigation.filter(item => item.section === 'operations').slice(0, 4);
+  const currentPage = navigation.find(item => isActive(item.href));
 
   return (
     <div className="min-h-screen lg:pl-[264px]">
@@ -116,24 +131,27 @@ const Navbar: React.FC = () => {
       </aside>
 
       <header className="mobile-header lg:hidden">
-        <img src={krispyKremeLogo} alt="Krispy Kreme Operations" className="h-11 w-auto" />
-        <button onClick={() => setIsOpen(true)} className="icon-button" aria-label="Ouvrir le menu"><Menu className="h-5 w-5" /></button>
+        <div className="min-w-0">
+          <p className="mobile-header-kicker">Krispy Kreme Operations</p>
+          <p className="mobile-header-title">{currentPage?.name || 'Espace de travail'}</p>
+        </div>
       </header>
 
-      {isOpen && <div className="fixed inset-0 z-50 lg:hidden">
-        <button className="absolute inset-0 bg-slate-950/40 backdrop-blur-[2px]" onClick={() => setIsOpen(false)} aria-label="Fermer le menu" />
-        <section className="mobile-sheet absolute inset-x-0 bottom-0 max-h-[90dvh] overflow-y-auto rounded-t-[28px] bg-white p-5 pb-8 shadow-2xl" role="dialog" aria-modal="true">
-          <div className="mb-6 flex items-start justify-between"><div><p className="eyebrow">Espace de travail</p><h2 className="mt-1 text-xl font-bold text-slate-900">Navigation</h2></div><button className="icon-button" onClick={() => setIsOpen(false)} aria-label="Fermer"><X className="h-5 w-5" /></button></div>
+      {isOpen && <div className="sheet-layer fixed inset-0 lg:hidden">
+        <button className="sheet-backdrop absolute inset-0 bg-slate-950/35" onClick={() => setIsOpen(false)} aria-label="Fermer le menu" />
+        <section ref={sheetRef} className="mobile-sheet absolute inset-x-0 bottom-0 max-h-[90dvh] overflow-y-auto rounded-t-[24px] bg-white px-5 pb-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="mobile-menu-title">
+          <div className="sheet-handle" aria-hidden="true" />
+          <div className="mb-6 flex items-start justify-between"><div><p className="eyebrow">Espace de travail</p><h2 id="mobile-menu-title" className="mt-1 text-xl font-semibold text-slate-900">Navigation</h2></div><button className="icon-button" onClick={() => setIsOpen(false)} aria-label="Fermer"><X className="h-5 w-5" /></button></div>
           <NavItems mobile />
           <button onClick={() => void logout()} className="btn-secondary w-full"><LogOut className="h-4 w-4" /> Se déconnecter</button>
         </section>
       </div>}
 
-      <main id="main-content" tabIndex={-1} className="page-enter app-main"><Outlet /></main>
+      <main id="main-content" tabIndex={-1} className="app-main"><div key={location.pathname} className="page-enter"><Outlet /></div></main>
 
       <nav className="mobile-bottom-nav lg:hidden" aria-label="Navigation mobile" style={{ gridTemplateColumns: `repeat(${primaryMobile.length + 1}, minmax(0, 1fr))` }}>
         {primaryMobile.map(item => { const Icon = item.icon; const active = isActive(item.href); return <Link key={item.href} to={item.href} className={`mobile-nav-item ${active ? 'text-krispy-green' : 'text-slate-500'}`}><span className={`relative rounded-xl p-1.5 ${active ? 'bg-emerald-50' : ''}`}><Icon className="h-5 w-5" />{item.href === '/orders' && pendingOrdersCount > 0 && <i className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-krispy-red ring-2 ring-white" />}</span><span>{item.name}</span></Link>; })}
-        <button onClick={() => setIsOpen(true)} className="mobile-nav-item text-slate-500"><span className="rounded-xl p-1.5"><MoreHorizontal className="h-5 w-5" /></span><span>Plus</span></button>
+        <button ref={moreButtonRef} onClick={() => setIsOpen(true)} className={`mobile-nav-item ${isOpen ? 'text-krispy-green' : 'text-slate-500'}`} aria-haspopup="dialog" aria-expanded={isOpen}><span className={`rounded-xl p-1.5 ${isOpen ? 'bg-emerald-50' : ''}`}><MoreHorizontal className="h-5 w-5" /></span><span>Plus</span></button>
       </nav>
     </div>
   );

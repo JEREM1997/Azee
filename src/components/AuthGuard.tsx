@@ -9,7 +9,7 @@ const AuthGuard: React.FC = () => {
   const fallbackRoute = isAdmin ? '/dashboard' : isProduction ? '/plans' : '/orders';
 
   if (loading) {
-    return <LoadingSpinner fullScreen message="Checking authentication..." />;
+    return <LoadingSpinner fullScreen size="large" message="Connexion…" />;
   }
 
   if (!user) {

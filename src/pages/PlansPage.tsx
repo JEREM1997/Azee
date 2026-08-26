@@ -1,3 +1,4 @@
+import ContentSkeleton from '../components/ContentSkeleton';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Calendar, Eye, FileText, AlertTriangle, RefreshCw, Edit, Trash2, Plus } from 'lucide-react';
 import { productionService } from '../services/productionService';
@@ -470,11 +471,7 @@ const PlansPage: React.FC = () => {
   }, [loadPlans]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-krispy-green"></div>
-      </div>
-    );
+    return <ContentSkeleton variant="table" label="Préparation des plans de production…" />;
   }
 
   return (
