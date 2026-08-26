@@ -1,6 +1,6 @@
 import ContentSkeleton from '../components/ContentSkeleton';
 ﻿import React, { useState, useEffect } from 'react';
-import { BarChart2, PieChart, TrendingUp, DollarSign, Store, Target, Package, Printer } from 'lucide-react';
+import { BarChart2, PieChart, TrendingUp, DollarSign, Store, Target, Package, Printer, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
 import { apiService } from '../services/apiService';
 import { productionService } from '../services/productionService';
@@ -103,10 +103,10 @@ const StatsPage: React.FC = () => {
 
     return [];
   };
-  
+
        // Single source of truth for production data fetching/transformations
   // (previous duplicate block removed to prevent double renders & undefined refs)
-  const loadProductionData = async () => { 
+  const loadProductionData = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -148,7 +148,7 @@ const StatsPage: React.FC = () => {
         setRawProductionPlans([]);
         return;
        }
-        
+
       console.log(
         '📊 Stats – period:',
         selectedPeriod,
@@ -244,7 +244,7 @@ const StatsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };       
+  };
   useEffect(() => {
     loadProductionData();
   }, [
@@ -256,7 +256,7 @@ const StatsPage: React.FC = () => {
     selectedEndDate,
     selectedStores
   ]);
-  
+
   useEffect(() => {
     const loadKpiSnapshot = async () => {
       const { data } = await apiService.production.getLatestForecastKpiSnapshot();
@@ -265,16 +265,16 @@ const StatsPage: React.FC = () => {
 
     loadKpiSnapshot();
   }, []);
-  
+
   const getFilteredData = (): ProductionData[] => {
     if (!productionData || productionData.length === 0) return [];
-    
+
     switch (selectedPeriod) {
       case 'day':
         return productionData.filter(item => {
           return item.date === selectedDate;
         });
-        
+
       case 'range':
         return productionData.filter(item => {
           const itemDate = new Date(item.date);
@@ -282,34 +282,34 @@ const StatsPage: React.FC = () => {
           const endDate = new Date(selectedEndDate);
           return itemDate >= startDate && itemDate <= endDate;
         });
-        
+
       case 'month':
         return productionData.filter(item => {
           const itemDate = new Date(item.date);
-          return itemDate.getMonth() + 1 === selectedMonth && 
+          return itemDate.getMonth() + 1 === selectedMonth &&
                  itemDate.getFullYear() === selectedYear;
         });
-        
+
       case 'year':
         return productionData.filter(item => {
           const itemDate = new Date(item.date);
           return itemDate.getFullYear() === selectedYear;
         });
-        
+
       default:
         return productionData;
     }
   };
-  
+
   const data = getFilteredData();
-  
+
   // Calculate store performance from real data (this respects store filtering)
   const getStorePerformance = (): StorePerformance[] => {
     const storeStats: { [storeId: string]: StorePerformance } = {};
-    
+
     // Get the filtered dates to match our current selection
     const filteredDates = data.map(d => d.date);
-    
+
     // Initialize with active stores (filtered by selection if any)
     const relevantStores = stores.filter(store => {
       if (!store.isActive) return false;
@@ -318,7 +318,7 @@ const StatsPage: React.FC = () => {
       }
       return true;
     });
-    
+
     relevantStores.forEach(store => {
       storeStats[store.id] = {
         id: store.id,
@@ -331,24 +331,24 @@ const StatsPage: React.FC = () => {
         wasteCost: 0
       };
     });
-    
+
     // Extract real data from production plans
     rawProductionPlans.forEach(plan => {
       // Only process plans that match our filtered date range
       if (!filteredDates.includes(plan.date)) return;
-      
+
       const planEntries = getPlanEntries(plan);
         if (planEntries.length > 0) {
           planEntries.forEach((store: any) => {
           // Skip if store not in our filtered list
           if (!storeStats[store.store_id]) return;
-          
+
           let storeProduction = 0;
           let storeReceived = 0;
           let storeWaste = 0;
           let storeCost = 0;
           let storeWasteCost = 0;
-          
+
           // Process individual production items
           if (store.production_items && Array.isArray(store.production_items)) {
             store.production_items.forEach((item: any) => {
@@ -356,23 +356,23 @@ const StatsPage: React.FC = () => {
               // CRITICAL: Only use received quantity if delivery was confirmed, otherwise use 0
               const received = (item.received !== null && item.received !== undefined) ? item.received : 0;
               const waste = item.waste || 0;
-              
+
               // Get variety-specific production cost from admin configuration
               const variety = varieties.find(v => v.id === item.variety_id);
               const varietyCost = variety?.productionCost || 0; // Use productionCost from admin config
-              
+
               storeProduction += quantity;
               storeReceived += received;
               storeWaste += waste;
-              
+
               // Calculate cost based on ACTUAL received quantity using admin-configured production cost
               const itemCost = received * varietyCost;
               storeCost += itemCost;
-              
+
               // Calculate waste cost using the same variety cost
               const itemWasteCost = waste * varietyCost;
               storeWasteCost += itemWasteCost;
-              
+
               // Debug logging for cost calculation
               if (received > 0) {
                 console.log(`Variety Cost: ${variety?.name || 'Unknown'} - ${received} received × CHF ${varietyCost} = CHF ${itemCost.toFixed(2)}`);
@@ -382,7 +382,7 @@ const StatsPage: React.FC = () => {
               }
             });
           }
-          
+
           // Process box productions
           if (store.box_productions && Array.isArray(store.box_productions)) {
             store.box_productions.forEach((boxProd: any) => {
@@ -392,7 +392,7 @@ const StatsPage: React.FC = () => {
                 // CRITICAL: Only use received boxes if delivery was confirmed, otherwise use 0
                 const receivedBoxes = (boxProd.received !== null && boxProd.received !== undefined) ? boxProd.received : 0;
                 const wasteBoxes = boxProd.waste || 0;
-                
+
                 // Calculate box cost based on varieties configured in the box
                 let boxUnitCost = 0;
                 if (box.varieties && box.varieties.length > 0) {
@@ -408,20 +408,20 @@ const StatsPage: React.FC = () => {
                   // Fallback if no varieties configured
                   boxUnitCost = 0.20;
                 }
-                
+
                 const boxSize = box.size;
                 storeProduction += boxQuantity * boxSize;
                 storeReceived += receivedBoxes * boxSize;
                 storeWaste += wasteBoxes * boxSize;
-                
+
                 // Calculate cost based on ACTUAL received boxes using calculated box unit cost
                 const totalBoxCost = receivedBoxes * boxUnitCost;
                 storeCost += totalBoxCost;
-                
+
                 // Calculate waste cost based on wasted boxes using the same box unit cost
                 const totalBoxWasteCost = wasteBoxes * boxUnitCost;
                 storeWasteCost += totalBoxWasteCost;
-                
+
                 // Debug logging for box cost calculation
                 if (receivedBoxes > 0) {
                   console.log(`Box Cost: ${box.name} - ${receivedBoxes} boxes received × CHF ${boxUnitCost.toFixed(2)}/box = CHF ${totalBoxCost.toFixed(2)}`);
@@ -442,14 +442,14 @@ const StatsPage: React.FC = () => {
               }
             });
           }
-          
+
           // Update store stats
           storeStats[store.store_id].production += storeProduction;
           storeStats[store.store_id].received += storeReceived;
           storeStats[store.store_id].waste += storeWaste;
           storeStats[store.store_id].cost += storeCost;
           storeStats[store.store_id].wasteCost += storeWasteCost;
-          
+
           // Debug logging for store totals
           if (storeCost > 0) {
             console.log(`Store ${store.store_name}: Total Production Cost = CHF ${storeCost.toFixed(2)}`);
@@ -460,25 +460,25 @@ const StatsPage: React.FC = () => {
         });
       }
     });
-    
+
     // Calculate waste percentages
     Object.values(storeStats).forEach(store => {
       store.wastePercent = store.received > 0 ? (store.waste / store.received) * 100 : 0;
     });
-    
+
     return Object.values(storeStats).filter(store => store.production > 0); // Only show stores with production
   };
-  
+
   const storePerformance = getStorePerformance();
-  
+
   // Calculate total waste costs using variety-specific and box-specific costs
   const getTotalWasteCost = (): number => {
     const filteredDates = data.map(d => d.date);
     let totalWasteCost = 0;
-    
+
     rawProductionPlans.forEach(plan => {
       if (!filteredDates.includes(plan.date)) return;
-      
+
       const planEntries = getPlanEntries(plan);
       if (planEntries.length > 0) {
         planEntries.forEach((store: any) => {
@@ -486,25 +486,25 @@ const StatsPage: React.FC = () => {
           if (selectedStores.length > 0 && !selectedStores.includes(store.store_id)) {
             return;
           }
-          
+
           // Calculate waste cost for individual production items
           if (store.production_items && Array.isArray(store.production_items)) {
             store.production_items.forEach((item: any) => {
               const waste = item.waste || 0;
               const variety = varieties.find(v => v.id === item.variety_id);
               const varietyCost = variety?.productionCost || 0; // Use admin-configured production cost
-              
+
               totalWasteCost += waste * varietyCost;
             });
           }
-          
+
           // Calculate waste cost for box productions
           if (store.box_productions && Array.isArray(store.box_productions)) {
             store.box_productions.forEach((boxProd: any) => {
               const box = boxes.find(b => b.name === boxProd.box_name);
               if (box) {
                 const wasteBoxes = boxProd.waste || 0;
-                
+
                 // Calculate box cost based on varieties configured in the box (same as main calculation)
                 let boxUnitCost = 0;
                 if (box.varieties && box.varieties.length > 0) {
@@ -518,7 +518,7 @@ const StatsPage: React.FC = () => {
                 } else {
                   boxUnitCost = 0.20; // Fallback
                 }
-                
+
                 totalWasteCost += wasteBoxes * boxUnitCost;
               }
             });
@@ -526,17 +526,17 @@ const StatsPage: React.FC = () => {
         });
       }
     });
-    
+
     return totalWasteCost;
   };
-  
+
   // Enhanced statistics calculations - now respect store filtering
   const totalProduction = storePerformance.reduce((sum, store) => sum + store.production, 0);
   const totalReceived = storePerformance.reduce((sum, store) => sum + store.received, 0);
   const totalWaste = storePerformance.reduce((sum, store) => sum + store.waste, 0);
   const totalProductionCost = storePerformance.reduce((sum, store) => sum + store.cost, 0);
   const totalWasteCost = getTotalWasteCost();
-  
+
   // Debug: Log comprehensive cost calculation summary
   console.log('=== PRODUCTION COST CALCULATION SUMMARY ===');
   console.log(`Total Stores with Production: ${storePerformance.length}`);
@@ -555,16 +555,16 @@ const StatsPage: React.FC = () => {
   console.log(`TOTAL PRODUCTION COST: CHF ${totalProductionCost.toFixed(2)}`);
   console.log(`Note: Uses exact admin configuration (productionCost) and delivery confirmation data`);
   console.log('=== END COST SUMMARY ===');
-  
-  // Calculate boxes totals from filtered store data 
+
+  // Calculate boxes totals from filtered store data
   const getBoxTotals = () => {
     const filteredDates = data.map(d => d.date);
     let totalBoxes = 0;
     let totalBoxDoughnuts = 0;
-    
+
     rawProductionPlans.forEach(plan => {
       if (!filteredDates.includes(plan.date)) return;
-      
+
       const planEntries = getPlanEntries(plan);
       if (planEntries.length > 0) {
         planEntries.forEach((store: any) => {
@@ -572,7 +572,7 @@ const StatsPage: React.FC = () => {
           if (selectedStores.length > 0 && !selectedStores.includes(store.store_id)) {
             return;
           }
-          
+
           if (store.box_productions && Array.isArray(store.box_productions)) {
             store.box_productions.forEach((boxProd: any) => {
               const box = boxes.find(b => b.name === boxProd.box_name);
@@ -586,19 +586,19 @@ const StatsPage: React.FC = () => {
         });
       }
     });
-    
+
     return { totalBoxes, totalBoxDoughnuts };
   };
-  
+
   const { totalBoxes, totalBoxDoughnuts } = getBoxTotals();
   const totalIndividualDoughnuts = totalProduction - totalBoxDoughnuts;
   const avgDailyProduction = Math.round(totalProduction / (data.length || 1));
   const avgWastePercent = totalReceived > 0 ? ((totalWaste / totalReceived) * 100).toFixed(2) : '0.00';
-  
+
   // Cost calculations now use variety-specific and box-specific costs
   const avgDailyCost = totalProductionCost / (data.length || 1);
   const avgCostPerDonut = totalProduction > 0 ? totalProductionCost / totalProduction : 0;
-  
+
   // Performance comparison (current period vs same period last week/month/year)
   const getPerformanceComparison = (): { production: PerformanceComparison; waste: PerformanceComparison } => {
       const currentData = data;
@@ -633,7 +633,7 @@ const StatsPage: React.FC = () => {
 
           const prevRangeStart = new Date(rangeStart);
           prevRangeStart.setDate(rangeStart.getDate() - periodLength);
-    
+
          const prevRangeEnd = new Date(rangeEnd);
          prevRangeEnd.setDate(rangeEnd.getDate() - periodLength);
 
@@ -644,15 +644,15 @@ const StatsPage: React.FC = () => {
           break;
         }
       }
-    
+
     const currentProduction = currentData.reduce((sum, day) => sum + day.production, 0);
     const currentWaste = currentData.reduce((sum, day) => sum + day.waste, 0);
     const previousProduction = comparisonData.reduce((sum, day) => sum + day.production, 0);
     const previousWaste = comparisonData.reduce((sum, day) => sum + day.waste, 0);
-    
+
     const productionChange = currentProduction - previousProduction;
     const wasteChange = currentWaste - previousWaste;
-    
+
     return {
       production: {
         current: currentProduction,
@@ -670,26 +670,26 @@ const StatsPage: React.FC = () => {
       }
     };
   };
-  
+
   const performanceComparison = getPerformanceComparison();
-  
+
   // Real variety popularity from actual sales data (received - waste)
   const getRealVarietyPopularity = (): VarietyPopularity[] => {
     const varietyStats: { [varietyId: string]: { quantity: number; formName?: string } } = {};
-    
+
     // Get the filtered dates to match our current selection
     const filteredDates = data.map(d => d.date);
-    
+
     // Debug: Log that we're using real sales data
     console.log('Using 100% REAL SALES DATA for variety popularity (received - waste)');
     console.log('Filtered dates:', filteredDates);
     console.log('Raw production plans available:', rawProductionPlans.length);
-    
+
     // Extract real variety sales data from raw production plans
     rawProductionPlans.forEach(plan => {
       // Only process plans that match our filtered date range
       if (!filteredDates.includes(plan.date)) return;
-      
+
       const planEntries = getPlanEntries(plan);
       if (planEntries.length > 0) {
         planEntries.forEach((store: any) => {
@@ -697,7 +697,7 @@ const StatsPage: React.FC = () => {
           if (selectedStores.length > 0 && !selectedStores.includes(store.store_id)) {
             return;
           }
-          
+
           // Process individual production items - use SALES quantities (received - waste)
           if (store.production_items && Array.isArray(store.production_items)) {
             store.production_items.forEach((item: any) => {
@@ -706,7 +706,7 @@ const StatsPage: React.FC = () => {
               const received = (item.received !== null && item.received !== undefined) ? item.received : 0;
               const waste = item.waste || 0;
               const salesQuantity = received - waste;
-              
+
               if (!varietyStats[varietyId]) {
                 const variety = varieties.find(v => v.id === varietyId);
                 const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
@@ -715,11 +715,11 @@ const StatsPage: React.FC = () => {
                   formName: form?.name
                 };
               }
-              
+
               varietyStats[varietyId].quantity += salesQuantity;
             });
           }
-          
+
           // Process varieties from box productions - use SALES quantities
           if (store.box_productions && Array.isArray(store.box_productions)) {
             store.box_productions.forEach((boxProd: any) => {
@@ -729,11 +729,11 @@ const StatsPage: React.FC = () => {
                 const receivedBoxes = (boxProd.received !== null && boxProd.received !== undefined) ? boxProd.received : 0;
                 const wasteBoxes = boxProd.waste || 0;
                 const salesBoxes = receivedBoxes - wasteBoxes;
-                
+
                 box.varieties.forEach(boxVariety => {
                   const varietyId = boxVariety.varietyId;
                   const varietyQuantityFromSalesBoxes = boxVariety.quantity * salesBoxes;
-                  
+
                   if (!varietyStats[varietyId]) {
                     const variety = varieties.find(v => v.id === varietyId);
                     const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
@@ -742,7 +742,7 @@ const StatsPage: React.FC = () => {
                       formName: form?.name
                     };
                   }
-                  
+
                   varietyStats[varietyId].quantity += varietyQuantityFromSalesBoxes;
                 });
               }
@@ -751,44 +751,44 @@ const StatsPage: React.FC = () => {
         });
       }
     });
-    
+
     // Debug: Log the real variety sales statistics
     console.log('Real variety SALES statistics:', varietyStats);
-    
+
     const totalVarietySales = Object.values(varietyStats).reduce((sum, data) => sum + data.quantity, 0);
     console.log('Total variety SALES from real data:', totalVarietySales);
-    
+
     return varieties
       .filter(v => v.isActive)
       .map(variety => ({
         id: variety.id,
         name: variety.name,
         quantity: varietyStats[variety.id]?.quantity || 0,
-        percentage: totalVarietySales > 0 ? 
+        percentage: totalVarietySales > 0 ?
           Math.round(((varietyStats[variety.id]?.quantity || 0) / totalVarietySales) * 100) : 0,
         formName: varietyStats[variety.id]?.formName
       }))
       .filter(variety => variety.quantity > 0) // Only show varieties that were actually sold
       .sort((a, b) => b.quantity - a.quantity);
   };
-  
+
   // Real box popularity from actual sales data (received - waste)
   const getRealBoxPopularity = (): BoxPopularity[] => {
     const boxStats: { [boxId: string]: { quantity: number; boxName: string } } = {};
-    
+
     // Get the filtered dates to match our current selection
     const filteredDates = data.map(d => d.date);
-    
+
     // Debug: Log that we're using real sales data
     console.log('Using 100% REAL SALES DATA for box popularity (received - waste)');
     console.log('Filtered dates:', filteredDates);
     console.log('Raw production plans available:', rawProductionPlans.length);
-    
+
     // Extract real box sales data from raw production plans
     rawProductionPlans.forEach(plan => {
       // Only process plans that match our filtered date range
       if (!filteredDates.includes(plan.date)) return;
-      
+
       const planEntries = getPlanEntries(plan);
       if (planEntries.length > 0) {
         planEntries.forEach((store: any) => {
@@ -796,7 +796,7 @@ const StatsPage: React.FC = () => {
           if (selectedStores.length > 0 && !selectedStores.includes(store.store_id)) {
             return;
           }
-          
+
           if (store.box_productions && Array.isArray(store.box_productions)) {
             store.box_productions.forEach((boxProd: any) => {
               const boxName = boxProd.box_name;
@@ -804,7 +804,7 @@ const StatsPage: React.FC = () => {
               const receivedBoxes = (boxProd.received !== null && boxProd.received !== undefined) ? boxProd.received : 0;
               const wasteBoxes = boxProd.waste || 0;
               const salesBoxes = receivedBoxes - wasteBoxes;
-              
+
               // Find the box configuration by name
               const box = boxes.find(b => b.name === boxName);
               if (box) {
@@ -814,7 +814,7 @@ const StatsPage: React.FC = () => {
                     boxName: boxName
                   };
                 }
-                
+
                 boxStats[box.id].quantity += salesBoxes;
               }
             });
@@ -822,19 +822,19 @@ const StatsPage: React.FC = () => {
         });
       }
     });
-    
+
     // Debug: Log the real box sales statistics
     console.log('Real box SALES statistics:', boxStats);
-    
+
     const totalBoxSales = Object.values(boxStats).reduce((sum, data) => sum + data.quantity, 0);
     console.log('Total box SALES from real data:', totalBoxSales);
-    
+
     return boxes
       .filter(box => box.isActive)
       .map(box => {
         const boxQuantity = boxStats[box.id]?.quantity || 0;
         const totalDoughnuts = boxQuantity * box.size;
-        
+
         // Get varieties in this box
         const boxVarieties = box.varieties ? box.varieties.map(boxVariety => {
           const variety = varieties.find(v => v.id === boxVariety.varietyId);
@@ -843,9 +843,9 @@ const StatsPage: React.FC = () => {
             quantity: boxVariety.quantity
           };
         }) : [];
-        
+
         // Get unique forms from the varieties in this box
-        const boxForms = box.varieties ? 
+        const boxForms = box.varieties ?
           [...new Set(box.varieties
             .map(boxVariety => {
               const variety = varieties.find(v => v.id === boxVariety.varietyId);
@@ -857,14 +857,14 @@ const StatsPage: React.FC = () => {
             })
             .filter(formName => formName !== null)
           )] : [];
-        
+
         return {
           id: box.id,
           name: box.name,
           size: box.size,
           quantity: boxQuantity,
           totalDoughnuts,
-          percentage: totalBoxSales > 0 ? 
+          percentage: totalBoxSales > 0 ?
             Math.round((boxQuantity / totalBoxSales) * 100) : 0,
           varieties: boxVarieties,
           forms: boxForms as string[]
@@ -873,13 +873,13 @@ const StatsPage: React.FC = () => {
       .filter(box => box.quantity > 0) // Only show boxes that were actually sold
       .sort((a, b) => b.quantity - a.quantity);
   };
-  
+
   // Format data for production trend chart
   const getChartData = () => {
     return data.map(item => {
       const date = new Date(item.date);
       let formattedDate = '';
-      
+
       switch (selectedPeriod) {
         case 'day':
           formattedDate = date.toLocaleDateString('fr-FR', {
@@ -891,22 +891,22 @@ const StatsPage: React.FC = () => {
           formattedDate = date.toLocaleDateString('fr-FR', {
             day: '2-digit',
             month: '2-digit'
-           });   
+           });
           break;
         case 'month':
           formattedDate = date.toLocaleDateString('fr-FR', {
-            day: '2-digit', 
-            month: 'short' 
+            day: '2-digit',
+            month: 'short'
           });
           break;
         case 'year':
-          formattedDate = date.toLocaleDateString('fr-FR', { 
-            month: 'short', 
-            year: '2-digit' 
+          formattedDate = date.toLocaleDateString('fr-FR', {
+            month: 'short',
+            year: '2-digit'
           });
           break;
       }
-      
+
       return {
         date: formattedDate,
         fullDate: item.date,
@@ -968,10 +968,10 @@ const StatsPage: React.FC = () => {
     const filteredDates = data.map(d => d.date);
     let totalVarietiesFromPlans = 0;
     let totalBoxesFromPlans = 0;
-    
+
     rawProductionPlans.forEach(plan => {
       if (!filteredDates.includes(plan.date)) return;
-      
+
       const planEntries = getPlanEntries(plan);
       if (planEntries.length > 0) {
         planEntries.forEach((store: any) => {
@@ -984,7 +984,7 @@ const StatsPage: React.FC = () => {
         });
       }
     });
-    
+
     console.log('✅ Real Data Validation:');
     console.log('📊 Total individual doughnuts from plans:', totalVarietiesFromPlans);
     console.log('📦 Total boxes from plans:', totalBoxesFromPlans);
@@ -1006,16 +1006,16 @@ const StatsPage: React.FC = () => {
   // Generate PDF Sales Report
   const generateSalesReport = () => {
     const doc = new jsPDF();
-    
+
     // Set up the document
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text('Rapport de Ventes Détaillé par Magasin', 20, 25);
-    
+
     // Add period information
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
-    
+
     let periodText = '';
     switch (selectedPeriod) {
       case 'day':
@@ -1033,21 +1033,21 @@ const StatsPage: React.FC = () => {
         periodText = `Année ${selectedYear}`;
         break;
     }
-    
+
     doc.text(`Période: ${periodText}`, 20, 35);
     doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, 20, 45);
-    
+
     // Filter stores if specific stores are selected
-    const filteredStoreNames = selectedStores.length > 0 
+    const filteredStoreNames = selectedStores.length > 0
       ? stores.filter(store => selectedStores.includes(store.id)).map(store => store.name)
       : ['Tous les magasins'];
-    
+
     doc.setFontSize(10);
     doc.text(`Magasins: ${filteredStoreNames.join(', ')}`, 20, 55);
-    
+
     // Get filtered dates to match our current selection
     const filteredDates = data.map(d => d.date);
-    
+
     // Extract detailed sales data from raw production plans
     const detailedSalesData: Array<{
       storeName: string;
@@ -1057,11 +1057,11 @@ const StatsPage: React.FC = () => {
       waste: number;
       sales: number;
     }> = [];
-    
+
     rawProductionPlans.forEach(plan => {
       // Only process plans that match our filtered date range
       if (!filteredDates.includes(plan.date)) return;
-      
+
       const planEntries = getPlanEntries(plan);
       if (planEntries.length > 0) {
         planEntries.forEach((store: any) => {
@@ -1069,19 +1069,19 @@ const StatsPage: React.FC = () => {
           if (selectedStores.length > 0 && !selectedStores.includes(store.store_id)) {
             return;
           }
-          
+
           const storeName = store.store_name;
-          
+
           // Process individual production items (varieties)
           if (store.production_items && Array.isArray(store.production_items)) {
             store.production_items.forEach((item: any) => {
               const variety = varieties.find(v => v.id === item.variety_id);
               const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
-              
+
               const received = item.received !== null && item.received !== undefined ? item.received : item.quantity;
               const waste = item.waste || 0;
               const sales = received - waste;
-              
+
               detailedSalesData.push({
                 storeName: storeName,
                 variety: variety?.name || 'Variété inconnue',
@@ -1092,31 +1092,31 @@ const StatsPage: React.FC = () => {
               });
             });
           }
-          
+
           // Process box productions
           if (store.box_productions && Array.isArray(store.box_productions)) {
             store.box_productions.forEach((boxProd: any) => {
               const box = boxes.find(b => b.name === boxProd.box_name);
               const boxQuantity = boxProd.quantity || 0;
-              
+
               if (box) {
                 const boxSize = box.size;
                 const receivedBoxes = boxProd.received !== null && boxProd.received !== undefined ? boxProd.received : boxQuantity;
                 const wasteBoxes = boxProd.waste || 0;
                 const salesBoxes = receivedBoxes - wasteBoxes;
-                
+
                 // Convert to doughnuts
                 const receivedDoughnuts = receivedBoxes * boxSize;
                 const wasteDoughnuts = wasteBoxes * boxSize;
                 const salesDoughnuts = salesBoxes * boxSize;
-                
+
                 // Get varieties in this box for description
-                const boxVarieties = box.varieties ? 
+                const boxVarieties = box.varieties ?
                   box.varieties.map(bv => {
                     const v = varieties.find(variety => variety.id === bv.varietyId);
                     return v?.name || 'Inconnue';
                   }).join(', ') : 'Non configurées';
-                
+
                 detailedSalesData.push({
                   storeName: storeName,
                   variety: boxVarieties,
@@ -1131,7 +1131,7 @@ const StatsPage: React.FC = () => {
         });
       }
     });
-    
+
     // Sort by store name, then by variety/box format
     detailedSalesData.sort((a, b) => {
       if (a.storeName !== b.storeName) {
@@ -1139,12 +1139,12 @@ const StatsPage: React.FC = () => {
       }
       return a.variety.localeCompare(b.variety);
     });
-    
+
     // Prepare table data
     const tableHeaders = [
       ['Magasin', 'Variété', 'Format', 'Reçu', 'Déchets', 'Ventes', '% Déchets']
     ];
-    
+
     const tableData = detailedSalesData.map(row => [
       row.storeName,
       row.variety,
@@ -1154,7 +1154,7 @@ const StatsPage: React.FC = () => {
       formatNum(row.sales),
       row.received > 0 ? ((row.waste / row.received) * 100).toFixed(1) + '%' : '0%'
     ]);
-    
+
     // Add the table
     (doc as any).autoTable({
       startY: 70,
@@ -1180,10 +1180,10 @@ const StatsPage: React.FC = () => {
         6: { cellWidth: 20, halign: 'center' } // Waste %
       }
     });
-    
+
     // Add summary section
     const finalY = Math.max((doc as any).lastAutoTable?.finalY + 20, 120); // Ensure minimum Y position
-    
+
     // Calculate totals
     const totals = detailedSalesData.reduce((acc, row) => ({
       received: acc.received + row.received,
@@ -1194,10 +1194,10 @@ const StatsPage: React.FC = () => {
       waste: 0,
       sales: 0
     });
-    
+
     // Calculate overall waste percentage for PDF summary
     const overallWastePercent = totals.received > 0 ? (totals.waste / totals.received) * 100 : 0;
-    
+
     // Prepare summary data
     const summaryData = [
       ['Total Reçu:', formatNum(totals.received) + ' doughnuts'],
@@ -1206,21 +1206,21 @@ const StatsPage: React.FC = () => {
       ['Coût de Production:', 'CHF ' + totalProductionCost.toFixed(2)],
       ['Coût des Déchets:', 'CHF ' + totalWasteCost.toFixed(2)]
     ];
-    
+
     // Check if we need a new page for the summary
     const summaryHeight = 60; // Approximate height needed for summary
     if (finalY + summaryHeight > 280) { // Page height limit
       doc.addPage();
       const newPageY = 30;
-      
+
       // Summary box on new page
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
       doc.text('Résumé Global', 20, newPageY);
-      
+
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      
+
       summaryData.forEach((row, index) => {
         doc.text(row[0], 20, newPageY + 15 + (index * 8));
         doc.text(row[1], 80, newPageY + 15 + (index * 8));
@@ -1230,16 +1230,16 @@ const StatsPage: React.FC = () => {
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
       doc.text('Résumé Global', 20, finalY);
-      
+
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      
+
       summaryData.forEach((row, index) => {
         doc.text(row[0], 20, finalY + 15 + (index * 8));
         doc.text(row[1], 80, finalY + 15 + (index * 8));
       });
     }
-    
+
     // Save the PDF
     const storeFilter = selectedStores.length > 0 ? `-${selectedStores.length}magasins` : '-tous-magasins';
     const filename = `rapport-ventes-detaille${storeFilter}-${periodText.replace(/[^a-zA-Z0-9]/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
@@ -1252,16 +1252,16 @@ const StatsPage: React.FC = () => {
     if (!store) return;
 
     const doc = new jsPDF();
-    
+
     // Set up the document
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text(`Rapport de Ventes - ${store.name}`, 20, 25);
-    
+
     // Add period information
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
-    
+
     let periodText = '';
     switch (selectedPeriod) {
       case 'day':
@@ -1279,18 +1279,18 @@ const StatsPage: React.FC = () => {
         periodText = `Année ${selectedYear}`;
         break;
     }
-    
+
     doc.text(`Période: ${periodText}`, 20, 35);
     doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, 20, 45);
-    
+
     // Store overview
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('Aperçu du Magasin', 20, 65);
-    
+
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    
+
     const sales = store.received - store.waste;
     const overviewData = [
       ['Production Totale:', formatNum(store.production) + ' doughnuts'],
@@ -1300,7 +1300,7 @@ const StatsPage: React.FC = () => {
       ['Coût de Production:', 'CHF ' + store.cost.toFixed(2)],
       ['Coût des Déchets:', 'CHF ' + store.wasteCost.toFixed(2)]
     ];
-    
+
     overviewData.forEach((row, index) => {
       doc.text(row[0], 20, 80 + (index * 8));
       doc.text(row[1], 80, 80 + (index * 8));
@@ -1315,25 +1315,25 @@ const StatsPage: React.FC = () => {
       waste: number;
       sales: number;
     }> = [];
-    
+
     rawProductionPlans.forEach(plan => {
       if (!filteredDates.includes(plan.date)) return;
-      
+
       const planEntries = getPlanEntries(plan);
       if (planEntries.length > 0) {
         planEntries.forEach((planStore: any) => {
           if (planStore.store_id !== storeId) return;
-          
+
           // Process individual production items
           if (planStore.production_items && Array.isArray(planStore.production_items)) {
             planStore.production_items.forEach((item: any) => {
               const variety = varieties.find(v => v.id === item.variety_id);
               const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
-              
+
               const received = item.received !== null && item.received !== undefined ? item.received : item.quantity;
               const waste = item.waste || 0;
               const sales = received - waste;
-              
+
               storeDetailedData.push({
                 variety: variety?.name || 'Variété inconnue',
                 boxFormat: form?.name ? `Individuel (${form.name})` : 'Individuel',
@@ -1343,7 +1343,7 @@ const StatsPage: React.FC = () => {
               });
             });
           }
-          
+
           // Process box productions
           if (planStore.box_productions && Array.isArray(planStore.box_productions)) {
             planStore.box_productions.forEach((boxProd: any) => {
@@ -1354,17 +1354,17 @@ const StatsPage: React.FC = () => {
                 const receivedBoxes = boxProd.received !== null && boxProd.received !== undefined ? boxProd.received : boxQuantity;
                 const wasteBoxes = boxProd.waste || 0;
                 const salesBoxes = receivedBoxes - wasteBoxes;
-                
+
                 const receivedDoughnuts = receivedBoxes * boxSize;
                 const wasteDoughnuts = wasteBoxes * boxSize;
                 const salesDoughnuts = salesBoxes * boxSize;
-                
-                const boxVarieties = box.varieties ? 
+
+                const boxVarieties = box.varieties ?
                   box.varieties.map(bv => {
                     const v = varieties.find(variety => variety.id === bv.varietyId);
                     return v?.name || 'Inconnue';
                   }).join(', ') : 'Non configurées';
-                
+
                 storeDetailedData.push({
                   variety: boxVarieties,
                   boxFormat: `Boîte ${box.name} (${boxSize} unités)`,
@@ -1384,11 +1384,11 @@ const StatsPage: React.FC = () => {
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
       doc.text('Détail par Variété et Format', 20, 130);
-      
+
       const tableHeaders = [
         ['Variété', 'Format', 'Reçu', 'Déchets', 'Ventes', '% Déchets']
       ];
-      
+
       const tableData = storeDetailedData.map(row => [
         row.variety,
         row.boxFormat,
@@ -1397,7 +1397,7 @@ const StatsPage: React.FC = () => {
         formatNum(row.sales),
         row.received > 0 ? ((row.waste / row.received) * 100).toFixed(1) + '%' : '0%'
       ]);
-      
+
       (doc as any).autoTable({
         startY: 140,
         head: tableHeaders,
@@ -1439,10 +1439,10 @@ const StatsPage: React.FC = () => {
   };
 
   const varietyChartData = getVarietyChartData();
-  
+
   // Colors for variety pie chart
   const VARIETY_COLORS = [
-    '#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', 
+    '#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
     '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#6b7280'
   ];
 
@@ -1470,14 +1470,15 @@ const StatsPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Statistiques</h1>
-          <p className="text-gray-600 mt-1">Analyse de la production et des coûts</p>
+    <div className="stats-page max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <header className="stats-hero">
+        <div className="stats-hero__copy">
+          <p className="stats-hero__eyebrow"><Sparkles aria-hidden="true" /> Centre analytique</p>
+          <h1>La performance du réseau, en un regard.</h1>
+          <p>Ventes, déchets et tendances comparées pour détecter immédiatement les réussites et les points d’attention.</p>
         </div>
-        
-        <div className="mt-4 sm:mt-0 space-y-4">
+
+        <div className="stats-filters mt-4 sm:mt-0 space-y-4"><div className="stats-filters__label"><SlidersHorizontal aria-hidden="true" /> Période & périmètre</div>
           <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
           <div className="flex space-x-4">
             <select
@@ -1546,7 +1547,7 @@ const StatsPage: React.FC = () => {
               </select>
             )}
           </div>
-            
+
             <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
               <div className="w-64">
                 <label htmlFor="store-select" className="block text-xs font-medium text-gray-700 mb-1">
@@ -1573,7 +1574,7 @@ const StatsPage: React.FC = () => {
                   Ctrl+Click pour sélectionner plusieurs
                 </p>
               </div>
-            
+
               <button
                 onClick={generateSalesReport}
                 disabled={storePerformance.length === 0}
@@ -1586,13 +1587,13 @@ const StatsPage: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
       <MetricStrip items={[
-        { label: 'Production', value: totalProduction.toLocaleString('fr-FR'), detail: 'doughnuts sur la période' },
+        { label: 'Ventes potentielles', value: totalProduction.toLocaleString('fr-FR'), detail: 'doughnuts sur la période', tone: 'green' },
         { label: 'Réception', value: totalReceived.toLocaleString('fr-FR'), detail: 'unités confirmées', tone: 'blue' },
-        { label: 'Déchets', value: `${avgWastePercent}%`, detail: `${totalWaste.toLocaleString('fr-FR')} unités`, tone: Number(avgWastePercent) > 10 ? 'red' : 'amber' },
-        { label: 'Coût production', value: `CHF ${totalProductionCost.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}`, detail: `CHF ${avgCostPerDonut.toFixed(2)} / unité` }
+        { label: 'Déchets', value: `${avgWastePercent}%`, detail: `${totalWaste.toLocaleString('fr-FR')} unités`, tone: Number(avgWastePercent) > 10 ? 'red' : Number(avgWastePercent) > 6 ? 'amber' : 'green' },
+        { label: 'Coût production', value: `CHF ${totalProductionCost.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}`, detail: `CHF ${avgCostPerDonut.toFixed(2)} / unité`, tone: 'violet' }
       ]} />
 
       {error && (
@@ -1611,10 +1612,10 @@ const StatsPage: React.FC = () => {
       )}
 
        {kpiSnapshot && (
-        <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+        <div className="forecast-panel mb-6 rounded-lg p-4">
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-emerald-900">KPI Forecast (dernier snapshot)</h2>
-            <span className="text-xs text-emerald-700">
+            <h2 className="text-sm font-semibold text-violet-900">KPI Forecast (dernier snapshot)</h2>
+            <span className="text-xs text-violet-700">
               {kpiSnapshot.snapshot_date} • {kpiSnapshot.range_start} → {kpiSnapshot.range_end}
             </span>
           </div>
@@ -1627,9 +1628,9 @@ const StatsPage: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="stats-kpis grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {/* Production & Boxes Total */}
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-krispy-green">
+        <div className="analytics-kpi analytics-kpi--sales">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm font-medium text-gray-600">Production Totale</p>
@@ -1645,9 +1646,9 @@ const StatsPage: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Waste Analysis */}
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-red-400">
+        <div className={`analytics-kpi ${Number(avgWastePercent) > 10 ? 'analytics-kpi--danger' : Number(avgWastePercent) > 6 ? 'analytics-kpi--warning' : 'analytics-kpi--success'}`}>
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm font-medium text-gray-600">Analyse des Déchets</p>
@@ -1662,9 +1663,9 @@ const StatsPage: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Production Cost */}
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-400">
+        <div className="analytics-kpi analytics-kpi--volume">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm font-medium text-gray-600">Coût de Production</p>
@@ -1679,9 +1680,9 @@ const StatsPage: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Performance Indicator */}
-        <div className="bg-white rounded-lg shadow p-6 border-l-4 border-purple-400">
+        <div className="analytics-kpi analytics-kpi--insight">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm font-medium text-gray-600">Performance Globale</p>
@@ -1723,9 +1724,9 @@ const StatsPage: React.FC = () => {
           </div>
         </div>
       </div>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white rounded-lg shadow">
+        <div className="analytics-panel">
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-800 flex items-center">
               <TrendingUp className="h-5 w-5 mr-2 text-krispy-green" />
@@ -1738,12 +1739,12 @@ const StatsPage: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis 
-                      dataKey="date" 
+                    <XAxis
+                      dataKey="date"
                       tick={{ fontSize: 12 }}
                       stroke="#6b7280"
                     />
-                    <YAxis 
+                    <YAxis
                       tick={{ fontSize: 12 }}
                       stroke="#6b7280"
                     />
@@ -1754,36 +1755,36 @@ const StatsPage: React.FC = () => {
                       dataKey="production"
                       name="Production"
                       stackId="1"
-                      stroke="#22c55e"
-                      fill="#22c55e"
-                      fillOpacity={0.6}
+                      stroke="#168151"
+                      fill="#168151"
+                      fillOpacity={0.10}
                     />
                     <Area
                       type="monotone"
                       dataKey="received"
                       name="Reçu"
                       stackId="2"
-                      stroke="#3b82f6"
-                      fill="#3b82f6"
-                      fillOpacity={0.6}
+                      stroke="#3679b8"
+                      fill="#3679b8"
+                      fillOpacity={0.08}
                     />
                     <Area
                       type="monotone"
                       dataKey="sales"
                       name="Ventes"
                       stackId="3"
-                      stroke="#10b981"
-                      fill="#10b981"
-                      fillOpacity={0.8}
+                      stroke="#046a38"
+                      fill="#046a38"
+                      fillOpacity={0.18}
                     />
                     <Area
                       type="monotone"
                       dataKey="waste"
                       name="Déchets"
                       stackId="4"
-                      stroke="#ef4444"
-                      fill="#ef4444"
-                      fillOpacity={0.6}
+                      stroke="#d33d56"
+                      fill="#d33d56"
+                      fillOpacity={0.12}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -1806,8 +1807,8 @@ const StatsPage: React.FC = () => {
             </div>
           </div>
         </div>
-        
-        <div className="bg-white rounded-lg shadow">
+
+        <div className="analytics-panel">
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-800 flex items-center">
               <PieChart className="h-5 w-5 mr-2 text-krispy-green" />
@@ -1829,9 +1830,9 @@ const StatsPage: React.FC = () => {
                       dataKey="value"
                     >
                       {varietyChartData.map((_, index) => (
-                        <Cell 
-                          key={`cell-${index}`} 
-                          fill={VARIETY_COLORS[index % VARIETY_COLORS.length]} 
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={VARIETY_COLORS[index % VARIETY_COLORS.length]}
                         />
                       ))}
                     </Pie>
@@ -1904,7 +1905,7 @@ const StatsPage: React.FC = () => {
             </div>
           </div>
         )}
-        
+
         {/* Enhanced Doughnut Popularity */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
@@ -1928,14 +1929,14 @@ const StatsPage: React.FC = () => {
                   const isTopPerformer = index < 3;
                   const dozens = Math.floor(variety.quantity / 12);
                   const units = variety.quantity % 12;
-                  
+
                   return (
-                    <div 
-                      key={variety.id} 
+                    <div
+                      key={variety.id}
                       className={`p-4 rounded-lg border-l-4 ${
-                        index === 0 ? 'border-yellow-400 bg-yellow-50' :
-                        index === 1 ? 'border-gray-400 bg-gray-50' :
-                        index === 2 ? 'border-orange-400 bg-orange-50' :
+                        index === 0 ? 'border-emerald-500 bg-emerald-50' :
+                        index === 1 ? 'border-blue-400 bg-blue-50' :
+                        index === 2 ? 'border-violet-400 bg-violet-50' :
                         'border-gray-200 bg-gray-25'
                       } ${isTopPerformer ? 'shadow-sm' : ''}`}
                     >
@@ -1943,16 +1944,14 @@ const StatsPage: React.FC = () => {
                         <div className="flex items-center space-x-3">
                           <div className="flex items-center space-x-2">
                             <span className={`text-lg font-bold ${
-                              index === 0 ? 'text-yellow-600' :
-                              index === 1 ? 'text-gray-600' :
-                              index === 2 ? 'text-orange-600' :
+                              index === 0 ? 'text-emerald-700' :
+                              index === 1 ? 'text-blue-700' :
+                              index === 2 ? 'text-violet-700' :
                               'text-gray-500'
                             }`}>
                               #{index + 1}
                             </span>
-                            {index === 0 && <span className="text-yellow-500">🥇</span>}
-                            {index === 1 && <span className="text-gray-500">🥈</span>}
-                            {index === 2 && <span className="text-orange-500">🥉</span>}
+
                           </div>
                           <div>
                             <h3 className="font-semibold text-gray-900">{variety.name}</h3>
@@ -1964,9 +1963,9 @@ const StatsPage: React.FC = () => {
                         <div className="text-right">
                           <div className="flex items-center space-x-2">
                             <span className={`text-2xl font-bold ${
-                              index === 0 ? 'text-yellow-600' :
-                              index === 1 ? 'text-gray-600' :
-                              index === 2 ? 'text-orange-600' :
+                              index === 0 ? 'text-emerald-700' :
+                              index === 1 ? 'text-blue-700' :
+                              index === 2 ? 'text-violet-700' :
                               'text-gray-700'
                             }`}>
                               {variety.percentage}%
@@ -1983,15 +1982,15 @@ const StatsPage: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Progress bar */}
                       <div className="mt-3">
                         <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
+                          <div
                             className={`h-2 rounded-full ${
-                              index === 0 ? 'bg-yellow-400' :
-                              index === 1 ? 'bg-gray-400' :
-                              index === 2 ? 'bg-orange-400' :
+                              index === 0 ? 'bg-emerald-500' :
+                              index === 1 ? 'bg-blue-400' :
+                              index === 2 ? 'bg-violet-400' :
                               'bg-gray-300'
                             }`}
                             style={{ width: `${variety.percentage}%` }}
@@ -2032,10 +2031,10 @@ const StatsPage: React.FC = () => {
               <div className="space-y-4">
                 {boxPopularity.map((box, index) => {
                   const isTopPerformer = index < 3;
-                  
+
                   return (
-                    <div 
-                      key={box.id} 
+                    <div
+                      key={box.id}
                       className={`p-4 rounded-lg border-l-4 ${
                         index === 0 ? 'border-purple-400 bg-purple-50' :
                         index === 1 ? 'border-blue-400 bg-blue-50' :
@@ -2080,11 +2079,11 @@ const StatsPage: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Progress bar */}
                       <div className="mt-3">
                         <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
+                          <div
                             className={`h-2 rounded-full ${
                               index === 0 ? 'bg-purple-400' :
                               index === 1 ? 'bg-blue-400' :
@@ -2095,7 +2094,7 @@ const StatsPage: React.FC = () => {
                           ></div>
                         </div>
                       </div>
-                      
+
                       {/* Box Details */}
                       <div className="mt-3 pt-3 border-t border-gray-200">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
@@ -2115,14 +2114,14 @@ const StatsPage: React.FC = () => {
                               <span className="text-gray-400 italic">Aucune variété configurée</span>
                             )}
                           </div>
-                          
+
                           {/* Forms used */}
                           <div>
                             <p className="font-medium text-gray-700 mb-1">Formes de doughnuts:</p>
                             {box.forms.length > 0 ? (
                               <div className="flex flex-wrap gap-1">
                                 {box.forms.map((form, fIndex) => (
-                                  <span 
+                                  <span
                                     key={fIndex}
                                     className="inline-block px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs"
                                   >
@@ -2149,7 +2148,7 @@ const StatsPage: React.FC = () => {
           </div>
         </div>
       </div>
-      
+
       <div className="bg-white rounded-lg shadow mb-8">
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-800 flex items-center">
@@ -2176,7 +2175,7 @@ const StatsPage: React.FC = () => {
                 {storePerformance.map(store => {
                   const productionPercent = totalProduction > 0 ? Math.round((store.production / totalProduction) * 100) : 0;
                   const sales = store.received - store.waste;
-                  
+
                   return (
                     <tr key={store.id}>
                       <td data-label="Magasin" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">

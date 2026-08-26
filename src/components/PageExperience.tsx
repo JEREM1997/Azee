@@ -9,8 +9,18 @@ export function PageHeader({ eyebrow, title, description, icon: Icon, actions, m
   actions?: React.ReactNode;
   meta?: React.ReactNode;
 }) {
+  const context = /atelier|production/i.test(eyebrow)
+    ? 'operations'
+    : /logistique|livraison/i.test(eyebrow)
+      ? 'logistics'
+      : /commande/i.test(eyebrow)
+        ? 'commerce'
+        : /pilotage|traçabilité/i.test(eyebrow)
+          ? 'reporting'
+          : 'administration';
+
   return (
-    <header className="page-hero">
+    <header className={`page-hero page-hero--${context}`}>
       <div className="page-hero__copy">
         <div className="page-hero__eyebrow">{Icon && <Icon aria-hidden="true" />}{eyebrow}</div>
         <h1 className="page-hero__title">{title}</h1>
@@ -22,7 +32,7 @@ export function PageHeader({ eyebrow, title, description, icon: Icon, actions, m
   );
 }
 
-export function MetricStrip({ items }: { items: Array<{ label: string; value: React.ReactNode; detail?: string; tone?: 'green' | 'red' | 'amber' | 'blue' }> }) {
+export function MetricStrip({ items }: { items: Array<{ label: string; value: React.ReactNode; detail?: string; tone?: 'green' | 'red' | 'amber' | 'blue' | 'violet' }> }) {
   return <section className="metric-strip" aria-label="Résumé de la page">{items.map((item) => (
     <div className="metric-strip__item" key={item.label}>
       <span className={`metric-strip__marker metric-strip__marker--${item.tone || 'green'}`} />
