@@ -699,20 +699,26 @@ const OrdersPage: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <input
-                    type="text"
-                    value={form.handledBy}
-                    onChange={(event) => handleFormChange('handledBy', event.target.value)}
-                    className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
-                    placeholder="Traitée par"
-                  />
-                  <input
-                    type="text"
-                    value={form.deliveredBy}
-                    onChange={(event) => handleFormChange('deliveredBy', event.target.value)}
-                    className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
-                    placeholder="Livrée par"
-                  />
+                  <label className="block text-sm font-medium text-gray-700">
+                    Commande saisie par
+                    <input
+                      type="text"
+                      value={form.handledBy}
+                      onChange={(event) => handleFormChange('handledBy', event.target.value)}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
+                      placeholder="Nom de la personne"
+                    />
+                  </label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Livraison effectuée par
+                    <input
+                      type="text"
+                      value={form.deliveredBy}
+                      onChange={(event) => handleFormChange('deliveredBy', event.target.value)}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
+                      placeholder="Nom du livreur"
+                    />
+                  </label>
                 </div>
               </div>
             </div>
@@ -910,13 +916,15 @@ const OrdersPage: React.FC = () => {
                       <td data-label="Commande" className="px-4 py-4 text-sm text-gray-900">
                         <div className="font-semibold">{order.customerName}</div>
                         <div className="text-gray-600">{orderTypeLabels[order.orderType]}</div>
+                        <div className="mt-1 text-xs text-gray-600">
+                          Saisie par : <span className="font-medium text-gray-800">{order.handledBy || 'Non renseigné'}</span>
+                        </div>
                       </td>
 
                       <td data-label="Magasin" className="px-4 py-4 text-sm text-gray-900">
                         <div className="font-semibold">
                           {order.storeName || 'Magasin inconnu'}
                         </div>
-                        <div className="text-gray-600">{order.storeId}</div>
                       </td>
 
                       <td data-label="Livraison" className="px-4 py-4 text-sm text-gray-900">
