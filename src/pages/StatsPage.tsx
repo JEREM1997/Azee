@@ -1430,21 +1430,32 @@ const StatsPage: React.FC = () => {
 
   // Format data for variety pie chart
   const getVarietyChartData = () => {
-    return varietyPopularity.slice(0, 8).map((variety, _) => ({
+    const primary = varietyPopularity.slice(0, 5).map((variety) => ({
       name: variety.name,
       value: variety.quantity,
       percentage: variety.percentage,
       formName: variety.formName
     }));
+    const secondary = varietyPopularity.slice(5);
+    if (secondary.length) {
+      primary.push({
+        name: `Autres (${secondary.length})`,
+        value: secondary.reduce((total, variety) => total + variety.quantity, 0),
+        percentage: secondary.reduce((total, variety) => total + variety.percentage, 0),
+        formName: ''
+      });
+    }
+    return primary;
   };
 
   const varietyChartData = getVarietyChartData();
 
   // Colors for variety pie chart
   const VARIETY_COLORS = [
-    '#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
-    '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#6b7280'
+    '#168151', '#3679b8', '#c47a10', '#9bafaa', '#bdc9c4', '#e1e7e4'
   ];
+
+  const leadingVariety = varietyChartData[0];
 
   // Custom tooltip for variety chart
   const VarietyTooltip = ({ active, payload }: any) => {
@@ -1817,7 +1828,7 @@ const StatsPage: React.FC = () => {
           </div>
           <div className="p-6">
             {varietyChartData.length > 0 ? (
-              <div className="h-64 w-full">
+              <div className="relative h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsPieChart>
                     <Pie
@@ -1839,6 +1850,7 @@ const StatsPage: React.FC = () => {
                     <Tooltip content={<VarietyTooltip />} />
                   </RechartsPieChart>
                 </ResponsiveContainer>
+                {leadingVariety && <div className="donut-center" aria-hidden="true"><strong>{leadingVariety.percentage}%</strong><span>n° 1</span></div>}
               </div>
             ) : (
               <div className="flex items-center justify-center h-64">
@@ -1852,13 +1864,7 @@ const StatsPage: React.FC = () => {
               {varietyPopularity.slice(0, 5).map((variety, index) => (
                 <div key={variety.id} className="flex items-center justify-between">
                   <div className="flex items-center">
-                    <span className={`w-3 h-3 inline-block rounded-full mr-2 ${
-                      index === 0 ? 'bg-krispy-green' :
-                      index === 1 ? 'bg-krispy-green-light' :
-                      index === 2 ? 'bg-krispy-green-dark' :
-                      index === 3 ? 'bg-krispy-red' :
-                      'bg-krispy-red-light'
-                    }`}></span>
+                    <span className="mr-2 inline-block h-3 w-3 rounded-full" style={{ backgroundColor: VARIETY_COLORS[index] }}></span>
                     <div>
                     <span className="text-sm text-gray-600">{variety.name}</span>
                       {variety.formName && (
