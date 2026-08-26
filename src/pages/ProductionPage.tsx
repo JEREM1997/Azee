@@ -1,3 +1,4 @@
+import ContentSkeleton from '../components/ContentSkeleton';
 import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { Plus, Minus, Save, AlertTriangle, Edit, Sparkles, Brain, TrendingUp, Store } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -684,11 +685,7 @@ const ProductionPage: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="app-background min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-krispy-green"></div>
-      </div>
-    );
+    return <ContentSkeleton variant="table" label="Préparation du plan de production…" />;
   }
 
   return (

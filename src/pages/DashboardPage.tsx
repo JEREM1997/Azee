@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { productionService } from '../services/productionService';
 import { ProductionPlan, StorePlan } from '../types';
 import { Calendar, Check, AlertTriangle, FileText, Truck, X, Store, Factory, CheckCircle2, Clock3, ArrowUpRight } from 'lucide-react';
+import ContentSkeleton from '../components/ContentSkeleton';
 
 const DashboardPage: React.FC = () => {
   const { currentUser: user, isAdmin, isProduction, isStore } = useAuth();
@@ -91,7 +92,7 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  if (loading) return <div className="space-y-6" aria-label="Chargement du tableau de bord"><div className="h-20 animate-pulse rounded-2xl bg-slate-200/70" /><div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[1,2,3,4].map(i => <div key={i} className="h-32 animate-pulse rounded-2xl bg-white" />)}</div><div className="h-80 animate-pulse rounded-2xl bg-white" /></div>;
+  if (loading) return <ContentSkeleton variant="dashboard" label="Préparation du tableau de bord…" />;
 
   const allowedStoreIds = new Set((user?.storeIds || []).map(id => id.toString().toLowerCase()));
   const visibleStores = currentPlan?.stores?.filter(store => isAdmin || isProduction || showAllStores || allowedStoreIds.has(store.store_id?.toString().toLowerCase())) || [];

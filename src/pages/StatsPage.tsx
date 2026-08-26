@@ -1,3 +1,4 @@
+import ContentSkeleton from '../components/ContentSkeleton';
 ﻿import React, { useState, useEffect } from 'react';
 import { BarChart2, PieChart, TrendingUp, DollarSign, Store, Target, Package, Printer } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
@@ -1464,11 +1465,7 @@ const StatsPage: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-krispy-green"></div>
-      </div>
-    );
+    return <ContentSkeleton variant="dashboard" label="Calcul des performances…" />;
   }
 
   return (

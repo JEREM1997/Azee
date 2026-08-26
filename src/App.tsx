@@ -41,7 +41,7 @@ export default function App() {
         <AuthProvider>
           <AdminProvider>
             <div className="app-shell min-h-screen">
-              <Suspense fallback={<LoadingSpinner fullScreen message="Loading application..." />}>
+              <Suspense fallback={<LoadingSpinner fullScreen size="large" message="Préparation de votre espace…" />}>
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
 
