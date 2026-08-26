@@ -61,8 +61,9 @@ const Toast: React.FC<ToastProps> = ({
 
   return createPortal(
     <div
-      className={`fixed bottom-4 right-4 flex items-center p-4 mb-4 rounded-lg border ${config.bgColor} ${config.textColor} ${config.borderColor}`}
-      role="alert"
+      className={`toast-enter fixed inset-x-3 bottom-24 z-[70] flex items-center rounded-xl border p-4 shadow-lg sm:inset-x-auto sm:bottom-4 sm:right-4 sm:max-w-md ${config.bgColor} ${config.textColor} ${config.borderColor}`}
+      role={type === 'error' ? 'alert' : 'status'}
+      aria-live={type === 'error' ? 'assertive' : 'polite'}
     >
       <Icon className={`w-5 h-5 mr-2 ${config.iconColor}`} />
       <span className="sr-only">{type}:</span>
@@ -81,4 +82,4 @@ const Toast: React.FC<ToastProps> = ({
   );
 };
 
-export default Toast; 
+export default Toast;

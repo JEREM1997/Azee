@@ -74,13 +74,25 @@ const Navbar: React.FC = () => {
   }, [isAdmin, isProduction, mobileNavigation]);
 
   const mobileNavColumnCount = mobilePrimaryNavigation.length + 1;
-  
+
   const isActive = (path: string) => location.pathname === path;
 
   useEffect(() => {
     setIsOpen(false);
     setIsManagementOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!isOpen && !isManagementOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+        setIsManagementOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isManagementOpen]);
 
   useEffect(() => {
     let isMounted = true;
@@ -108,11 +120,11 @@ const Navbar: React.FC = () => {
     const intervalId = window.setInterval(() => {
       void refreshPendingOrdersCount();
     }, 30000);
-    
+
     const handleOrdersChanged = () => {
       void refreshPendingOrdersCount();
     };
-    
+
     const handleWindowFocus = () => {
       void refreshPendingOrdersCount();
     };
@@ -148,15 +160,16 @@ const Navbar: React.FC = () => {
       {item.href === '/orders' && renderOrdersBadge()}
     </span>
   );
- 
+
   return (
     <>
-      <nav className="navbar-pattern shadow">
+      <a href="#main-content" className="skip-link">Aller au contenu principal</a>
+      <nav className="navbar-pattern sticky top-0 z-30 border-b border-slate-200/80 shadow-sm" aria-label="Navigation principale">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center gap-4">
             <div className="flex flex-shrink-0 items-center">
               <img
-               className="h-12 w-auto sm:h-16 lg:h-20" 
+               className="h-10 w-auto sm:h-11"
                 src={krispyKremeLogo}
                 alt="Krispy Kreme Operations"
               />
@@ -177,13 +190,15 @@ const Navbar: React.FC = () => {
                     {renderNavLabel(item)}
                   </Link>
                 ))}
-               </div> 
+               </div>
 
                {desktopManagementNavigation.length > 0 && (
                 <div className="relative hidden lg:flex flex-shrink-0">
                   <button
                     type="button"
                     onClick={() => setIsManagementOpen(prev => !prev)}
+                    aria-expanded={isManagementOpen}
+                    aria-haspopup="menu"
                     className={`${
                       desktopManagementNavigation.some(item => isActive(item.href))
                         ? 'border-krispy-green text-gray-900'
@@ -193,7 +208,7 @@ const Navbar: React.FC = () => {
                     Gestion
                     <ChevronDown className="ml-1 h-4 w-4" />
                   </button>
-                
+
              {isManagementOpen && (
                     <div className="absolute right-0 top-full z-30 mt-3 w-56 rounded-xl border border-gray-200 bg-white p-2 shadow-xl ring-1 ring-black/5">
                       {desktopManagementNavigation.map(item => (
@@ -201,9 +216,10 @@ const Navbar: React.FC = () => {
                           key={item.name}
                           to={item.href}
                           onClick={() => setIsManagementOpen(false)}
+                          role="menuitem"
                           className={`${
                             isActive(item.href)
-                              ? 'bg-krispy-green-light text-krispy-green'
+                              ? 'bg-emerald-50 text-krispy-green'
                               : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                           } block rounded-lg px-3 py-2 text-sm font-medium`}
                         >
@@ -228,7 +244,7 @@ const Navbar: React.FC = () => {
                     Gestion
                   </Link>
                 </div>
-              )}       
+              )}
             </div>
 
             <div className="hidden sm:flex flex-shrink-0 items-center gap-3">
@@ -246,10 +262,13 @@ const Navbar: React.FC = () => {
             <div className="ml-auto flex items-center sm:hidden">
               <button
                onClick={() => setIsOpen(prev => !prev)}
-                className="inline-flex items-center justify-center rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-krispy-green"  
+                type="button"
+                aria-expanded={isOpen}
+                aria-controls="mobile-navigation"
+                className="inline-flex items-center justify-center rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-krispy-green"
               >
                <span className="sr-only">Ouvrir le menu</span>
-                {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />} 
+                {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
               </button>
             </div>
           </div>
@@ -264,7 +283,7 @@ const Navbar: React.FC = () => {
                 onClick={() => setIsOpen(false)}
                 className={`${
                   isActive(item.href)
-                    ? 'bg-krispy-green-light text-krispy-green'
+                    ? 'bg-emerald-50 text-krispy-green'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 } block rounded-lg px-3 py-2 text-base font-medium`}
               >
@@ -275,7 +294,7 @@ const Navbar: React.FC = () => {
 
           <div className="border-t border-gray-200 px-4 py-4">
             <div className="mb-3 text-sm text-gray-500">
-              {user?.fullName || user?.email}  
+              {user?.fullName || user?.email}
             </div>
              <button
               onClick={() => {
@@ -298,7 +317,7 @@ const Navbar: React.FC = () => {
             onClick={() => setIsOpen(false)}
             className="absolute inset-0 bg-slate-900/35"
           />
-          <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-white px-4 pb-6 pt-4 shadow-2xl">
+          <div id="mobile-navigation" role="dialog" aria-modal="true" aria-label="Menu de navigation" className="mobile-sheet absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-3xl bg-white px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] pt-4 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <div className="text-sm font-semibold text-gray-900">Navigation</div>
@@ -321,7 +340,7 @@ const Navbar: React.FC = () => {
                   onClick={() => setIsOpen(false)}
                   className={`${
                     isActive(item.href)
-                      ? 'border-krispy-green bg-krispy-green-light text-krispy-green'
+                      ? 'border-emerald-200 bg-emerald-50 text-krispy-green'
                       : 'border-gray-200 text-gray-700'
                   } rounded-2xl border px-4 py-3 text-sm font-medium`}
                 >
@@ -383,7 +402,7 @@ const Navbar: React.FC = () => {
         </div>
       </div>
 
-      <main className="max-w-7xl mx-auto px-4 py-6 pb-24 sm:px-6 sm:pb-6 lg:px-8">
+      <main id="main-content" tabIndex={-1} className="page-enter mx-auto w-full max-w-[1440px] px-3 py-5 pb-24 sm:px-6 sm:py-7 sm:pb-8 lg:px-8">
         <Outlet />
       </main>
     </>

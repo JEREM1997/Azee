@@ -2,6 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: light;
+  --brand-green: #046a38;
+  --brand-green-dark: #03552e;
+  --brand-red: #c8102e;
+  --surface: #ffffff;
+  --canvas: #f6f8f7;
+  --ink: #17201c;
+  --muted: #64716a;
+  --border: #dfe6e2;
+  --radius-card: 1rem;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px rgba(15, 23, 42, 0.05);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    color: var(--ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+  button, [role='button'], select { touch-action: manipulation; }
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 3px solid rgba(4, 106, 56, 0.24);
+    outline-offset: 2px;
+  }
+  input, select, textarea { min-height: 44px; }
+  button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: not-allowed; opacity: .65; }
+  h1, h2, h3 { letter-spacing: -0.025em; text-wrap: balance; }
+}
+
+@layer components {
+  .app-shell { background: linear-gradient(180deg, rgba(255,255,255,.65), rgba(246,248,247,.92)); }
+  .navbar-pattern { background: rgba(255, 255, 255, .94); backdrop-filter: blur(14px); }
+  .skip-link {
+    position: fixed; left: 1rem; top: 1rem; z-index: 100; transform: translateY(-160%);
+    border-radius: .75rem; background: var(--brand-green); color: white; padding: .7rem 1rem;
+    font-weight: 700; transition: transform 160ms var(--ease-out);
+  }
+  .skip-link:focus { transform: translateY(0); }
+  .page-enter { animation: page-in 260ms var(--ease-out) both; }
+  .mobile-sheet { animation: sheet-in 240ms var(--ease-out) both; }
+  .toast-enter { animation: toast-in 220ms var(--ease-out) both; }
+
+  /* A consistent surface language without changing existing component behavior. */
+  main > div > .bg-white,
+  main > div > section.bg-white { border-color: var(--border); box-shadow: var(--shadow-card); }
+  main table { border-collapse: separate; border-spacing: 0; }
+  main thead { background-color: #f7f9f8; }
+  main th { color: #526059; font-size: .72rem; letter-spacing: .055em; }
+}
+
+@keyframes page-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -19,6 +85,12 @@ body {
   background-size: auto, cover;
   background-position: center, center;
   background-attachment: scroll, scroll;
+}
+
+@media (max-width: 639px) {
+  body { background-image: none; }
+  h1 { font-size: clamp(1.5rem, 7vw, 1.875rem) !important; line-height: 1.2 !important; }
+  main button:not([class*='rounded-full']), main a[class*='px-'] { min-height: 44px; }
 }
 
 #root {
@@ -109,4 +181,3 @@ canvas {
     max-width: 56%;
   }
 }
-
