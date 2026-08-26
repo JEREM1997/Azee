@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { productionService } from '../services/productionService';
 import { ProductionPlan, StorePlan } from '../types';
-import { Calendar, Check, AlertTriangle, TrendingUp, FileText, Truck, X, Store } from 'lucide-react';
+import { Calendar, Check, AlertTriangle, FileText, Truck, X, Store, Factory, CheckCircle2, Clock3, ArrowUpRight } from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
   const { currentUser: user, isAdmin, isProduction, isStore } = useAuth();
@@ -91,40 +91,33 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-krispy-green"></div>
-      </div>
-    );
-  }
+  if (loading) return <div className="space-y-6" aria-label="Chargement du tableau de bord"><div className="h-20 animate-pulse rounded-2xl bg-slate-200/70" /><div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[1,2,3,4].map(i => <div key={i} className="h-32 animate-pulse rounded-2xl bg-white" />)}</div><div className="h-80 animate-pulse rounded-2xl bg-white" /></div>;
+
+  const allowedStoreIds = new Set((user?.storeIds || []).map(id => id.toString().toLowerCase()));
+  const visibleStores = currentPlan?.stores?.filter(store => isAdmin || isProduction || showAllStores || allowedStoreIds.has(store.store_id?.toString().toLowerCase())) || [];
+  const completed = visibleStores.filter(store => store.delivery_confirmed && store.waste_reported).length;
+  const deliveries = visibleStores.filter(store => store.delivery_confirmed).length;
+  const progress = visibleStores.length ? Math.round((completed / visibleStores.length) * 100) : 0;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Tableau de Bord</h1>
-          <p className="text-gray-600 mt-1">Bienvenue, <span className="font-semibold">{user?.fullName}</span> !</p>
-        </div>
-        
-        <div className="mt-4 md:mt-0">
-          <div className="flex items-center space-x-2">
-            <label htmlFor="date-selector" className="text-sm font-medium text-gray-700">
-              Sélectionner une date:
-            </label>
+    <div>
+      <header className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+        <div><p className="eyebrow">Centre des opérations</p><h1 className="page-heading mt-2">Bonjour {user?.fullName?.split(' ')[0] || 'à vous'} <span aria-hidden="true">👋</span></h1><p className="page-description">Suivez la production, les livraisons et l’avancement du réseau en un coup d’œil.</p></div>
+        <div className="surface-card flex items-center gap-3 p-2.5 pl-4">
+            <Calendar className="h-4 w-4 text-krispy-green" />
+            <label htmlFor="date-selector" className="sr-only">Date d’activité</label>
             <input
               id="date-selector"
               type="date"
               value={selectedDate}
               onChange={handleDateChange}
-              className="shadow-sm focus:ring-krispy-green focus:border-krispy-green block sm:text-sm border-gray-300 rounded-md"
+              className="border-0 bg-transparent px-1 text-sm font-semibold text-slate-700 shadow-none focus:ring-0"
             />
-          </div>
         </div>
-      </div>
+      </header>
 
       {error && (
-        <div className="mb-8 bg-red-50 border-l-4 border-red-400 p-4">
+        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4">
           <div className="flex">
             <div className="flex-shrink-0">
               <AlertTriangle className="h-5 w-5 text-red-400" />
@@ -136,33 +129,29 @@ const DashboardPage: React.FC = () => {
         </div>
       )}
       
-      <div className="bg-white rounded-lg shadow mb-8">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800 flex items-center">
-            <Calendar className="h-5 w-5 mr-2 text-krispy-green" />
-            Production du {formatDate(selectedDate)}
-          </h2>
-        </div>
-        <div className="p-6">
-          {currentPlan ? (
-            <div>
-              <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
-                <div>
-                  <p className="text-lg font-medium text-gray-900">
-                    Production totale: <span className="font-bold">{currentPlan.total_production}</span> doughnuts
-                  </p>
-                </div>
+      <section className="mb-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          { label: 'Production prévue', value: (currentPlan?.total_production || 0).toLocaleString('fr-FR'), unit: 'doughnuts', icon: Factory },
+          { label: 'Magasins suivis', value: visibleStores.length, unit: 'points de vente', icon: Store },
+          { label: 'Livraisons reçues', value: `${deliveries}/${visibleStores.length}`, unit: deliveries === visibleStores.length && visibleStores.length ? 'toutes reçues' : 'à contrôler', icon: Truck },
+          { label: 'Journée complétée', value: `${progress}%`, unit: `${completed} magasin${completed > 1 ? 's' : ''} finalisé${completed > 1 ? 's' : ''}`, icon: CheckCircle2 },
+        ].map(({label,value,unit,icon: Icon}, index) => <article className="kpi-card" key={label}><div className="mb-5 flex items-start justify-between"><span className="kpi-icon"><Icon className="h-5 w-5" /></span>{index === 0 && <span className="status-pill bg-emerald-50 text-emerald-700"><ArrowUpRight className="h-3 w-3" />Plan actif</span>}</div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{value}</p><p className="mt-1 text-xs text-slate-500">{unit}</p></article>)}
+      </section>
+
+      <section className="surface-card overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div><div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-500 ring-4 ring-emerald-50" /><h2 className="text-lg font-bold text-slate-900">Suivi des magasins</h2></div><p className="mt-1 text-sm text-slate-500">Production du {formatDate(selectedDate)}</p></div>
                 {(isAdmin || isProduction) && (
                   <button
                     onClick={() => setShowAllStores(prev => !prev)}
-                    className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
+                    className="btn-secondary"
                   >
+                    <Store className="h-4 w-4" />
                     {showAllStores ? 'Voir mes magasins' : 'Voir tous les magasins'}
                   </button>
                 )}
-              </div>
-              
-              <div className="overflow-hidden md:overflow-x-auto">
+        </div>
+        {currentPlan && visibleStores.length ? <div className="overflow-hidden md:overflow-x-auto">
                 <table className="responsive-table min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
@@ -183,17 +172,8 @@ const DashboardPage: React.FC = () => {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {(() => {
-                      const allowedStoreIds = new Set(
-                        (user?.storeIds || []).map(id => id.toString().toLowerCase())
-                      );
-                      const visibleStores = currentPlan.stores ? currentPlan.stores.filter(store => {
-                        if (isAdmin || isProduction) return true;
-                        if (showAllStores) return true;
-                        return allowedStoreIds.has(store.store_id?.toString().toLowerCase());
-                      }) : [];
-                      return visibleStores.map((store) => {
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {visibleStores.map((store) => {
                         // Calculate completion metrics
                         const totalItems = store.production_items?.length || 0;
                         const receivedItems = store.production_items?.filter(item => item.received !== null).length || 0;
@@ -203,12 +183,12 @@ const DashboardPage: React.FC = () => {
                         const wastePercentage = totalItems > 0 ? Math.round((wasteItems / totalItems) * 100) : 0;
                         
                         return (
-                          <tr key={store.store_id}>
+                          <tr key={store.store_id} className="group">
                             <td data-label="Magasin" className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">{store.store_name}</div>
+                              <div className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500"><Store className="h-4 w-4" /></span><div><div className="text-sm font-semibold text-slate-900">{store.store_name}</div><div className="text-xs text-slate-400">Point de vente</div></div></div>
                             </td>
                             <td data-label="Quantité" className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">{store.total_quantity} doughnuts</div>
+                              <div className="text-sm font-bold text-slate-800">{store.total_quantity.toLocaleString('fr-FR')} <span className="font-normal text-slate-400">unités</span></div>
                             </td>
                             <td data-label="Livraison" className="px-6 py-4 whitespace-nowrap">
                               {store.delivery_confirmed ? (
@@ -237,26 +217,18 @@ const DashboardPage: React.FC = () => {
                               )}
                             </td>
                             <td data-label="Statut" className="px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(store)}`}>
+                              <span className={`status-pill ${getStatusColor(store)}`}>
                                 {getStatusIcon(store)}
                                 {getStatusText(store)}
                               </span>
                             </td>
                           </tr>
                         );
-                      });
-                    })()}
+                      })}
                   </tbody>
                 </table>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-gray-500">Aucun plan de production trouvé pour cette date.</p>
-            </div>
-          )}
-        </div>
-      </div>
+              </div> : <div className="px-6 py-16 text-center"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><Clock3 className="h-6 w-6" /></span><h3 className="mt-4 font-bold text-slate-800">Aucun plan pour cette journée</h3><p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">Sélectionnez une autre date pour consulter la production et l’avancement des magasins.</p></div>}
+      </section>
     </div>
   );
 };
