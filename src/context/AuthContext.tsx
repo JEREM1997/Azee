@@ -50,6 +50,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 🔹 Initialisation de la session au chargement
   useEffect(() => {
+    let subscription: ReturnType<typeof supabase.auth.onAuthStateChange>['data']['subscription'] | undefined;
+    let active = true;
+
     const initializeAuth = async () => {
       try {
         const {
@@ -76,9 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // 🔹 Abonnement aux changements d’auth
-        const {
-          data: { subscription },
-        } = supabase.auth.onAuthStateChange(
+        const { data } = supabase.auth.onAuthStateChange(
           async (event, session) => {
             if (event === 'SIGNED_IN' && session?.user) {
               const user: User = {
@@ -100,11 +101,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
         );
-
-        return () => {
-          subscription.unsubscribe();
-        };
+        subscription = data.subscription;
       } catch (error) {
+        if (!active) return;
         setState({
           user: null,
           loading: false,
@@ -113,7 +112,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    initializeAuth();
+    void initializeAuth();
+
+    return () => {
+      active = false;
+      subscription?.unsubscribe();
+    };
   }, [navigate]);
 
   /**
@@ -289,4 +293,3 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </AuthContext.Provider>
   );
 };
-

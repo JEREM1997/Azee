@@ -40,7 +40,7 @@ export default function App() {
       <Router>
         <AuthProvider>
           <AdminProvider>
-            <div className="min-h-screen bg-gray-50">
+            <div className="app-shell min-h-screen">
               <Suspense fallback={<LoadingSpinner fullScreen message="Loading application..." />}>
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
@@ -90,4 +90,3 @@ export default function App() {
     </ErrorBoundary>
   );
 }
-

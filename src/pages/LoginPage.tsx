@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { LockKeyhole, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { AppErrorHandler } from '../utils/errorHandling';
 import krispyKremeOpsLogo from '../assets/krispy-kreme-ops-logo.png';
@@ -8,13 +8,11 @@ import doughnutsBackground from '../assets/doughnuts-background.jpg.jpg';
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // 🔹 On récupère aussi l'erreur gérée par AuthContext (pour IP Migros)
   const { login, error: authError } = useAuth();
-  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +33,7 @@ const LoginPage: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative"
+      className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden px-4 py-8 sm:px-6"
       style={{
         backgroundImage: `url(${doughnutsBackground})`,
         backgroundSize: 'cover',
@@ -44,63 +42,74 @@ const LoginPage: React.FC = () => {
       }}
     >
       {/* Background overlay for better readability */}
-      <div className="absolute inset-0 bg-black bg-opacity-40"></div>
+      <div className="absolute inset-0 bg-slate-950/55"></div>
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/45 via-transparent to-emerald-950/20" />
 
       {/* Content container */}
-      <div className="max-w-md w-full space-y-8 relative z-10">
+      <main className="relative z-10 w-full max-w-[420px]">
         {/* White card background for the form */}
-        <div className="bg-white rounded-xl shadow-2xl p-8 backdrop-blur-sm">
-          <div className="-mt-20">
+        <div className="rounded-2xl border border-white/60 bg-white p-5 shadow-2xl shadow-slate-950/25 sm:p-8">
+          <div className="flex justify-center border-b border-slate-100 pb-5">
             <div className="flex justify-center">
               <img
                 src={krispyKremeOpsLogo}
                 alt="Krispy Kreme OPS"
-                className="h-72 w-auto"
+                className="h-24 w-auto object-contain sm:h-28"
               />
             </div>
           </div>
+          <div className="pt-6 text-center">
+            <h1 className="text-2xl font-bold text-slate-900">Bienvenue</h1>
+            <p className="mt-1 text-sm text-slate-500">Connectez-vous à votre espace opérations</p>
+          </div>
 
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-            <div className="rounded-md shadow-sm -space-y-px">
+          <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
+            <div className="space-y-4">
               <div>
-                <label htmlFor="email-address" className="sr-only">
-                  Email address
+                <label htmlFor="email-address" className="mb-1.5 block text-sm font-semibold text-slate-700">
+                  Adresse e-mail
                 </label>
+                <div className="relative">
+                <Mail aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                 <input
                   id="email-address"
                   name="email"
                   type="email"
                   autoComplete="email"
                   required
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-krispy-green focus:border-krispy-green focus:z-10 sm:text-sm"
-                  placeholder="Email address"
+                  className="block min-h-12 w-full rounded-xl border border-slate-300 bg-white py-3 pl-11 pr-3 text-base text-slate-900 placeholder-slate-400 transition-colors hover:border-slate-400 focus:border-krispy-green focus:outline-none focus:ring-2 focus:ring-krispy-green/15"
+                  placeholder="prenom.nom@entreprise.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
                 />
+                </div>
               </div>
               <div>
-                <label htmlFor="password" className="sr-only">
-                  Password
+                <label htmlFor="password" className="mb-1.5 block text-sm font-semibold text-slate-700">
+                  Mot de passe
                 </label>
+                <div className="relative">
+                <LockKeyhole aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                 <input
                   id="password"
                   name="password"
                   type="password"
                   autoComplete="current-password"
                   required
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-krispy-green focus:border-krispy-green focus:z-10 sm:text-sm"
-                  placeholder="Password"
+                  className="block min-h-12 w-full rounded-xl border border-slate-300 bg-white py-3 pl-11 pr-3 text-base text-slate-900 placeholder-slate-400 transition-colors hover:border-slate-400 focus:border-krispy-green focus:outline-none focus:ring-2 focus:ring-krispy-green/15"
+                  placeholder="Votre mot de passe"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
                 />
+                </div>
               </div>
             </div>
 
             {/* 🔴 Bloc d’erreur : combine l’erreur locale + l’erreur du AuthContext */}
             {(error || authError) && (
-              <div className="rounded-md bg-red-50 p-4">
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4" role="alert" aria-live="assertive">
                 <div className="flex">
                   <div className="flex-shrink-0">
                     <svg
@@ -132,10 +141,10 @@ const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
+                className={`group relative flex min-h-12 w-full items-center justify-center rounded-xl border border-transparent px-4 py-3 text-sm font-semibold text-white shadow-sm transition duration-150 ${
                   isLoading
                     ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-krispy-green hover:bg-krispy-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green'
+                    : 'bg-krispy-green hover:-translate-y-0.5 hover:bg-krispy-green-dark hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green active:translate-y-0'
                 }`}
               >
                 {isLoading ? (
@@ -160,12 +169,13 @@ const LoginPage: React.FC = () => {
                     ></path>
                   </svg>
                 ) : null}
-                {isLoading ? 'Signing in...' : 'Sign in'}
+                {isLoading ? 'Connexion en cours…' : 'Se connecter'}
               </button>
             </div>
           </form>
         </div>
-      </div>
+        <p className="mt-5 text-center text-xs font-medium text-white/75">Portail interne sécurisé Krispy Kreme Operations</p>
+      </main>
     </div>
   );
 };
