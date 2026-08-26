@@ -7,6 +7,7 @@ import { productionService } from '../services/productionService';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
+import { MetricStrip } from '../components/PageExperience';
 
 // Helper: consistent number format for PDF (comma as thousands separator)
 const formatNum = (n: number) => n.toLocaleString('en-US');
@@ -1586,6 +1587,13 @@ const StatsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <MetricStrip items={[
+        { label: 'Production', value: totalProduction.toLocaleString('fr-FR'), detail: 'doughnuts sur la période' },
+        { label: 'Réception', value: totalReceived.toLocaleString('fr-FR'), detail: 'unités confirmées', tone: 'blue' },
+        { label: 'Déchets', value: `${avgWastePercent}%`, detail: `${totalWaste.toLocaleString('fr-FR')} unités`, tone: Number(avgWastePercent) > 10 ? 'red' : 'amber' },
+        { label: 'Coût production', value: `CHF ${totalProductionCost.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}`, detail: `CHF ${avgCostPerDonut.toFixed(2)} / unité` }
+      ]} />
 
       {error && (
         <div className="mb-6 bg-red-50 border-l-4 border-red-400 p-4">

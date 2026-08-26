@@ -7,6 +7,7 @@ import { useAdmin } from '../context/AdminContext';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { apiService } from '../services/apiService';
+import { EmptyState, MetricStrip, PageError, PageHeader } from '../components/PageExperience';
 
 // Delivery-specific types
 interface DeliveryProductionItem {
@@ -826,21 +827,14 @@ const DeliveryPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center space-x-4 flex-wrap">
-        <h1 className="text-3xl font-bold text-gray-900">Gestion des Livraisons</h1>
-        {(isAdmin || isProduction) && (
+      <PageHeader eyebrow="Suivi logistique" title="Livraisons du réseau" description="Identifiez immédiatement les réceptions confirmées, les déchets manquants et les magasins qui demandent votre attention." icon={TruckIcon} meta={(isAdmin || isProduction) && (
           <button
             onClick={() => setShowAllStores(prev => !prev)}
             className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
           >
             {showAllStores ? 'Voir mes magasins' : 'Voir tous les magasins'}
           </button>
-        )}
-        </div>
-        <p className="text-gray-600 mt-1">Gérer les livraisons et suivre les déchets</p>
-
-        <div className="mt-4 md:mt-0">
+        )} actions={<div>
           <div className="w-full md:w-auto">
             <label htmlFor="delivery-date" className="block text-sm font-medium text-gray-700 mb-1">
               Date de Livraison
@@ -854,20 +848,16 @@ const DeliveryPage: React.FC = () => {
               className="shadow-sm focus:ring-krispy-green focus:border-krispy-green block w-full sm:text-sm border-gray-300 rounded-md"
             />
           </div>
-        </div>
-      </div>
+        </div>} />
+      <MetricStrip items={[
+        { label: 'Livraisons', value: userStores.length, detail: 'prévues à cette date', tone: 'blue' },
+        { label: 'Confirmées', value: userStores.filter(store => store.delivery_confirmed).length, detail: 'réceptions validées' },
+        { label: 'Déchets à saisir', value: userStores.filter(store => store.delivery_confirmed && !store.waste_reported).length, detail: 'actions restantes', tone: 'amber' },
+        { label: 'En attente', value: userStores.filter(store => !store.delivery_confirmed && store.source_type !== 'order').length, detail: 'non confirmées', tone: 'red' }
+      ]} />
 
       {error && (
-        <div className="mb-6 bg-red-50 border-l-4 border-red-400 p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <AlertTriangle className="h-5 w-5 text-red-400" />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          </div>
-        </div>
+        <PageError message={error} />
       )}
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -939,14 +929,7 @@ const DeliveryPage: React.FC = () => {
               ))}
               
               {userStores.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  <div className="text-sm">
-                    Aucune livraison prévue pour le {formatDateSafe(deliveryDate)}
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1">
-                    Sélectionnez une autre date pour voir les livraisons
-                  </div>
-                </div>
+                <EmptyState icon={Truck} title="Aucune tournée prévue" description={`Aucune livraison n’est planifiée le ${formatDateSafe(deliveryDate)}. Choisissez une autre date pour consulter la tournée.`} />
               )}
             </div>
           </div>

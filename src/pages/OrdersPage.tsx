@@ -10,6 +10,8 @@ import {
   updateOrderProduction,
 } from '../services/ordersService';
 import { DonutVariety, Order, OrderLineItem, OrderPaymentStatus, OrderType, Store } from '../types';
+import { ShoppingCart } from 'lucide-react';
+import { MetricStrip, PageHeader } from '../components/PageExperience';
 
 interface OrderFormState {
   customerName: string;
@@ -509,19 +511,11 @@ const OrdersPage: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <div className="bg-white shadow rounded-lg p-6 border border-gray-100">
-        <div className="flex items-start justify-between flex-wrap gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Commandes magasin</h1>
-            <p className="text-gray-600">
-              Le magasin saisit seulement la livraison. La production est fixée par un admin.
-            </p>
-          </div>
-
-          <div className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 text-sm">
+      <PageHeader eyebrow="Commandes clients" title="Préparer une commande" description="Composez la demande magasin, vérifiez les coordonnées de livraison et transmettez-la à la production." icon={ShoppingCart} meta={<div className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 text-sm">
             Validation admin obligatoire avant apparition dans le plan
-          </div>
-        </div>
+          </div>} />
+      <MetricStrip items={[{ label: 'Commandes', value: orders.length, detail: 'dans l’historique' }, { label: 'À valider', value: orders.filter(order => !order.productionValidated).length, detail: 'validation production', tone: 'amber' }, { label: 'Prêtes', value: orders.filter(order => order.productionValidated).length, detail: 'prises en charge', tone: 'green' }]} />
+      <div className="bg-white shadow rounded-lg p-6 border border-gray-100">
 
         {adminError && (
           <div className="rounded-md bg-red-50 p-4 mb-4 text-sm text-red-700">
