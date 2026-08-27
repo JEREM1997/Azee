@@ -3,6 +3,7 @@ import { Plus, Edit, Trash2, Save, X, Coffee, ShoppingBag, Store as StoreIcon, D
 import { useAdmin } from '../context/AdminContext';
 import { Store as StoreType, DonutVariety, DonutForm, BoxConfiguration } from '../types';
 import { MetricStrip, PageHeader } from '../components/PageExperience';
+import ContentSkeleton from '../components/ContentSkeleton';
 
 type AdminTab = 'stores' | 'varieties' | 'forms' | 'boxes';
 
@@ -666,17 +667,15 @@ const AdminPage: React.FC = () => {
     });
   };
   
+  if (loading) {
+    return <ContentSkeleton variant="table" label="Chargement de la configuration…" />;
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {error && (
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
           Erreur: {error}
-        </div>
-      )}
-      
-      {loading && (
-        <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded">
-          Chargement des données...
         </div>
       )}
       

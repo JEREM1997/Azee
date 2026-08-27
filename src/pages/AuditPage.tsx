@@ -3,6 +3,7 @@ import { RefreshCw, Search, ShieldCheck } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { AuditLog } from '../types';
 import { PageHeader } from '../components/PageExperience';
+import ContentSkeleton from '../components/ContentSkeleton';
 
 const ACTION_OPTIONS = [
   { value: '', label: 'Toutes les actions' },
@@ -101,6 +102,7 @@ const formatDetails = (log: AuditLog) => {
 const AuditPage: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actorEmail, setActorEmail] = useState('');
   const [action, setAction] = useState('');
@@ -129,12 +131,17 @@ const AuditPage: React.FC = () => {
       setError(getErrorMessage(err)); 
     } finally {
       setLoading(false);
+      setReady(true);
     }
   };
 
   useEffect(() => {
     loadLogs();
   }, []);
+
+  if (!ready) {
+    return <ContentSkeleton variant="table" label="Chargement du journal d’audit…" />;
+  }
 
   return (
     <div className="px-4 sm:px-0">
