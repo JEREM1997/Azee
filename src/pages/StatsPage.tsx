@@ -1,5 +1,5 @@
-import ContentSkeleton from '../components/ContentSkeleton';
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
+import KrispyKremeLoader from '../components/KrispyKremeLoader';
 import { BarChart2, PieChart, TrendingUp, DollarSign, Store, Target, Package, Printer, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
 import { apiService } from '../services/apiService';
@@ -64,7 +64,7 @@ interface PerformanceComparison {
 }
 
 const StatsPage: React.FC = () => {
-  const { stores, varieties, boxes, forms } = useAdmin();
+  const { stores, varieties, boxes, forms, loading: adminLoading } = useAdmin();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'range' | 'month' | 'year'>('day');
   const [selectedStartDate, setSelectedStartDate] = useState<string>(() => {
@@ -80,6 +80,9 @@ const StatsPage: React.FC = () => {
   const [rawProductionPlans, setRawProductionPlans] = useState<any[]>([]); // Store raw plans data
   const [selectedStores, setSelectedStores] = useState<string[]>([]); // Add store filter
   const [loading, setLoading] = useState(true);
+  const [hasLoadedCriticalData, setHasLoadedCriticalData] = useState(false);
+  const [kpiLoading, setKpiLoading] = useState(true);
+  const requestIdRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [kpiSnapshot, setKpiSnapshot] = useState<{
     snapshot_date: string;
@@ -107,6 +110,7 @@ const StatsPage: React.FC = () => {
        // Single source of truth for production data fetching/transformations
   // (previous duplicate block removed to prevent double renders & undefined refs)
   const loadProductionData = async () => {
+    const requestId = ++requestIdRef.current;
     try {
       setLoading(true);
       setError(null);
@@ -162,6 +166,8 @@ const StatsPage: React.FC = () => {
         startDateStr,
         endDateStr
       );
+
+      if (requestId !== requestIdRef.current) return;
 
       if (!plans || plans.length === 0) {
         setProductionData([]);
@@ -233,19 +239,26 @@ const StatsPage: React.FC = () => {
         };
       });
 
-      setProductionData(transformedData);
+      if (requestId === requestIdRef.current) {
+        setProductionData(transformedData);
+      }
     } catch (err) {
       console.error('Error loading production data:', err);
+      if (requestId !== requestIdRef.current) return;
       setError(
         err instanceof Error
           ? err.message
           : 'Error loading production data'
       );
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+        setHasLoadedCriticalData(true);
+      }
     }
   };
   useEffect(() => {
+    if (adminLoading) return;
     loadProductionData();
   }, [
     selectedPeriod,
@@ -254,13 +267,21 @@ const StatsPage: React.FC = () => {
     selectedYear,
     selectedStartDate,
     selectedEndDate,
-    selectedStores
+    selectedStores,
+    adminLoading
   ]);
 
   useEffect(() => {
     const loadKpiSnapshot = async () => {
-      const { data } = await apiService.production.getLatestForecastKpiSnapshot();
-      setKpiSnapshot(data || null);
+      try {
+        const { data } = await apiService.production.getLatestForecastKpiSnapshot();
+        setKpiSnapshot(data || null);
+      } catch (err) {
+        console.error('Error loading forecast KPI snapshot:', err);
+        setKpiSnapshot(null);
+      } finally {
+        setKpiLoading(false);
+      }
     };
 
     loadKpiSnapshot();
@@ -1476,8 +1497,11 @@ const StatsPage: React.FC = () => {
     return null;
   };
 
-  if (loading) {
-    return <ContentSkeleton variant="dashboard" label="Calcul des performances…" />;
+  const isInitialCriticalLoading = adminLoading || (loading && !hasLoadedCriticalData);
+  const beginFilterRefresh = () => setLoading(true);
+
+  if (isInitialCriticalLoading) {
+    return <KrispyKremeLoader size="lg" label="Calcul des performances…" fullscreen />;
   }
 
   return (
@@ -1489,12 +1513,12 @@ const StatsPage: React.FC = () => {
           <p>Ventes, déchets et tendances comparées pour détecter immédiatement les réussites et les points d’attention.</p>
         </div>
 
-        <div className="stats-filters mt-4 sm:mt-0 space-y-4"><div className="stats-filters__label"><SlidersHorizontal aria-hidden="true" /> Période & périmètre</div>
-          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
-          <div className="flex space-x-4">
+        <div className="stats-filters space-y-4"><div className="stats-filters__label"><SlidersHorizontal aria-hidden="true" /> Période & périmètre</div>
+          <div className="stats-filters__controls">
+          <div className="stats-filters__period">
             <select
               value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value as any)}
+              onChange={(e) => { beginFilterRefresh(); setSelectedPeriod(e.target.value as any); }}
               className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
             >
               <option value="day">Par Jour</option>
@@ -1507,7 +1531,7 @@ const StatsPage: React.FC = () => {
               <input
                 type="date"
                 value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
+                onChange={(e) => { beginFilterRefresh(); setSelectedDate(e.target.value); }}
                 className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
               />
             )}
@@ -1517,13 +1541,13 @@ const StatsPage: React.FC = () => {
                 <input
                   type="date"
                   value={selectedStartDate}
-                  onChange={(e) => setSelectedStartDate(e.target.value)}
+                  onChange={(e) => { beginFilterRefresh(); setSelectedStartDate(e.target.value); }}
                   className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
                />
                 <input
                   type="date"
                   value={selectedEndDate}
-                  onChange={(e) => setSelectedEndDate(e.target.value)}
+                  onChange={(e) => { beginFilterRefresh(); setSelectedEndDate(e.target.value); }}
                   className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
                 />
               </div>
@@ -1533,14 +1557,14 @@ const StatsPage: React.FC = () => {
               <div className="flex space-x-2">
                 <select
                   value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                  onChange={(e) => { beginFilterRefresh(); setSelectedMonth(parseInt(e.target.value)); }}
                   className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
                 >
                   {getMonthOptions()}
                 </select>
                 <select
                   value={selectedYear}
-                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                  onChange={(e) => { beginFilterRefresh(); setSelectedYear(parseInt(e.target.value)); }}
                   className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
                 >
                   {getYearOptions()}
@@ -1551,7 +1575,7 @@ const StatsPage: React.FC = () => {
             {selectedPeriod === 'year' && (
               <select
                 value={selectedYear}
-                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                onChange={(e) => { beginFilterRefresh(); setSelectedYear(parseInt(e.target.value)); }}
                 className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
               >
                 {getYearOptions()}
@@ -1560,7 +1584,7 @@ const StatsPage: React.FC = () => {
           </div>
 
             <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
-              <div className="w-64">
+              <div className="stats-filters__stores">
                 <label htmlFor="store-select" className="block text-xs font-medium text-gray-700 mb-1">
                   Magasins (laisser vide = tous)
                 </label>
@@ -1569,6 +1593,7 @@ const StatsPage: React.FC = () => {
                   multiple
                   value={selectedStores}
                   onChange={(e) => {
+                    beginFilterRefresh();
                     const values = Array.from(e.target.selectedOptions, option => option.value);
                     setSelectedStores(values);
                   }}
@@ -1600,6 +1625,13 @@ const StatsPage: React.FC = () => {
         </div>
       </header>
 
+      {loading ? (
+        <div className="stats-refresh" role="status" aria-live="polite">
+          <KrispyKremeLoader size="md" label="Actualisation des statistiques…" />
+        </div>
+      ) : (
+      <div className="stats-content-ready">
+
       <MetricStrip items={[
         { label: 'Ventes potentielles', value: totalProduction.toLocaleString('fr-FR'), detail: 'doughnuts sur la période', tone: 'green' },
         { label: 'Réception', value: totalReceived.toLocaleString('fr-FR'), detail: 'unités confirmées', tone: 'blue' },
@@ -1622,7 +1654,14 @@ const StatsPage: React.FC = () => {
         </div>
       )}
 
-       {kpiSnapshot && (
+       {kpiLoading ? (
+        <div className="forecast-panel mb-6 rounded-lg p-4" role="status" aria-label="Chargement des indicateurs prévisionnels">
+          <div className="skeleton-bone h-5 w-64 max-w-full" />
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[0, 1, 2, 3].map(item => <div className="skeleton-bone h-16 rounded" key={item} />)}
+          </div>
+        </div>
+       ) : kpiSnapshot && (
         <div className="forecast-panel mb-6 rounded-lg p-4">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-violet-900">KPI Forecast (dernier snapshot)</h2>
@@ -2233,6 +2272,8 @@ const StatsPage: React.FC = () => {
           )}
         </div>
       </div>
+      </div>
+      )}
     </div>
   );
 };
