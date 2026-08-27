@@ -111,6 +111,7 @@ const Navbar: React.FC = () => {
 
   const primaryMobile = visibleNavigation.filter(item => item.section === 'operations').slice(0, 4);
   const currentPage = navigation.find(item => isActive(item.href));
+  const roleLabel = isAdmin ? 'Administrateur' : isProduction ? 'Production' : 'Magasin';
 
   return (
     <div className="min-h-screen lg:pl-[264px]">
@@ -122,11 +123,16 @@ const Navbar: React.FC = () => {
         </Link>
         <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-6"><NavItems /></nav>
         <div className="border-t border-slate-200/80 p-4">
-          <div className="mb-3 flex items-center gap-3 rounded-xl px-2 py-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-krispy-green"><UserRound className="h-4 w-4" /></span>
-            <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-800">{user?.fullName || 'Collaborateur'}</p><p className="truncate text-xs text-slate-500">{user?.email}</p></div>
+          <div className="account-panel">
+            <span className="account-avatar" aria-hidden="true"><UserRound className="h-4 w-4" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-slate-800">{user?.fullName || 'Collaborateur'}</p>
+              <p className="truncate text-xs text-slate-500">{roleLabel}</p>
+            </div>
+            <button onClick={() => void logout()} className="account-signout" aria-label={`Se déconnecter du compte ${user?.email || ''}`} title="Se déconnecter">
+              <LogOut className="h-4 w-4" aria-hidden="true" /><span>Quitter</span>
+            </button>
           </div>
-          <button onClick={() => void logout()} className="btn-secondary w-full"><LogOut className="h-4 w-4" /> Se déconnecter</button>
         </div>
       </aside>
 

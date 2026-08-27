@@ -84,6 +84,10 @@
   .nav-icon { display: flex; height: 30px; width: 30px; flex: none; align-items: center; justify-content: center; border-radius: 9px; color: #718078; }
   .nav-item-active .nav-icon { color: var(--brand-green); }
   .nav-badge { min-width: 21px; border-radius: 999px; background: #fff; padding: 2px 6px; text-align: center; font-size: 10px; font-weight: 800; color: var(--brand-red); box-shadow: 0 0 0 1px #f3ccd3; }
+  .account-panel { display: flex; align-items: center; gap: 10px; border: 1px solid #e3e9e5; border-radius: 14px; padding: 10px; background: linear-gradient(135deg,#fff,#f7faf8); box-shadow: 0 3px 14px rgba(20,40,29,.04); }
+  .account-avatar { display: flex; height: 36px; width: 36px; flex: none; align-items: center; justify-content: center; border-radius: 999px; background: #eaf6ef; color: var(--brand-green); box-shadow: inset 0 0 0 1px rgba(4,106,56,.08); }
+  .account-signout { display: inline-flex; min-height: 34px; flex: none; align-items: center; gap: 5px; border-radius: 9px; padding: 7px 8px; color: #66736c; font-size: 11px; font-weight: 700; transition: 160ms var(--ease-out); }
+  .account-signout:hover { background: #fff; color: var(--brand-red); box-shadow: inset 0 0 0 1px #e7dfe1; }
   .app-main { min-height: 100dvh; width: 100%; padding: 36px clamp(24px, 4vw, 64px) 56px; }
   .app-main > div { max-width: 1320px; margin-left: auto; margin-right: auto; }
   .mobile-header { position: sticky; top: 0; z-index: var(--z-sticky); min-height: calc(72px + env(safe-area-inset-top, 0px)); align-items: flex-end; border-bottom: 1px solid rgba(223,230,226,.82); background: rgba(255,255,255,.94); padding: calc(10px + env(safe-area-inset-top, 0px)) 20px 11px; backdrop-filter: blur(16px); }

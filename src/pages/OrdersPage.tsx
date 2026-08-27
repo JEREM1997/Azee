@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
-import LoadingSpinner from '../components/LoadingSpinner';
 import {
   createOrder,
   deleteOrder,
@@ -12,6 +11,7 @@ import {
 import { DonutVariety, Order, OrderLineItem, OrderPaymentStatus, OrderType, Store } from '../types';
 import { ShoppingCart } from 'lucide-react';
 import { MetricStrip, PageHeader } from '../components/PageExperience';
+import ContentSkeleton from '../components/ContentSkeleton';
 
 interface OrderFormState {
   customerName: string;
@@ -99,6 +99,7 @@ const OrdersPage: React.FC = () => {
   const [form, setForm] = useState<OrderFormState | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersReady, setOrdersReady] = useState(false);
   const [ordersError, setOrdersError] = useState<string | null>(null);
   const [savingOrderId, setSavingOrderId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -214,6 +215,7 @@ const OrdersPage: React.FC = () => {
       );
     } finally {
       setOrdersLoading(false);
+      setOrdersReady(true);
     }
   }, [user?.role, user?.storeIds]);
 
@@ -501,12 +503,11 @@ const OrdersPage: React.FC = () => {
 
   const isFormReady = !!form && catalogue.length > 0 && storeOptions.length > 0;
 
-  if (adminLoading) {
-    return (
-      <div className="bg-white shadow rounded-lg p-6 border border-gray-100">
-        <LoadingSpinner message="Chargement du catalogue..." />
-      </div>
-    );
+  // The catalogue and order history define the page's initial metrics and form.
+  // Keep one layout-faithful placeholder until both are ready instead of
+  // revealing a partial page and then showing a second loader below it.
+  if (adminLoading || !ordersReady) {
+    return <ContentSkeleton variant="form" label="Préparation des commandes…" />;
   }
 
   return (
@@ -515,6 +516,7 @@ const OrdersPage: React.FC = () => {
             Validation admin obligatoire avant apparition dans le plan
           </div>} />
       <MetricStrip items={[{ label: 'Commandes', value: orders.length, detail: 'dans l’historique' }, { label: 'À valider', value: orders.filter(order => !order.productionValidated).length, detail: 'validation production', tone: 'amber' }, { label: 'Prêtes', value: orders.filter(order => order.productionValidated).length, detail: 'prises en charge', tone: 'green' }]} />
+      {ordersLoading && <span className="sr-only" role="status">Actualisation des commandes…</span>}
       <div className="bg-white shadow rounded-lg p-6 border border-gray-100">
 
         {adminError && (
@@ -866,13 +868,11 @@ const OrdersPage: React.FC = () => {
           </div>
         )}
 
-        {ordersLoading && <LoadingSpinner message="Chargement des commandes..." />}
-
-        {!ordersLoading && orders.length === 0 && (
+        {orders.length === 0 && (
           <div className="text-sm text-gray-600">Aucune commande pour le moment.</div>
         )}
 
-        {!ordersLoading && orders.length > 0 && (
+        {orders.length > 0 && (
           <div className="overflow-hidden md:overflow-x-auto">
             <table className="responsive-table min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
