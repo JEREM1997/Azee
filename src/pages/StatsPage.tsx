@@ -88,6 +88,7 @@ const StatsPage: React.FC = () => {
   const [kpiLoading, setKpiLoading] = useState(true);
   const requestIdRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
+  const [comparisonWarning, setComparisonWarning] = useState<string | null>(null);
   const [kpiSnapshot, setKpiSnapshot] = useState<{
     snapshot_date: string;
     range_start: string;
@@ -127,6 +128,7 @@ const StatsPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      setComparisonWarning(null);
 
       let startDateStr = comparisonWindows.current.start;
       let endDateStr = comparisonWindows.current.end;
@@ -175,10 +177,25 @@ const StatsPage: React.FC = () => {
         endDateStr
       );
 
-      const plans = await productionService.getProductionPlans(
-        comparisonWindows.previous.start < startDateStr ? comparisonWindows.previous.start : startDateStr,
-        comparisonWindows.previous.end > endDateStr ? comparisonWindows.previous.end : endDateStr
-      );
+      // Keep requests bounded to their own windows. Fetching the union of an
+      // eight-week period and its predecessor made the Edge Function scan up
+      // to sixteen weeks and regularly time out in production.
+      const [currentResult, previousResult] = await Promise.allSettled([
+        productionService.getProductionPlans(startDateStr, endDateStr),
+        productionService.getProductionPlans(comparisonWindows.previous.start, comparisonWindows.previous.end),
+      ]);
+
+      if (currentResult.status === 'rejected') {
+        throw currentResult.reason;
+      }
+
+      const plans = currentResult.value || [];
+      const previousPlans = previousResult.status === 'fulfilled' ? previousResult.value || [] : [];
+
+      if (previousResult.status === 'rejected') {
+        console.warn('Unable to load comparison period:', previousResult.reason);
+        setComparisonWarning('La période actuelle est affichée, mais la comparaison précédente est momentanément indisponible.');
+      }
 
       if (requestId !== requestIdRef.current) return;
 
@@ -190,7 +207,6 @@ const StatsPage: React.FC = () => {
       }
 
       const currentPlans = plans.filter((plan: any) => plan.date >= startDateStr && plan.date <= endDateStr);
-      const previousPlans = plans.filter((plan: any) => plan.date >= comparisonWindows.previous.start && plan.date <= comparisonWindows.previous.end);
       setRawProductionPlans(currentPlans);
       setPreviousProductionPlans(previousPlans);
 
@@ -1611,6 +1627,12 @@ const StatsPage: React.FC = () => {
               <p className="text-sm text-red-700">{error}</p>
             </div>
           </div>
+        </div>
+      )}
+
+      {comparisonWarning && !error && (
+        <div className="mb-6 border-l-4 border-amber-400 bg-amber-50 p-4 text-sm text-amber-900" role="status">
+          {comparisonWarning}
         </div>
       )}
 
