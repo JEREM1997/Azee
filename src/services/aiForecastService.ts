@@ -1,5 +1,6 @@
 import { productionService } from './productionService';
 import { apiService } from './apiService';
+import { ANALYTICS_RULES } from '../analytics/businessRules';
 
 export interface AIForecastResult {
   storeId: string;
@@ -53,20 +54,20 @@ export interface ForecastOptions {
 
 export class AIForecastService {
   // Minimum production safeguards
-  private readonly MIN_VAR_PRODUCTION = 4; // At least 4 doughnuts per variety
-  private readonly MIN_BOX_PRODUCTION = 2; // At least 2 boxes per configuration
+  private readonly MIN_VAR_PRODUCTION = ANALYTICS_RULES.minimumVariety;
+  private readonly MIN_BOX_PRODUCTION = ANALYTICS_RULES.minimumBox;
   // === Tunable parameters (see requirements table) ===
-  private readonly BUFFER_INITIAL = 0.25;       // Starting buffer
-  private readonly BUFFER_MIN = 0.10;           // Minimum buffer after reductions
-  private readonly BUFFER_STEP = 0.05;          // Step size for buffer reduction
-  private readonly MAX_WASTE_RATIO = 0.30;      // Maximum acceptable waste ratio
+  private readonly BUFFER_INITIAL = ANALYTICS_RULES.initialBuffer;
+  private readonly BUFFER_MIN = ANALYTICS_RULES.minimumBuffer;
+  private readonly BUFFER_STEP = ANALYTICS_RULES.bufferStep;
+  private readonly MAX_WASTE_RATIO = ANALYTICS_RULES.highWasteRate;
   // private readonly SAFETY_STOCK_MIN = 0.10;     // Align with BUFFER_MIN
   private readonly SAFETY_STOCK_MAX = 0.35; // Maximum 35% safety stock
   private readonly MIN_DATA_POINTS = 1; // At least 1 same-weekday record required
 
   // Stability controls
-  private readonly MAX_WEEKLY_INCREASE = 0.30; // cap +30% vs last same-weekday
-  private readonly MAX_WEEKLY_DECREASE = 0.25; // cap -25% vs last same-weekday
+  private readonly MAX_WEEKLY_INCREASE = ANALYTICS_RULES.maxIncrease;
+  private readonly MAX_WEEKLY_DECREASE = ANALYTICS_RULES.maxDecrease;
   private readonly ZERO_SALES_UPPER_BOUND = 8; // when last observed sales were 0
 
   /**
