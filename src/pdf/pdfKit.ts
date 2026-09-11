@@ -7,8 +7,10 @@ export const PDF_FOOTER = 13;
 type RGB = readonly [number,number,number];
 export interface PdfImage { data: string; width: number; height: number }
 const color=(doc:jsPDF,kind:'text'|'fill'|'draw',rgb:RGB)=>kind==='text'?doc.setTextColor(...rgb):kind==='fill'?doc.setFillColor(...rgb):doc.setDrawColor(...rgb);
-export const formatPdfNumber=(value:number|null|undefined)=>value==null?'—':new Intl.NumberFormat('fr-CH',{maximumFractionDigits:1}).format(value);
-export const formatPdfPercent=(value:number|null|undefined)=>value==null?'—':new Intl.NumberFormat('fr-CH',{style:'percent',maximumFractionDigits:1}).format(value);
+/** jsPDF's built-in Helvetica font does not map the narrow no-break space emitted by Intl correctly. */
+export const normalizePdfText=(value:string)=>value.replace(/[\u00a0\u202f]/g,' ');
+export const formatPdfNumber=(value:number|null|undefined)=>value==null?'—':normalizePdfText(new Intl.NumberFormat('fr-CH',{maximumFractionDigits:1}).format(value));
+export const formatPdfPercent=(value:number|null|undefined)=>value==null?'—':normalizePdfText(new Intl.NumberFormat('fr-CH',{style:'percent',maximumFractionDigits:1}).format(value));
 export const formatWritableValue=(value:number|null|undefined)=>value==null?'':formatPdfNumber(value);
 export const formatPdfDate=(value:string)=>new Intl.DateTimeFormat('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric',timeZone:'UTC'}).format(new Date(`${value.slice(0,10)}T12:00:00Z`));
 export const safePdfFilename=(parts:string[])=>`${parts.join('_').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/-+/g,'-')}.pdf`;

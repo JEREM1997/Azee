@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { calculateProductMetrics, normalizeProductionPlans } from '../engine.ts';
 import { makeEntry, makePlans } from './fixtures.ts';
 import { buildDecisionPdf, buildDeliveryPdf, buildProductionPlanPdf, buildSalesPdf } from '../../pdf/reports.ts';
-import { addContainedImage, formatPdfNumber, formatWritableValue, safePdfFilename } from '../../pdf/pdfKit.ts';
+import { addContainedImage, formatPdfNumber, formatPdfPercent, formatWritableValue, normalizePdfText, safePdfFilename } from '../../pdf/pdfKit.ts';
 
 const ctx={periodStart:'2026-01-01',periodEnd:'2026-12-31',scope:'Tous les magasins'};
 const observations=normalizeProductionPlans(makePlans(8));
@@ -37,10 +37,11 @@ test('delivery PDF stays portrait, supports nulls, true zeros and a missing logo
   assert.equal(report.doc.internal.pageSize.getHeight()>report.doc.internal.pageSize.getWidth(),true);assert.equal(new TextDecoder().decode(bytes(report.doc).slice(0,5)),'%PDF-');
 });
 
-test('Balexert delivery with 16 varieties and one box fits exactly one page',()=>{
+test('Balexert delivery with 16 varieties and several boxes fits exactly one page',()=>{
   const items=Array.from({length:16},(_,i)=>({name:`Variété ${i+1}`,planned:220-i,received:i===0?null:0,waste:i===0?null:0}));
-  const report=buildDeliveryPdf({storeName:'KK - Balexert',productionDate:'2026-09-10',deliveryDate:'2026-09-11',sourceLabel:'Plan habituel',items,boxes:[{name:'Boîte assortiment',planned:8,received:null,waste:null}]});
+  const report=buildDeliveryPdf({storeName:'KK - Balexert',productionDate:'2026-09-10',deliveryDate:'2026-09-11',sourceLabel:'Plan habituel',items,boxes:[{name:'Boîte assortiment',planned:8,received:null,waste:null},{name:'Boîte Original Glazed',planned:5,received:null,waste:null},{name:'Boîte personnalisée',planned:3,received:0,waste:0}]});
   assert.equal(report.doc.getNumberOfPages(),1);
+  const pageCommands=(report.doc.internal.pages as any[]).flat().join('\n');assert.equal(pageCommands.includes('CONTRÔLE LOGISTIQUE'),false);assert.equal(pageCommands.includes('RÉCEPTION MAGASIN'),true);
 });
 
 test('logo placement preserves its intrinsic ratio and centers it like contain',()=>{
@@ -63,4 +64,8 @@ test('production plan PDF is landscape and preserves unknown box configuration',
 });
 
 test('wide and long names wrap without forcing microscopic tables',()=>{const report=buildDecisionPdf(metrics.map((m,i)=>({...m,key:String(i),productName:'Produit avec un nom exceptionnellement long — édition limitée à vérifier'})),ctx);assert.ok(report.doc.getNumberOfPages()>=4);});
-test('French formatting and filenames are safe',()=>{assert.equal(formatPdfNumber(null),'—');assert.equal(formatPdfNumber(0),'0');assert.equal(safePdfFilename(['KKOPS','Aide décision','Genève']), 'KKOPS_Aide-decision_Geneve.pdf');});
+test('French PDF formatting replaces unsupported Unicode spacing without changing values',()=>{
+  assert.equal(formatPdfNumber(null),'—');assert.equal(formatPdfNumber(0),'0');assert.equal(formatPdfNumber(56_975),'56 975');assert.equal(formatPdfNumber(105_326),'105 326');assert.equal(formatPdfNumber(48_351),'48 351');
+  assert.equal(formatPdfPercent(12.345),'1 234,5%');assert.equal(normalizePdfText('12\u202f345\u00a0678'),'12 345 678');assert.equal(formatPdfNumber(56_975).includes('\u202f'),false);
+  assert.equal(safePdfFilename(['KKOPS','Aide décision','Genève']), 'KKOPS_Aide-decision_Geneve.pdf');
+});
