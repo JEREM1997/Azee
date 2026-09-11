@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
 import { buildDeliveryPdf } from '../pdf/reports';
 import { loadPdfImage } from '../pdf/pdfKit';
-import kkOpsLogo from '../assets/krispy-kreme-ops-logo.png';
+import kkOpsLogo from '../assets/digital_72_png-KK_logo_Red_Green_FNL.png';
 import { apiService } from '../services/apiService';
 import { EmptyState, MetricStrip, PageError, PageHeader } from '../components/PageExperience';
 

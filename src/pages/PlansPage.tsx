@@ -8,7 +8,7 @@ import { ProductionPlan, StorePlan, ProductionItem, BoxProduction } from '../typ
 import { EmptyState, PageError, PageHeader } from '../components/PageExperience';
 import { buildProductionPlanPdf } from '../pdf/reports';
 import { loadPdfImage } from '../pdf/pdfKit';
-import kkOpsLogo from '../assets/krispy-kreme-ops-logo.png';
+import kkOpsLogo from '../assets/digital_72_png-KK_logo_Red_Green_FNL.png';
 
 const PlansPage: React.FC = () => {
   const [plans, setPlans] = useState<ProductionPlan[]>([]);

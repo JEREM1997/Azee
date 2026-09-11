@@ -5,8 +5,8 @@ import { useAdmin } from '../context/AdminContext';
 import { apiService } from '../services/apiService';
 import { productionService } from '../services/productionService';
 import { buildDecisionPdf, buildSalesPdf } from '../pdf/reports';
-import { loadPdfImage } from '../pdf/pdfKit';
-import kkOpsLogo from '../assets/krispy-kreme-ops-logo.png';
+import { loadPdfImage, type PdfImage } from '../pdf/pdfKit';
+import kkOpsLogo from '../assets/digital_72_png-KK_logo_Red_Green_FNL.png';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 import { MetricStrip } from '../components/PageExperience';
 import StoreAnalyticsView from '../components/StoreAnalyticsView';
@@ -1032,7 +1032,7 @@ const StatsPage: React.FC = () => {
     scope: selectedStores.length ? stores.filter(store => selectedStores.includes(store.id)).map(store => store.name).join(', ') : 'Tous-magasins',
   });
   const eligibleObservations = () => normalizeProductionPlans(rawProductionPlans, new Set(boxes.map(box => box.id))).filter(observation => selectedStores.length === 0 || selectedStores.includes(observation.storeId));
-  const runPdfGeneration = async (builder: (logo: string | null) => { doc: any; filename: string }) => {
+  const runPdfGeneration = async (builder: (logo: PdfImage | null) => { doc: any; filename: string }) => {
     if (loadState !== 'success' || pdfProgress) { setPdfMessage('Impossible de générer le rapport : les statistiques sont incomplètes.'); return; }
     try {
       setPdfMessage(null); setPdfProgress('Préparation du rapport…');
@@ -1050,7 +1050,7 @@ const StatsPage: React.FC = () => {
     const store = stores.find(item => item.id === storeId); if (!store) return;
     return runPdfGeneration(logo => buildSalesPdf(eligibleObservations(), { ...reportContext(), scope: store.name, logo }, store.name));
   };
-  const generateDecisionReport = () => runPdfGeneration(logo => buildDecisionPdf(safeProductMetrics.filter(metric => selectedStores.length === 0 || selectedStores.includes(metric.storeId)), { ...reportContext(), logo }));
+  const generateDecisionReport = (includeAnnex = false) => runPdfGeneration(logo => buildDecisionPdf(safeProductMetrics.filter(metric => selectedStores.length === 0 || selectedStores.includes(metric.storeId)), { ...reportContext(), logo }, includeAnnex));
 
   // Format data for variety pie chart
   const getVarietyChartData = () => {
@@ -1926,9 +1926,12 @@ const StatsPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="mt-8 flex justify-end">
-        <button onClick={generateDecisionReport} disabled={loadState !== 'success' || safeProductMetrics.length === 0 || !!pdfProgress} className="inline-flex min-h-11 items-center rounded-lg bg-krispy-green px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50">
-          <Printer className="mr-2 h-4 w-4" />{pdfProgress ? pdfProgress : 'Télécharger le rapport d’aide à la décision'}
+      <div className="mt-8 flex flex-wrap justify-end gap-3">
+        <button onClick={() => generateDecisionReport(false)} disabled={loadState !== 'success' || safeProductMetrics.length === 0 || !!pdfProgress} className="inline-flex min-h-11 items-center rounded-lg bg-krispy-green px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50">
+          <Printer className="mr-2 h-4 w-4" />{pdfProgress ? pdfProgress : 'Rapport synthétique'}
+        </button>
+        <button onClick={() => generateDecisionReport(true)} disabled={loadState !== 'success' || safeProductMetrics.length === 0 || !!pdfProgress} className="inline-flex min-h-11 items-center rounded-lg border border-krispy-green bg-white px-4 py-2.5 text-sm font-semibold text-krispy-green hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-50">
+          <Printer className="mr-2 h-4 w-4" />Rapport détaillé avec annexes
         </button>
       </div>
       <StoreAnalyticsView
