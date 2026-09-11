@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
 import KrispyKremeLoader from '../components/KrispyKremeLoader';
 import { BarChart2, PieChart, TrendingUp, DollarSign, Store, Target, Package, Printer, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
@@ -8,6 +8,9 @@ import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 import { MetricStrip } from '../components/PageExperience';
+import StoreAnalyticsView from '../components/StoreAnalyticsView';
+import { calculateProductMetrics, normalizeProductionPlans } from '../analytics/engine';
+import { getComparisonWindows } from '../analytics/salesDate';
 
 // Helper: consistent number format for PDF (comma as thousands separator)
 const formatNum = (n: number) => n.toLocaleString('en-US');
@@ -66,11 +69,11 @@ interface PerformanceComparison {
 const StatsPage: React.FC = () => {
   const { stores, varieties, boxes, forms, loading: adminLoading } = useAdmin();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'range' | 'month' | 'year'>('day');
+  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'range' | 'month' | 'year'>('range');
   const [selectedStartDate, setSelectedStartDate] = useState<string>(() => {
     const today = new Date();
     const start = new Date(today);
-    start.setDate(today.getDate() - 6);
+    start.setDate(today.getDate() - 55);
     return start.toISOString().split('T')[0];
   });
   const [selectedEndDate, setSelectedEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -78,12 +81,14 @@ const StatsPage: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [productionData, setProductionData] = useState<ProductionData[]>([]);
   const [rawProductionPlans, setRawProductionPlans] = useState<any[]>([]); // Store raw plans data
+  const [previousProductionPlans, setPreviousProductionPlans] = useState<any[]>([]);
   const [selectedStores, setSelectedStores] = useState<string[]>([]); // Add store filter
   const [loading, setLoading] = useState(true);
   const [hasLoadedCriticalData, setHasLoadedCriticalData] = useState(false);
   const [kpiLoading, setKpiLoading] = useState(true);
   const requestIdRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
+  const [comparisonWarning, setComparisonWarning] = useState<string | null>(null);
   const [kpiSnapshot, setKpiSnapshot] = useState<{
     snapshot_date: string;
     range_start: string;
@@ -94,6 +99,15 @@ const StatsPage: React.FC = () => {
     stockout_rate: number | null;
     observed_count: number | null;
   } | null>(null);
+
+  const comparisonWindows = useMemo(() => getComparisonWindows({
+    period: selectedPeriod,
+    date: selectedDate,
+    start: selectedStartDate,
+    end: selectedEndDate,
+    month: selectedMonth,
+    year: selectedYear,
+  }), [selectedPeriod, selectedDate, selectedStartDate, selectedEndDate, selectedMonth, selectedYear]);
 
   const getPlanEntries = (plan: any): any[] => {
     if (Array.isArray(plan?.delivery_entries) && plan.delivery_entries.length > 0) {
@@ -114,9 +128,10 @@ const StatsPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      setComparisonWarning(null);
 
-      let startDateStr = selectedDate;
-      let endDateStr = selectedDate;
+      let startDateStr = comparisonWindows.current.start;
+      let endDateStr = comparisonWindows.current.end;
 
       if (selectedPeriod === 'day') {
         startDateStr = selectedDate;
@@ -162,23 +177,41 @@ const StatsPage: React.FC = () => {
         endDateStr
       );
 
-      const plans = await productionService.getProductionPlans(
-        startDateStr,
-        endDateStr
-      );
+      // Keep requests bounded to their own windows. Fetching the union of an
+      // eight-week period and its predecessor made the Edge Function scan up
+      // to sixteen weeks and regularly time out in production.
+      const [currentResult, previousResult] = await Promise.allSettled([
+        productionService.getProductionPlans(startDateStr, endDateStr),
+        productionService.getProductionPlans(comparisonWindows.previous.start, comparisonWindows.previous.end),
+      ]);
+
+      if (currentResult.status === 'rejected') {
+        throw currentResult.reason;
+      }
+
+      const plans = currentResult.value || [];
+      const previousPlans = previousResult.status === 'fulfilled' ? previousResult.value || [] : [];
+
+      if (previousResult.status === 'rejected') {
+        console.warn('Unable to load comparison period:', previousResult.reason);
+        setComparisonWarning('La période actuelle est affichée, mais la comparaison précédente est momentanément indisponible.');
+      }
 
       if (requestId !== requestIdRef.current) return;
 
       if (!plans || plans.length === 0) {
         setProductionData([]);
         setRawProductionPlans([]);
+        setPreviousProductionPlans([]);
         return;
       }
 
-      setRawProductionPlans(plans);
+      const currentPlans = plans.filter((plan: any) => plan.date >= startDateStr && plan.date <= endDateStr);
+      setRawProductionPlans(currentPlans);
+      setPreviousProductionPlans(previousPlans);
 
       // 4) Transformer les données
-      const transformedData: ProductionData[] = plans.map((plan: any) => {
+      const transformedData: ProductionData[] = currentPlans.map((plan: any) => {
         let totalProduction = 0;
         let totalReceived = 0;
         let totalWaste = 0;
@@ -191,7 +224,7 @@ const StatsPage: React.FC = () => {
             totalProduction += store.total_quantity || 0;
 
             // Items individuels
-            if (store.production_items && Array.isArray(store.production_items)) {
+            if (store.delivery_confirmed && store.waste_reported && store.production_items && Array.isArray(store.production_items)) {
               store.production_items.forEach((item: any) => {
                 if (item.received !== null && item.received !== undefined) {
                   totalReceived += item.received;
@@ -203,13 +236,14 @@ const StatsPage: React.FC = () => {
             }
 
             // Boxes
-            if (store.box_productions && Array.isArray(store.box_productions)) {
+            if (store.delivery_confirmed && store.waste_reported && store.box_productions && Array.isArray(store.box_productions)) {
               store.box_productions.forEach((box: any) => {
                 const boxQuantity = box.quantity || 0;
                 totalBoxes += boxQuantity;
 
-                const boxConfig = boxes.find(b => b.name === box.box_name);
-                const boxSize = boxConfig ? boxConfig.size : 12;
+                const boxConfig = boxes.find(b => b.id === box.box_id);
+                if (!boxConfig) return;
+                const boxSize = boxConfig.size;
                 const boxDoughnuts = boxQuantity * boxSize;
                 totalBoxDoughnuts += boxDoughnuts;
 
@@ -268,7 +302,11 @@ const StatsPage: React.FC = () => {
     selectedStartDate,
     selectedEndDate,
     selectedStores,
-    adminLoading
+    adminLoading,
+    comparisonWindows.current.start,
+    comparisonWindows.current.end,
+    comparisonWindows.previous.start,
+    comparisonWindows.previous.end,
   ]);
 
   useEffect(() => {
@@ -323,6 +361,10 @@ const StatsPage: React.FC = () => {
   };
 
   const data = getFilteredData();
+  const productMetrics = useMemo(() => calculateProductMetrics(
+    normalizeProductionPlans(rawProductionPlans, new Set(boxes.map(box => box.id))),
+    normalizeProductionPlans(previousProductionPlans, new Set(boxes.map(box => box.id)))
+  ), [rawProductionPlans, previousProductionPlans, boxes]);
 
   // Calculate store performance from real data (this respects store filtering)
   const getStorePerformance = (): StorePerformance[] => {
@@ -371,12 +413,13 @@ const StatsPage: React.FC = () => {
           let storeWasteCost = 0;
 
           // Process individual production items
-          if (store.production_items && Array.isArray(store.production_items)) {
+          if (store.delivery_confirmed && store.waste_reported && store.production_items && Array.isArray(store.production_items)) {
             store.production_items.forEach((item: any) => {
               const quantity = item.quantity || 0;
               // CRITICAL: Only use received quantity if delivery was confirmed, otherwise use 0
               const received = (item.received !== null && item.received !== undefined) ? item.received : 0;
-              const waste = item.waste || 0;
+              if (received === 0 || item.waste == null || item.waste < 0 || item.waste > received) return;
+              const waste = item.waste;
 
               // Get variety-specific production cost from admin configuration
               const variety = varieties.find(v => v.id === item.variety_id);
@@ -405,14 +448,15 @@ const StatsPage: React.FC = () => {
           }
 
           // Process box productions
-          if (store.box_productions && Array.isArray(store.box_productions)) {
+          if (store.delivery_confirmed && store.waste_reported && store.box_productions && Array.isArray(store.box_productions)) {
             store.box_productions.forEach((boxProd: any) => {
               const box = boxes.find(b => b.name === boxProd.box_name);
               if (box) {
                 const boxQuantity = boxProd.quantity || 0;
                 // CRITICAL: Only use received boxes if delivery was confirmed, otherwise use 0
                 const receivedBoxes = (boxProd.received !== null && boxProd.received !== undefined) ? boxProd.received : 0;
-                const wasteBoxes = boxProd.waste || 0;
+                if (receivedBoxes === 0 || boxProd.waste == null || boxProd.waste < 0 || boxProd.waste > receivedBoxes) return;
+                const wasteBoxes = boxProd.waste;
 
                 // Calculate box cost based on varieties configured in the box
                 let boxUnitCost = 0;
@@ -425,9 +469,6 @@ const StatsPage: React.FC = () => {
                       boxUnitCost += varietyCostPerBox;
                     }
                   });
-                } else {
-                  // Fallback if no varieties configured
-                  boxUnitCost = 0.20;
                 }
 
                 const boxSize = box.size;
@@ -509,7 +550,7 @@ const StatsPage: React.FC = () => {
           }
 
           // Calculate waste cost for individual production items
-          if (store.production_items && Array.isArray(store.production_items)) {
+          if (store.delivery_confirmed && store.waste_reported && store.production_items && Array.isArray(store.production_items)) {
             store.production_items.forEach((item: any) => {
               const waste = item.waste || 0;
               const variety = varieties.find(v => v.id === item.variety_id);
@@ -536,8 +577,6 @@ const StatsPage: React.FC = () => {
                       boxUnitCost += varietyCostPerBox;
                     }
                   });
-                } else {
-                  boxUnitCost = 0.20; // Fallback
                 }
 
                 totalWasteCost += wasteBoxes * boxUnitCost;
@@ -623,53 +662,11 @@ const StatsPage: React.FC = () => {
   // Performance comparison (current period vs same period last week/month/year)
   const getPerformanceComparison = (): { production: PerformanceComparison; waste: PerformanceComparison } => {
       const currentData = data;
-      let comparisonData: ProductionData[] = [];
-
-      // Get comparison period data
-      switch (selectedPeriod) {
-        case 'day':
-          // Compare with same day last week (7 days ago)
-          const lastWeekDate = new Date(selectedDate);
-          lastWeekDate.setDate(lastWeekDate.getDate() - 7);
-          comparisonData = productionData.filter(item => item.date === lastWeekDate.toISOString().split('T')[0]);
-          break;
-        case 'month':
-          // Compare with same month last year
-          comparisonData = productionData.filter(item => {
-            const itemDate = new Date(item.date);
-            return itemDate.getMonth() + 1 === selectedMonth && itemDate.getFullYear() === selectedYear - 1;
-          });
-          break;
-        case 'year':
-          // Compare with previous year
-          comparisonData = productionData.filter(item => {
-            const itemDate = new Date(item.date);
-            return itemDate.getFullYear() === selectedYear - 1;
-          });
-          break;
-        case 'range': {
-          const rangeStart = new Date(selectedStartDate);
-          const rangeEnd = new Date(selectedEndDate);
-          const periodLength = Math.floor((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-          const prevRangeStart = new Date(rangeStart);
-          prevRangeStart.setDate(rangeStart.getDate() - periodLength);
-
-         const prevRangeEnd = new Date(rangeEnd);
-         prevRangeEnd.setDate(rangeEnd.getDate() - periodLength);
-
-        comparisonData = productionData.filter(item => {
-          const itemDate = new Date(item.date);
-          return itemDate >= prevRangeStart && itemDate <= prevRangeEnd;
-          });
-          break;
-        }
-      }
 
     const currentProduction = currentData.reduce((sum, day) => sum + day.production, 0);
-    const currentWaste = currentData.reduce((sum, day) => sum + day.waste, 0);
-    const previousProduction = comparisonData.reduce((sum, day) => sum + day.production, 0);
-    const previousWaste = comparisonData.reduce((sum, day) => sum + day.waste, 0);
+    const currentWaste = normalizeProductionPlans(rawProductionPlans).filter(row => row.quality === 'valid').reduce((sum, row) => sum + (row.waste || 0), 0);
+    const previousProduction = previousProductionPlans.reduce((total, plan) => total + getPlanEntries(plan).reduce((sum, store) => sum + Number(store.total_quantity || 0), 0), 0);
+    const previousWaste = normalizeProductionPlans(previousProductionPlans).filter(row => row.quality === 'valid').reduce((sum, row) => sum + (row.waste || 0), 0);
 
     const productionChange = currentProduction - previousProduction;
     const wasteChange = currentWaste - previousWaste;
@@ -724,8 +721,9 @@ const StatsPage: React.FC = () => {
             store.production_items.forEach((item: any) => {
               const varietyId = item.variety_id;
               // Calculate sales: received - waste
-              const received = (item.received !== null && item.received !== undefined) ? item.received : 0;
-              const waste = item.waste || 0;
+              if (item.received == null || item.received <= 0 || item.waste == null || item.waste < 0 || item.waste > item.received) return;
+              const received = item.received;
+              const waste = item.waste;
               const salesQuantity = received - waste;
 
               if (!varietyStats[varietyId]) {
@@ -741,34 +739,7 @@ const StatsPage: React.FC = () => {
             });
           }
 
-          // Process varieties from box productions - use SALES quantities
-          if (store.box_productions && Array.isArray(store.box_productions)) {
-            store.box_productions.forEach((boxProd: any) => {
-              const box = boxes.find(b => b.name === boxProd.box_name);
-              if (box && box.varieties && box.varieties.length > 0) {
-                // Calculate sales boxes: received - waste
-                const receivedBoxes = (boxProd.received !== null && boxProd.received !== undefined) ? boxProd.received : 0;
-                const wasteBoxes = boxProd.waste || 0;
-                const salesBoxes = receivedBoxes - wasteBoxes;
-
-                box.varieties.forEach(boxVariety => {
-                  const varietyId = boxVariety.varietyId;
-                  const varietyQuantityFromSalesBoxes = boxVariety.quantity * salesBoxes;
-
-                  if (!varietyStats[varietyId]) {
-                    const variety = varieties.find(v => v.id === varietyId);
-                    const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
-                    varietyStats[varietyId] = {
-                      quantity: 0,
-                      formName: form?.name
-                    };
-                  }
-
-                  varietyStats[varietyId].quantity += varietyQuantityFromSalesBoxes;
-                });
-              }
-            });
-          }
+          // Box contents are deliberately not counted as individual variety sales.
         });
       }
     });
@@ -818,12 +789,13 @@ const StatsPage: React.FC = () => {
             return;
           }
 
-          if (store.box_productions && Array.isArray(store.box_productions)) {
+          if (store.delivery_confirmed && store.waste_reported && store.box_productions && Array.isArray(store.box_productions)) {
             store.box_productions.forEach((boxProd: any) => {
               const boxName = boxProd.box_name;
               // Calculate sales boxes: received - waste
-              const receivedBoxes = (boxProd.received !== null && boxProd.received !== undefined) ? boxProd.received : 0;
-              const wasteBoxes = boxProd.waste || 0;
+              if (boxProd.received == null || boxProd.received <= 0 || boxProd.waste == null || boxProd.waste < 0 || boxProd.waste > boxProd.received) return;
+              const receivedBoxes = boxProd.received;
+              const wasteBoxes = boxProd.waste;
               const salesBoxes = receivedBoxes - wasteBoxes;
 
               // Find the box configuration by name
@@ -1099,8 +1071,9 @@ const StatsPage: React.FC = () => {
               const variety = varieties.find(v => v.id === item.variety_id);
               const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
 
-              const received = item.received !== null && item.received !== undefined ? item.received : item.quantity;
-              const waste = item.waste || 0;
+              if (!store.delivery_confirmed || !store.waste_reported || item.received == null || item.waste == null) return;
+              const received = item.received;
+              const waste = item.waste;
               const sales = received - waste;
 
               detailedSalesData.push({
@@ -1122,8 +1095,9 @@ const StatsPage: React.FC = () => {
 
               if (box) {
                 const boxSize = box.size;
-                const receivedBoxes = boxProd.received !== null && boxProd.received !== undefined ? boxProd.received : boxQuantity;
-                const wasteBoxes = boxProd.waste || 0;
+                if (!store.delivery_confirmed || !store.waste_reported || boxProd.received == null || boxProd.waste == null) return;
+                const receivedBoxes = boxProd.received;
+                const wasteBoxes = boxProd.waste;
                 const salesBoxes = receivedBoxes - wasteBoxes;
 
                 // Convert to doughnuts
@@ -1351,8 +1325,9 @@ const StatsPage: React.FC = () => {
               const variety = varieties.find(v => v.id === item.variety_id);
               const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
 
-              const received = item.received !== null && item.received !== undefined ? item.received : item.quantity;
-              const waste = item.waste || 0;
+              if (!planStore.delivery_confirmed || !planStore.waste_reported || item.received == null || item.waste == null) return;
+              const received = item.received;
+              const waste = item.waste;
               const sales = received - waste;
 
               storeDetailedData.push({
@@ -1372,8 +1347,9 @@ const StatsPage: React.FC = () => {
               if (box) {
                 const boxQuantity = boxProd.quantity || 0;
                 const boxSize = box.size;
-                const receivedBoxes = boxProd.received !== null && boxProd.received !== undefined ? boxProd.received : boxQuantity;
-                const wasteBoxes = boxProd.waste || 0;
+                if (!planStore.delivery_confirmed || !planStore.waste_reported || boxProd.received == null || boxProd.waste == null) return;
+                const receivedBoxes = boxProd.received;
+                const wasteBoxes = boxProd.waste;
                 const salesBoxes = receivedBoxes - wasteBoxes;
 
                 const receivedDoughnuts = receivedBoxes * boxSize;
@@ -1522,7 +1498,7 @@ const StatsPage: React.FC = () => {
               className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
             >
               <option value="day">Par Jour</option>
-              <option value="range">Par Semaine</option>
+              <option value="range">Période personnalisée</option>
               <option value="month">Par Mois</option>
               <option value="year">Par Année</option>
             </select>
@@ -1651,6 +1627,12 @@ const StatsPage: React.FC = () => {
               <p className="text-sm text-red-700">{error}</p>
             </div>
           </div>
+        </div>
+      )}
+
+      {comparisonWarning && !error && (
+        <div className="mb-6 border-l-4 border-amber-400 bg-amber-50 p-4 text-sm text-amber-900" role="status">
+          {comparisonWarning}
         </div>
       )}
 
@@ -2272,6 +2254,11 @@ const StatsPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      <StoreAnalyticsView
+        metrics={productMetrics}
+        stores={stores.filter(store => store.isActive && (selectedStores.length === 0 || selectedStores.includes(store.id)))}
+      />
       </div>
       )}
     </div>
