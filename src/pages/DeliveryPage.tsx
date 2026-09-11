@@ -4,8 +4,9 @@ import { flushSync } from 'react-dom';
 import { Edit, Check, Printer, FileText, TruckIcon, AlertTriangle, Truck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import { buildDeliveryPdf } from '../pdf/reports';
+import { loadPdfImage } from '../pdf/pdfKit';
+import kkOpsLogo from '../assets/digital_72_png-KK_logo_Red_Green_FNL.png';
 import { apiService } from '../services/apiService';
 import { EmptyState, MetricStrip, PageError, PageHeader } from '../components/PageExperience';
 
@@ -128,6 +129,7 @@ const DeliveryPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   const [deliveryDate, setDeliveryDate] = useState<string>(() => {
     // Avoid timezone issues by creating date in local timezone
     const today = new Date();
@@ -474,129 +476,32 @@ const DeliveryPage: React.FC = () => {
     isAdmin || currentUserStoreIds.includes(storeDetails.store_id)
   );
 
-  const generateDeliveryBulletin = () => {
-    if (!storeDetails) return;
-
-    const doc = new jsPDF();
-    
-    // Use the actual production plan date instead of current date
-    const productionDate = storeDetails.production_date ? formatDateSafe(storeDetails.production_date) : formatDateSafe(currentPlan?.date ?? new Date().toISOString().split('T')[0]);
-    
-    // Use the store's delivery date if available, otherwise fall back to production date
-    const deliveryDate = storeDetails.deliverydate ? formatDateSafe(storeDetails.deliverydate) : productionDate;
-    
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-    
-    const headers = [
-      ['Type', storeDetails.source_label || 'Plan habituel'],
-      ['Date de la production', productionDate],
-      ['Date de livraison', deliveryDate],
-      ['Magasin', getStoreDisplayName(storeDetails)]
-    ];
-
-    if (storeDetails.source_order_id) {
-      headers.push(['Référence commande', storeDetails.source_order_id]);
+  const generateDeliveryBulletin = async () => {
+    if (!storeDetails || generatingPdf) return;
+    setGeneratingPdf(true);
+    try {
+    const productionDate = storeDetails.production_date || currentPlan?.date || new Date().toISOString().slice(0, 10);
+    const deliveryDate = storeDetails.deliverydate || productionDate;
+    const logo = await loadPdfImage(kkOpsLogo);
+    const report = buildDeliveryPdf({
+      storeName: getStoreDisplayName(storeDetails),
+      productionDate,
+      deliveryDate,
+      sourceLabel: storeDetails.source_label || 'Plan habituel',
+      reference: storeDetails.source_order_id || undefined,
+      comments: storeDetails.comments || undefined,
+      items: (storeDetails.production_items || []).slice().sort((a,b)=>compareText(a.variety_name,b.variety_name)).map(item=>({
+        name: getVarietyDisplayName(item), conditioning:item.conditioning || undefined, planned:item.quantity,
+        received: receivedQuantities[item.id] ?? item.received ?? null, waste:wasteQuantities[item.id] ?? item.waste ?? null,
+      })),
+      boxes: (storeDetails.box_productions || []).slice().sort((a,b)=>compareText(a.box_name,b.box_name)).map(box=>({
+        name:getBoxDisplayName(box),planned:box.quantity,received:boxReceivedQuantities[box.id] ?? box.received ?? null,waste:boxWasteQuantities[box.id] ?? box.waste ?? null,
+      })),
+    },logo);
+    report.doc.save(report.filename);
+    } finally {
+      setGeneratingPdf(false);
     }
-    if (storeDetails.company_name) {
-      headers.push(['Société', storeDetails.company_name]); 
-    }
-    if (storeDetails.customer_name) {
-      headers.push(['Client', storeDetails.customer_name]);
-    }
-    if (storeDetails.customer_phone) {
-      headers.push(['Télephone', storeDetails.customer_phone]);
-    }
-    if (storeDetails.delivery_address) {
-      headers.push(['Adresse de livraison', storeDetails.delivery_address]);
-    }
-    if (storeDetails.billing_address) {
-      headers.push(['Adresse de facturation', storeDetails.billing_address]);
-    }
-    if (storeDetails.order_type) {
-      headers.push(['Type de commande', getOrderTypeLabel(storeDetails.order_type)]);
-    }
-    if (storeDetails.payment_status) {
-      headers.push(['Paiement', getPaymentStatusLabel(storeDetails.payment_status)]);
-    }
-    if (isOrderDelivery) {
-      headers.push(['Commande saisie par', storeDetails.handledBy || 'Non renseigné']);
-    }
-    if (storeDetails.deliveredBy) {
-      headers.push(['Livrée par', storeDetails.deliveredBy]); 
-    }
-    if (selectedConditionings.length > 0) {
-      headers.push(['Conditionnement', selectedConditionings.join(', ')]);
-    }
-     let currentY = 20;
-    headers.forEach(([label, value]) => {
-      const wrappedValue = doc.splitTextToSize(String(value), 105);
-      doc.text(`${label}:`, 20, currentY);
-      doc.text(wrappedValue, 70, currentY);
-      currentY += Math.max(wrappedValue.length, 1) * 8;
-    });
-
-    // Add individual items table
-    const itemsTableHeaders = [
-     ['Variété', 'Conditionnement', 'Quantité Prévue (unité)', 'Quantité Reçue (unité)', 'Déchets (unité)'] 
-    ];
-
-    
-    const itemsTableData = storeDetails.production_items?.slice().sort((a,b)=>compareText(a.variety_name, b.variety_name)).map(item => [
-      getVarietyDisplayName(item),
-      item.conditioning || '-',
-      item.quantity.toString(),
-      receivedQuantities[item.id]?.toString() || item.received?.toString() || '',
-      wasteQuantities[item.id]?.toString() || item.waste?.toString() || ''
-    ]) || [];
-
-    (doc as any).autoTable({
-      startY: currentY + 6,
-      head: itemsTableHeaders,
-      body: itemsTableData,
-      theme: 'grid',
-      styles: {
-        fontSize: 10,
-        cellPadding: 2
-      }
-    });
-
-    // Add boxes table if there are any boxes
-    if (storeDetails.box_productions && storeDetails.box_productions.length > 0) {
-      const boxesTableHeaders = [
-      ['Boîte', 'Quantité Prévue (unité)', 'Quantités Reçue (unité)', 'Déchets (unité)']  
-      ];
-
-      const boxesTableData = storeDetails.box_productions.slice().sort((a,b)=>compareText(a.box_name, b.box_name)).map(box => [
-        getBoxDisplayName(box),
-        box.quantity.toString(),
-        boxReceivedQuantities[box.id]?.toString() || box.received?.toString() || '',
-        boxWasteQuantities[box.id]?.toString() || box.waste?.toString() || ''
-      ]);
-
-      (doc as any).autoTable({
-        startY: (doc as any).lastAutoTable.finalY + 20,
-        head: boxesTableHeaders,
-        body: boxesTableData,
-        theme: 'grid',
-        styles: {
-          fontSize: 10,
-          cellPadding: 2
-        }
-      });
-    }
-
-    const finalY = (doc as any).lastAutoTable.finalY || 150;
-    if (storeDetails.comments) {
-      doc.text(`Commentaire: ${storeDetails.comments}`, 20, finalY + 15);
-    }
-    doc.line(20, finalY + 30, 190, finalY + 30);
-    doc.text('Signature:', 20, finalY + 40);
-
-    // Update filename to include delivery date
-    const fileDate = storeDetails.deliverydate ? formatDateSafe(storeDetails.deliverydate) : productionDate;
-    const filePrefix = isOrderDelivery ? 'bulletin-livraison-commande' : 'bulletin-livraison';
-    doc.save(`${filePrefix}-${getStoreDisplayName(storeDetails)}-${fileDate}.pdf`);
   };
 
   const handleConfirmDelivery = async () => {
@@ -1020,10 +925,11 @@ const DeliveryPage: React.FC = () => {
                   {(isAdmin || isProduction || currentUserStoreIds.includes(storeDetails.store_id)) && (
                     <button
                       onClick={generateDeliveryBulletin}
+                      disabled={generatingPdf}
                       className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
                     >
                       <Printer className="h-4 w-4 mr-1" />
-                      Télécharger le Bulletin
+                      {generatingPdf ? 'Préparation du rapport…' : 'Télécharger le Bulletin'}
                     </button>
                   )}
                 </div>

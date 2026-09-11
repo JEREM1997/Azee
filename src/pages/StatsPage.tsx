@@ -1,13 +1,18 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
 import KrispyKremeLoader from '../components/KrispyKremeLoader';
 import { BarChart2, PieChart, TrendingUp, DollarSign, Store, Target, Package, Printer, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
 import { apiService } from '../services/apiService';
 import { productionService } from '../services/productionService';
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import { buildDecisionPdf, buildSalesPdf } from '../pdf/reports';
+import { loadPdfImage, type PdfImage } from '../pdf/pdfKit';
+import kkOpsLogo from '../assets/digital_72_png-KK_logo_Red_Green_FNL.png';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 import { MetricStrip } from '../components/PageExperience';
+import StoreAnalyticsView from '../components/StoreAnalyticsView';
+import { calculateProductMetrics, normalizeProductionPlans } from '../analytics/engine';
+import { getComparisonWindows } from '../analytics/salesDate';
+import { canExportStatistics, friendlyStatisticsError, loadStatisticsWindows, type BatchFailure } from '../services/statisticsLoader';
 
 // Helper: consistent number format for PDF (comma as thousands separator)
 const formatNum = (n: number) => n.toLocaleString('en-US');
@@ -66,11 +71,11 @@ interface PerformanceComparison {
 const StatsPage: React.FC = () => {
   const { stores, varieties, boxes, forms, loading: adminLoading } = useAdmin();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'range' | 'month' | 'year'>('day');
+  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'range' | 'month' | 'year'>('range');
   const [selectedStartDate, setSelectedStartDate] = useState<string>(() => {
     const today = new Date();
     const start = new Date(today);
-    start.setDate(today.getDate() - 6);
+    start.setDate(today.getDate() - 55);
     return start.toISOString().split('T')[0];
   });
   const [selectedEndDate, setSelectedEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -78,12 +83,18 @@ const StatsPage: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [productionData, setProductionData] = useState<ProductionData[]>([]);
   const [rawProductionPlans, setRawProductionPlans] = useState<any[]>([]); // Store raw plans data
+  const [previousProductionPlans, setPreviousProductionPlans] = useState<any[]>([]);
   const [selectedStores, setSelectedStores] = useState<string[]>([]); // Add store filter
   const [loading, setLoading] = useState(true);
   const [hasLoadedCriticalData, setHasLoadedCriticalData] = useState(false);
   const [kpiLoading, setKpiLoading] = useState(true);
   const requestIdRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
+  const [comparisonWarning, setComparisonWarning] = useState<string | null>(null);
+  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'success' | 'partial' | 'error'>('idle');
+  const [loadProgress, setLoadProgress] = useState({ completed: 0, total: 0, label: '' });
+  const [failedBatches, setFailedBatches] = useState<BatchFailure[]>([]);
+  const [loadDiagnostics, setLoadDiagnostics] = useState<{ requests: number; rows: number; bytes: number; durationMs: number } | null>(null);
   const [kpiSnapshot, setKpiSnapshot] = useState<{
     snapshot_date: string;
     range_start: string;
@@ -94,6 +105,15 @@ const StatsPage: React.FC = () => {
     stockout_rate: number | null;
     observed_count: number | null;
   } | null>(null);
+
+  const comparisonWindows = useMemo(() => getComparisonWindows({
+    period: selectedPeriod,
+    date: selectedDate,
+    start: selectedStartDate,
+    end: selectedEndDate,
+    month: selectedMonth,
+    year: selectedYear,
+  }), [selectedPeriod, selectedDate, selectedStartDate, selectedEndDate, selectedMonth, selectedYear]);
 
   const getPlanEntries = (plan: any): any[] => {
     if (Array.isArray(plan?.delivery_entries) && plan.delivery_entries.length > 0) {
@@ -113,10 +133,14 @@ const StatsPage: React.FC = () => {
     const requestId = ++requestIdRef.current;
     try {
       setLoading(true);
+      setLoadState('loading');
       setError(null);
+      setComparisonWarning(null);
+      setFailedBatches([]);
+      setLoadProgress({ completed: 0, total: 0, label: '' });
 
-      let startDateStr = selectedDate;
-      let endDateStr = selectedDate;
+      let startDateStr = comparisonWindows.current.start;
+      let endDateStr = comparisonWindows.current.end;
 
       if (selectedPeriod === 'day') {
         startDateStr = selectedDate;
@@ -141,6 +165,7 @@ const StatsPage: React.FC = () => {
 
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
         setError('Veuillez sélectionner une période valide.');
+        setLoadState('error');
         setProductionData([]);
         setRawProductionPlans([]);
         return;
@@ -148,6 +173,7 @@ const StatsPage: React.FC = () => {
 
       if (startDate > endDate) {
         setError('La date de début doit être antérieure ou égale à la date de fin.');
+        setLoadState('error');
         setProductionData([]);
         setRawProductionPlans([]);
         return;
@@ -162,23 +188,56 @@ const StatsPage: React.FC = () => {
         endDateStr
       );
 
-      const plans = await productionService.getProductionPlans(
-        startDateStr,
-        endDateStr
-      );
+      const result = await loadStatisticsWindows({
+        current: { start: startDateStr, end: endDateStr },
+        previous: comparisonWindows.previous,
+        fetchBatch: (start, end) => productionService.getProductionPlans(start, end),
+        concurrency: 2,
+        retries: 1,
+        isStale: () => requestId !== requestIdRef.current,
+        onProgress: progress => {
+          if (requestId !== requestIdRef.current) return;
+          setLoadProgress({ completed: progress.completed, total: progress.total, label: `${progress.batch.start} → ${progress.batch.end}` });
+        },
+      });
+
+      const plans = result.current;
+      const previousPlans = result.previous;
+      setFailedBatches(result.failures);
+      setLoadDiagnostics({ requests: result.requestCount, rows: result.rowCount, bytes: result.responseBytes, durationMs: result.durationMs });
+
+      const currentFailures = result.failures.filter(failure => failure.scopes.includes('current'));
+      const previousFailures = result.failures.filter(failure => failure.scopes.includes('previous'));
+      if (currentFailures.length === result.batches.filter(batch => batch.scopes.includes('current')).length) {
+        const first = currentFailures[0];
+        throw Object.assign(new Error(`Impossible de charger les statistiques : ${friendlyStatisticsError(first)}`), { failures: currentFailures });
+      }
+      if (result.failures.length) {
+        setLoadState('partial');
+        const missing = result.failures.map(failure => `${failure.start} → ${failure.end}`).join(', ');
+        setComparisonWarning(`Chargement partiel : périodes indisponibles ${missing}. Les recommandations sont suspendues.`);
+      } else {
+        setLoadState('success');
+      }
+      if (previousFailures.length && !currentFailures.length) {
+        setComparisonWarning(`La période actuelle est complète, mais ${previousFailures.length} lot(s) de comparaison sont indisponibles. Les tendances sont suspendues.`);
+      }
 
       if (requestId !== requestIdRef.current) return;
 
-      if (!plans || plans.length === 0) {
+      if (plans.length === 0) {
         setProductionData([]);
         setRawProductionPlans([]);
+        setPreviousProductionPlans([]);
         return;
       }
 
-      setRawProductionPlans(plans);
+      const currentPlans = plans.filter((plan: any) => plan.date >= startDateStr && plan.date <= endDateStr);
+      setRawProductionPlans(currentPlans);
+      setPreviousProductionPlans(previousPlans);
 
       // 4) Transformer les données
-      const transformedData: ProductionData[] = plans.map((plan: any) => {
+      const transformedData: ProductionData[] = currentPlans.map((plan: any) => {
         let totalProduction = 0;
         let totalReceived = 0;
         let totalWaste = 0;
@@ -191,7 +250,7 @@ const StatsPage: React.FC = () => {
             totalProduction += store.total_quantity || 0;
 
             // Items individuels
-            if (store.production_items && Array.isArray(store.production_items)) {
+            if (store.delivery_confirmed && store.waste_reported && store.production_items && Array.isArray(store.production_items)) {
               store.production_items.forEach((item: any) => {
                 if (item.received !== null && item.received !== undefined) {
                   totalReceived += item.received;
@@ -203,13 +262,14 @@ const StatsPage: React.FC = () => {
             }
 
             // Boxes
-            if (store.box_productions && Array.isArray(store.box_productions)) {
+            if (store.delivery_confirmed && store.waste_reported && store.box_productions && Array.isArray(store.box_productions)) {
               store.box_productions.forEach((box: any) => {
                 const boxQuantity = box.quantity || 0;
                 totalBoxes += boxQuantity;
 
-                const boxConfig = boxes.find(b => b.name === box.box_name);
-                const boxSize = boxConfig ? boxConfig.size : 12;
+                const boxConfig = boxes.find(b => b.id === box.box_id);
+                if (!boxConfig) return;
+                const boxSize = boxConfig.size;
                 const boxDoughnuts = boxQuantity * boxSize;
                 totalBoxDoughnuts += boxDoughnuts;
 
@@ -245,6 +305,8 @@ const StatsPage: React.FC = () => {
     } catch (err) {
       console.error('Error loading production data:', err);
       if (requestId !== requestIdRef.current) return;
+      if ((err as any)?.code === 'STALE_REQUEST') return;
+      setLoadState('error');
       setError(
         err instanceof Error
           ? err.message
@@ -267,8 +329,11 @@ const StatsPage: React.FC = () => {
     selectedYear,
     selectedStartDate,
     selectedEndDate,
-    selectedStores,
-    adminLoading
+    adminLoading,
+    comparisonWindows.current.start,
+    comparisonWindows.current.end,
+    comparisonWindows.previous.start,
+    comparisonWindows.previous.end,
   ]);
 
   useEffect(() => {
@@ -323,6 +388,11 @@ const StatsPage: React.FC = () => {
   };
 
   const data = getFilteredData();
+  const productMetrics = useMemo(() => calculateProductMetrics(
+    normalizeProductionPlans(rawProductionPlans, new Set(boxes.map(box => box.id))),
+    normalizeProductionPlans(previousProductionPlans, new Set(boxes.map(box => box.id)))
+  ), [rawProductionPlans, previousProductionPlans, boxes]);
+  const safeProductMetrics = loadState === 'success' ? productMetrics : [];
 
   // Calculate store performance from real data (this respects store filtering)
   const getStorePerformance = (): StorePerformance[] => {
@@ -371,12 +441,13 @@ const StatsPage: React.FC = () => {
           let storeWasteCost = 0;
 
           // Process individual production items
-          if (store.production_items && Array.isArray(store.production_items)) {
+          if (store.delivery_confirmed && store.waste_reported && store.production_items && Array.isArray(store.production_items)) {
             store.production_items.forEach((item: any) => {
               const quantity = item.quantity || 0;
               // CRITICAL: Only use received quantity if delivery was confirmed, otherwise use 0
               const received = (item.received !== null && item.received !== undefined) ? item.received : 0;
-              const waste = item.waste || 0;
+              if (received === 0 || item.waste == null || item.waste < 0 || item.waste > received) return;
+              const waste = item.waste;
 
               // Get variety-specific production cost from admin configuration
               const variety = varieties.find(v => v.id === item.variety_id);
@@ -405,14 +476,15 @@ const StatsPage: React.FC = () => {
           }
 
           // Process box productions
-          if (store.box_productions && Array.isArray(store.box_productions)) {
+          if (store.delivery_confirmed && store.waste_reported && store.box_productions && Array.isArray(store.box_productions)) {
             store.box_productions.forEach((boxProd: any) => {
               const box = boxes.find(b => b.name === boxProd.box_name);
               if (box) {
                 const boxQuantity = boxProd.quantity || 0;
                 // CRITICAL: Only use received boxes if delivery was confirmed, otherwise use 0
                 const receivedBoxes = (boxProd.received !== null && boxProd.received !== undefined) ? boxProd.received : 0;
-                const wasteBoxes = boxProd.waste || 0;
+                if (receivedBoxes === 0 || boxProd.waste == null || boxProd.waste < 0 || boxProd.waste > receivedBoxes) return;
+                const wasteBoxes = boxProd.waste;
 
                 // Calculate box cost based on varieties configured in the box
                 let boxUnitCost = 0;
@@ -425,9 +497,6 @@ const StatsPage: React.FC = () => {
                       boxUnitCost += varietyCostPerBox;
                     }
                   });
-                } else {
-                  // Fallback if no varieties configured
-                  boxUnitCost = 0.20;
                 }
 
                 const boxSize = box.size;
@@ -509,7 +578,7 @@ const StatsPage: React.FC = () => {
           }
 
           // Calculate waste cost for individual production items
-          if (store.production_items && Array.isArray(store.production_items)) {
+          if (store.delivery_confirmed && store.waste_reported && store.production_items && Array.isArray(store.production_items)) {
             store.production_items.forEach((item: any) => {
               const waste = item.waste || 0;
               const variety = varieties.find(v => v.id === item.variety_id);
@@ -536,8 +605,6 @@ const StatsPage: React.FC = () => {
                       boxUnitCost += varietyCostPerBox;
                     }
                   });
-                } else {
-                  boxUnitCost = 0.20; // Fallback
                 }
 
                 totalWasteCost += wasteBoxes * boxUnitCost;
@@ -623,53 +690,11 @@ const StatsPage: React.FC = () => {
   // Performance comparison (current period vs same period last week/month/year)
   const getPerformanceComparison = (): { production: PerformanceComparison; waste: PerformanceComparison } => {
       const currentData = data;
-      let comparisonData: ProductionData[] = [];
-
-      // Get comparison period data
-      switch (selectedPeriod) {
-        case 'day':
-          // Compare with same day last week (7 days ago)
-          const lastWeekDate = new Date(selectedDate);
-          lastWeekDate.setDate(lastWeekDate.getDate() - 7);
-          comparisonData = productionData.filter(item => item.date === lastWeekDate.toISOString().split('T')[0]);
-          break;
-        case 'month':
-          // Compare with same month last year
-          comparisonData = productionData.filter(item => {
-            const itemDate = new Date(item.date);
-            return itemDate.getMonth() + 1 === selectedMonth && itemDate.getFullYear() === selectedYear - 1;
-          });
-          break;
-        case 'year':
-          // Compare with previous year
-          comparisonData = productionData.filter(item => {
-            const itemDate = new Date(item.date);
-            return itemDate.getFullYear() === selectedYear - 1;
-          });
-          break;
-        case 'range': {
-          const rangeStart = new Date(selectedStartDate);
-          const rangeEnd = new Date(selectedEndDate);
-          const periodLength = Math.floor((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-          const prevRangeStart = new Date(rangeStart);
-          prevRangeStart.setDate(rangeStart.getDate() - periodLength);
-
-         const prevRangeEnd = new Date(rangeEnd);
-         prevRangeEnd.setDate(rangeEnd.getDate() - periodLength);
-
-        comparisonData = productionData.filter(item => {
-          const itemDate = new Date(item.date);
-          return itemDate >= prevRangeStart && itemDate <= prevRangeEnd;
-          });
-          break;
-        }
-      }
 
     const currentProduction = currentData.reduce((sum, day) => sum + day.production, 0);
-    const currentWaste = currentData.reduce((sum, day) => sum + day.waste, 0);
-    const previousProduction = comparisonData.reduce((sum, day) => sum + day.production, 0);
-    const previousWaste = comparisonData.reduce((sum, day) => sum + day.waste, 0);
+    const currentWaste = normalizeProductionPlans(rawProductionPlans).filter(row => row.quality === 'valid').reduce((sum, row) => sum + (row.waste || 0), 0);
+    const previousProduction = previousProductionPlans.reduce((total, plan) => total + getPlanEntries(plan).reduce((sum, store) => sum + Number(store.total_quantity || 0), 0), 0);
+    const previousWaste = normalizeProductionPlans(previousProductionPlans).filter(row => row.quality === 'valid').reduce((sum, row) => sum + (row.waste || 0), 0);
 
     const productionChange = currentProduction - previousProduction;
     const wasteChange = currentWaste - previousWaste;
@@ -724,8 +749,9 @@ const StatsPage: React.FC = () => {
             store.production_items.forEach((item: any) => {
               const varietyId = item.variety_id;
               // Calculate sales: received - waste
-              const received = (item.received !== null && item.received !== undefined) ? item.received : 0;
-              const waste = item.waste || 0;
+              if (item.received == null || item.received <= 0 || item.waste == null || item.waste < 0 || item.waste > item.received) return;
+              const received = item.received;
+              const waste = item.waste;
               const salesQuantity = received - waste;
 
               if (!varietyStats[varietyId]) {
@@ -741,34 +767,7 @@ const StatsPage: React.FC = () => {
             });
           }
 
-          // Process varieties from box productions - use SALES quantities
-          if (store.box_productions && Array.isArray(store.box_productions)) {
-            store.box_productions.forEach((boxProd: any) => {
-              const box = boxes.find(b => b.name === boxProd.box_name);
-              if (box && box.varieties && box.varieties.length > 0) {
-                // Calculate sales boxes: received - waste
-                const receivedBoxes = (boxProd.received !== null && boxProd.received !== undefined) ? boxProd.received : 0;
-                const wasteBoxes = boxProd.waste || 0;
-                const salesBoxes = receivedBoxes - wasteBoxes;
-
-                box.varieties.forEach(boxVariety => {
-                  const varietyId = boxVariety.varietyId;
-                  const varietyQuantityFromSalesBoxes = boxVariety.quantity * salesBoxes;
-
-                  if (!varietyStats[varietyId]) {
-                    const variety = varieties.find(v => v.id === varietyId);
-                    const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
-                    varietyStats[varietyId] = {
-                      quantity: 0,
-                      formName: form?.name
-                    };
-                  }
-
-                  varietyStats[varietyId].quantity += varietyQuantityFromSalesBoxes;
-                });
-              }
-            });
-          }
+          // Box contents are deliberately not counted as individual variety sales.
         });
       }
     });
@@ -818,12 +817,13 @@ const StatsPage: React.FC = () => {
             return;
           }
 
-          if (store.box_productions && Array.isArray(store.box_productions)) {
+          if (store.delivery_confirmed && store.waste_reported && store.box_productions && Array.isArray(store.box_productions)) {
             store.box_productions.forEach((boxProd: any) => {
               const boxName = boxProd.box_name;
               // Calculate sales boxes: received - waste
-              const receivedBoxes = (boxProd.received !== null && boxProd.received !== undefined) ? boxProd.received : 0;
-              const wasteBoxes = boxProd.waste || 0;
+              if (boxProd.received == null || boxProd.received <= 0 || boxProd.waste == null || boxProd.waste < 0 || boxProd.waste > boxProd.received) return;
+              const receivedBoxes = boxProd.received;
+              const wasteBoxes = boxProd.waste;
               const salesBoxes = receivedBoxes - wasteBoxes;
 
               // Find the box configuration by name
@@ -1024,430 +1024,33 @@ const StatsPage: React.FC = () => {
     }
   }, [rawProductionPlans, data, totalIndividualDoughnuts, totalBoxes]);
 
-  // Generate PDF Sales Report
-  const generateSalesReport = () => {
-    const doc = new jsPDF();
-
-    // Set up the document
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Rapport de Ventes Détaillé par Magasin', 20, 25);
-
-    // Add period information
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-
-    let periodText = '';
-    switch (selectedPeriod) {
-      case 'day':
-        periodText = `Jour: ${new Date(selectedDate).toLocaleDateString('fr-FR')}`;
-        break;
-      case 'range':
-        periodText = `Du ${new Date(selectedStartDate).toLocaleDateString('fr-FR')} au ${new Date(selectedEndDate).toLocaleDateString('fr-FR')}`;
-        break;
-      case 'month':
-        const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-          'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-        periodText = `${monthNames[selectedMonth - 1]} ${selectedYear}`;
-        break;
-      case 'year':
-        periodText = `Année ${selectedYear}`;
-        break;
-    }
-
-    doc.text(`Période: ${periodText}`, 20, 35);
-    doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, 20, 45);
-
-    // Filter stores if specific stores are selected
-    const filteredStoreNames = selectedStores.length > 0
-      ? stores.filter(store => selectedStores.includes(store.id)).map(store => store.name)
-      : ['Tous les magasins'];
-
-    doc.setFontSize(10);
-    doc.text(`Magasins: ${filteredStoreNames.join(', ')}`, 20, 55);
-
-    // Get filtered dates to match our current selection
-    const filteredDates = data.map(d => d.date);
-
-    // Extract detailed sales data from raw production plans
-    const detailedSalesData: Array<{
-      storeName: string;
-      variety: string;
-      boxFormat: string;
-      received: number;
-      waste: number;
-      sales: number;
-    }> = [];
-
-    rawProductionPlans.forEach(plan => {
-      // Only process plans that match our filtered date range
-      if (!filteredDates.includes(plan.date)) return;
-
-      const planEntries = getPlanEntries(plan);
-      if (planEntries.length > 0) {
-        planEntries.forEach((store: any) => {
-          // Filter by selected stores if any are selected
-          if (selectedStores.length > 0 && !selectedStores.includes(store.store_id)) {
-            return;
-          }
-
-          const storeName = store.store_name;
-
-          // Process individual production items (varieties)
-          if (store.production_items && Array.isArray(store.production_items)) {
-            store.production_items.forEach((item: any) => {
-              const variety = varieties.find(v => v.id === item.variety_id);
-              const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
-
-              const received = item.received !== null && item.received !== undefined ? item.received : item.quantity;
-              const waste = item.waste || 0;
-              const sales = received - waste;
-
-              detailedSalesData.push({
-                storeName: storeName,
-                variety: variety?.name || 'Variété inconnue',
-                boxFormat: form?.name ? `Individuel (${form.name})` : 'Individuel',
-                received: received,
-                waste: waste,
-                sales: sales
-              });
-            });
-          }
-
-          // Process box productions
-          if (store.box_productions && Array.isArray(store.box_productions)) {
-            store.box_productions.forEach((boxProd: any) => {
-              const box = boxes.find(b => b.name === boxProd.box_name);
-              const boxQuantity = boxProd.quantity || 0;
-
-              if (box) {
-                const boxSize = box.size;
-                const receivedBoxes = boxProd.received !== null && boxProd.received !== undefined ? boxProd.received : boxQuantity;
-                const wasteBoxes = boxProd.waste || 0;
-                const salesBoxes = receivedBoxes - wasteBoxes;
-
-                // Convert to doughnuts
-                const receivedDoughnuts = receivedBoxes * boxSize;
-                const wasteDoughnuts = wasteBoxes * boxSize;
-                const salesDoughnuts = salesBoxes * boxSize;
-
-                // Get varieties in this box for description
-                const boxVarieties = box.varieties ?
-                  box.varieties.map(bv => {
-                    const v = varieties.find(variety => variety.id === bv.varietyId);
-                    return v?.name || 'Inconnue';
-                  }).join(', ') : 'Non configurées';
-
-                detailedSalesData.push({
-                  storeName: storeName,
-                  variety: boxVarieties,
-                  boxFormat: `Boîte ${box.name} (${boxSize} unités)`,
-                  received: receivedDoughnuts,
-                  waste: wasteDoughnuts,
-                  sales: salesDoughnuts
-                });
-              }
-            });
-          }
-        });
-      }
-    });
-
-    // Sort by store name, then by variety/box format
-    detailedSalesData.sort((a, b) => {
-      if (a.storeName !== b.storeName) {
-        return a.storeName.localeCompare(b.storeName);
-      }
-      return a.variety.localeCompare(b.variety);
-    });
-
-    // Prepare table data
-    const tableHeaders = [
-      ['Magasin', 'Variété', 'Format', 'Reçu', 'Déchets', 'Ventes', '% Déchets']
-    ];
-
-    const tableData = detailedSalesData.map(row => [
-      row.storeName,
-      row.variety,
-      row.boxFormat,
-      formatNum(row.received),
-      formatNum(row.waste),
-      formatNum(row.sales),
-      row.received > 0 ? ((row.waste / row.received) * 100).toFixed(1) + '%' : '0%'
-    ]);
-
-    // Add the table
-    (doc as any).autoTable({
-      startY: 70,
-      head: tableHeaders,
-      body: tableData,
-      theme: 'grid',
-      styles: {
-        fontSize: 7,
-        cellPadding: 2
-      },
-      headStyles: {
-        fillColor: [34, 197, 94], // Green color
-        textColor: 255,
-        fontStyle: 'bold'
-      },
-      columnStyles: {
-        0: { cellWidth: 30 }, // Store name
-        1: { cellWidth: 40 }, // Variety
-        2: { cellWidth: 35 }, // Box format
-        3: { cellWidth: 20, halign: 'center' }, // Received
-        4: { cellWidth: 20, halign: 'center' }, // Waste
-        5: { cellWidth: 20, halign: 'center' }, // Sales
-        6: { cellWidth: 20, halign: 'center' } // Waste %
-      }
-    });
-
-    // Add summary section
-    const finalY = Math.max((doc as any).lastAutoTable?.finalY + 20, 120); // Ensure minimum Y position
-
-    // Calculate totals
-    const totals = detailedSalesData.reduce((acc, row) => ({
-      received: acc.received + row.received,
-      waste: acc.waste + row.waste,
-      sales: acc.sales + row.sales
-    }), {
-      received: 0,
-      waste: 0,
-      sales: 0
-    });
-
-    // Calculate overall waste percentage for PDF summary
-    const overallWastePercent = totals.received > 0 ? (totals.waste / totals.received) * 100 : 0;
-
-    // Prepare summary data
-    const summaryData = [
-      ['Total Reçu:', formatNum(totals.received) + ' doughnuts'],
-      ['Total Ventes:', formatNum(totals.sales) + ' doughnuts'],
-      ['Total Déchets:', formatNum(totals.waste) + ' doughnuts (' + overallWastePercent.toFixed(1) + '%)'],
-      ['Coût de Production:', 'CHF ' + totalProductionCost.toFixed(2)],
-      ['Coût des Déchets:', 'CHF ' + totalWasteCost.toFixed(2)]
-    ];
-
-    // Check if we need a new page for the summary
-    const summaryHeight = 60; // Approximate height needed for summary
-    if (finalY + summaryHeight > 280) { // Page height limit
-      doc.addPage();
-      const newPageY = 30;
-
-      // Summary box on new page
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Résumé Global', 20, newPageY);
-
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-
-      summaryData.forEach((row, index) => {
-        doc.text(row[0], 20, newPageY + 15 + (index * 8));
-        doc.text(row[1], 80, newPageY + 15 + (index * 8));
-      });
-    } else {
-      // Summary box on same page
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Résumé Global', 20, finalY);
-
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-
-      summaryData.forEach((row, index) => {
-        doc.text(row[0], 20, finalY + 15 + (index * 8));
-        doc.text(row[1], 80, finalY + 15 + (index * 8));
-      });
-    }
-
-    // Save the PDF
-    const storeFilter = selectedStores.length > 0 ? `-${selectedStores.length}magasins` : '-tous-magasins';
-    const filename = `rapport-ventes-detaille${storeFilter}-${periodText.replace(/[^a-zA-Z0-9]/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(filename);
+  const [pdfProgress, setPdfProgress] = useState<string | null>(null);
+  const [pdfMessage, setPdfMessage] = useState<string | null>(null);
+  const reportContext = () => ({
+    periodStart: comparisonWindows.current.start,
+    periodEnd: comparisonWindows.current.end,
+    scope: selectedStores.length ? stores.filter(store => selectedStores.includes(store.id)).map(store => store.name).join(', ') : 'Tous-magasins',
+  });
+  const eligibleObservations = () => normalizeProductionPlans(rawProductionPlans, new Set(boxes.map(box => box.id))).filter(observation => selectedStores.length === 0 || selectedStores.includes(observation.storeId));
+  const runPdfGeneration = async (builder: (logo: PdfImage | null) => { doc: any; filename: string }) => {
+    if (loadState !== 'success' || pdfProgress) { setPdfMessage('Impossible de générer le rapport : les statistiques sont incomplètes.'); return; }
+    try {
+      setPdfMessage(null); setPdfProgress('Préparation du rapport…');
+      await new Promise(resolve => window.setTimeout(resolve, 0));
+      const logo = await loadPdfImage(kkOpsLogo);
+      setPdfProgress('Génération des tableaux…'); await new Promise(resolve => window.setTimeout(resolve, 0));
+      const report = builder(logo);
+      setPdfProgress('Finalisation du PDF…'); await new Promise(resolve => window.setTimeout(resolve, 0));
+      report.doc.save(report.filename); setPdfMessage('Rapport téléchargé avec succès.');
+    } catch (error) { console.error('PDF generation failed', error); setPdfMessage('Impossible de générer le rapport. Réessayez dans quelques instants.'); }
+    finally { setPdfProgress(null); }
   };
-
-  // Generate Individual Store PDF Report
+  const generateSalesReport = () => runPdfGeneration(logo => buildSalesPdf(eligibleObservations(), { ...reportContext(), logo }));
   const generateStoreReport = (storeId: string) => {
-    const store = storePerformance.find(s => s.id === storeId);
-    if (!store) return;
-
-    const doc = new jsPDF();
-
-    // Set up the document
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Rapport de Ventes - ${store.name}`, 20, 25);
-
-    // Add period information
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-
-    let periodText = '';
-    switch (selectedPeriod) {
-      case 'day':
-        periodText = `Jour: ${new Date(selectedDate).toLocaleDateString('fr-FR')}`;
-        break;
-      case 'range':
-        periodText = `Du ${new Date(selectedStartDate).toLocaleDateString('fr-FR')} au ${new Date(selectedEndDate).toLocaleDateString('fr-FR')}`;
-        break;
-      case 'month':
-        const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-          'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-        periodText = `${monthNames[selectedMonth - 1]} ${selectedYear}`;
-        break;
-      case 'year':
-        periodText = `Année ${selectedYear}`;
-        break;
-    }
-
-    doc.text(`Période: ${periodText}`, 20, 35);
-    doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, 20, 45);
-
-    // Store overview
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Aperçu du Magasin', 20, 65);
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-
-    const sales = store.received - store.waste;
-    const overviewData = [
-      ['Production Totale:', formatNum(store.production) + ' doughnuts'],
-      ['Quantité Reçue:', formatNum(store.received) + ' doughnuts'],
-      ['Ventes Réalisées:', formatNum(sales) + ' doughnuts'],
-      ['Déchets:', formatNum(store.waste) + ' doughnuts (' + store.wastePercent.toFixed(1) + '%)'],
-      ['Coût de Production:', 'CHF ' + store.cost.toFixed(2)],
-      ['Coût des Déchets:', 'CHF ' + store.wasteCost.toFixed(2)]
-    ];
-
-    overviewData.forEach((row, index) => {
-      doc.text(row[0], 20, 80 + (index * 8));
-      doc.text(row[1], 80, 80 + (index * 8));
-    });
-
-    // Get detailed store data
-    const filteredDates = data.map(d => d.date);
-    const storeDetailedData: Array<{
-      variety: string;
-      boxFormat: string;
-      received: number;
-      waste: number;
-      sales: number;
-    }> = [];
-
-    rawProductionPlans.forEach(plan => {
-      if (!filteredDates.includes(plan.date)) return;
-
-      const planEntries = getPlanEntries(plan);
-      if (planEntries.length > 0) {
-        planEntries.forEach((planStore: any) => {
-          if (planStore.store_id !== storeId) return;
-
-          // Process individual production items
-          if (planStore.production_items && Array.isArray(planStore.production_items)) {
-            planStore.production_items.forEach((item: any) => {
-              const variety = varieties.find(v => v.id === item.variety_id);
-              const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
-
-              const received = item.received !== null && item.received !== undefined ? item.received : item.quantity;
-              const waste = item.waste || 0;
-              const sales = received - waste;
-
-              storeDetailedData.push({
-                variety: variety?.name || 'Variété inconnue',
-                boxFormat: form?.name ? `Individuel (${form.name})` : 'Individuel',
-                received: received,
-                waste: waste,
-                sales: sales
-              });
-            });
-          }
-
-          // Process box productions
-          if (planStore.box_productions && Array.isArray(planStore.box_productions)) {
-            planStore.box_productions.forEach((boxProd: any) => {
-              const box = boxes.find(b => b.name === boxProd.box_name);
-              if (box) {
-                const boxQuantity = boxProd.quantity || 0;
-                const boxSize = box.size;
-                const receivedBoxes = boxProd.received !== null && boxProd.received !== undefined ? boxProd.received : boxQuantity;
-                const wasteBoxes = boxProd.waste || 0;
-                const salesBoxes = receivedBoxes - wasteBoxes;
-
-                const receivedDoughnuts = receivedBoxes * boxSize;
-                const wasteDoughnuts = wasteBoxes * boxSize;
-                const salesDoughnuts = salesBoxes * boxSize;
-
-                const boxVarieties = box.varieties ?
-                  box.varieties.map(bv => {
-                    const v = varieties.find(variety => variety.id === bv.varietyId);
-                    return v?.name || 'Inconnue';
-                  }).join(', ') : 'Non configurées';
-
-                storeDetailedData.push({
-                  variety: boxVarieties,
-                  boxFormat: `Boîte ${box.name} (${boxSize} unités)`,
-                  received: receivedDoughnuts,
-                  waste: wasteDoughnuts,
-                  sales: salesDoughnuts
-                });
-              }
-            });
-          }
-        });
-      }
-    });
-
-    // Add detailed breakdown table
-    if (storeDetailedData.length > 0) {
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Détail par Variété et Format', 20, 130);
-
-      const tableHeaders = [
-        ['Variété', 'Format', 'Reçu', 'Déchets', 'Ventes', '% Déchets']
-      ];
-
-      const tableData = storeDetailedData.map(row => [
-        row.variety,
-        row.boxFormat,
-        formatNum(row.received),
-        formatNum(row.waste),
-        formatNum(row.sales),
-        row.received > 0 ? ((row.waste / row.received) * 100).toFixed(1) + '%' : '0%'
-      ]);
-
-      (doc as any).autoTable({
-        startY: 140,
-        head: tableHeaders,
-        body: tableData,
-        theme: 'grid',
-        styles: {
-          fontSize: 8,
-          cellPadding: 3
-        },
-        headStyles: {
-          fillColor: [34, 197, 94],
-          textColor: 255,
-          fontStyle: 'bold'
-        },
-        columnStyles: {
-          0: { cellWidth: 50 }, // Variety
-          1: { cellWidth: 45 }, // Format
-          2: { cellWidth: 25, halign: 'center' }, // Received
-          3: { cellWidth: 25, halign: 'center' }, // Waste
-          4: { cellWidth: 25, halign: 'center' }, // Sales
-          5: { cellWidth: 25, halign: 'center' } // Waste %
-        }
-      });
-    }
-
-    // Save the PDF
-    const filename = `rapport-magasin-${store.name.replace(/[^a-zA-Z0-9]/g, '-')}-${periodText.replace(/[^a-zA-Z0-9]/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(filename);
+    const store = stores.find(item => item.id === storeId); if (!store) return;
+    return runPdfGeneration(logo => buildSalesPdf(eligibleObservations(), { ...reportContext(), scope: store.name, logo }, store.name));
   };
+  const generateDecisionReport = (includeAnnex = false) => runPdfGeneration(logo => buildDecisionPdf(safeProductMetrics.filter(metric => selectedStores.length === 0 || selectedStores.includes(metric.storeId)), { ...reportContext(), logo }, includeAnnex));
 
   // Format data for variety pie chart
   const getVarietyChartData = () => {
@@ -1500,6 +1103,36 @@ const StatsPage: React.FC = () => {
   const isInitialCriticalLoading = adminLoading || (loading && !hasLoadedCriticalData);
   const beginFilterRefresh = () => setLoading(true);
 
+  const retryFailedStatisticsBatches = async () => {
+    if (!failedBatches.length) return;
+    const requestId = ++requestIdRef.current;
+    setLoading(true);
+    setLoadState('loading');
+    const results = await Promise.allSettled(failedBatches.map(batch =>
+      productionService.getProductionPlans(batch.start, batch.end)
+    ));
+    if (requestId !== requestIdRef.current) return;
+    const remaining: BatchFailure[] = [];
+    const currentRecovered: any[] = [];
+    const previousRecovered: any[] = [];
+    results.forEach((result, index) => {
+      const batch = failedBatches[index];
+      if (result.status === 'rejected') {
+        remaining.push({ ...batch, message: result.reason?.message || batch.message });
+        return;
+      }
+      if (batch.scopes.includes('current')) currentRecovered.push(...result.value);
+      if (batch.scopes.includes('previous')) previousRecovered.push(...result.value);
+    });
+    const merge = (existing: any[], recovered: any[]) => [...new Map([...existing, ...recovered].map(plan => [plan.id || plan.date, plan])).values()];
+    setRawProductionPlans(existing => merge(existing, currentRecovered));
+    setPreviousProductionPlans(existing => merge(existing, previousRecovered));
+    setFailedBatches(remaining);
+    setComparisonWarning(remaining.length ? `Chargement encore partiel : ${remaining.map(batch => `${batch.start} → ${batch.end}`).join(', ')}.` : null);
+    setLoadState(remaining.length ? 'partial' : 'success');
+    setLoading(false);
+  };
+
   if (isInitialCriticalLoading) {
     return <KrispyKremeLoader size="lg" label="Calcul des performances…" fullscreen />;
   }
@@ -1522,7 +1155,7 @@ const StatsPage: React.FC = () => {
               className="rounded-md border-gray-300 shadow-sm focus:border-krispy-green focus:ring-krispy-green"
             >
               <option value="day">Par Jour</option>
-              <option value="range">Par Semaine</option>
+              <option value="range">Période personnalisée</option>
               <option value="month">Par Mois</option>
               <option value="year">Par Année</option>
             </select>
@@ -1613,7 +1246,7 @@ const StatsPage: React.FC = () => {
 
               <button
                 onClick={generateSalesReport}
-                disabled={storePerformance.length === 0}
+                disabled={!canExportStatistics(loadState, storePerformance.length)}
                 className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Télécharger le rapport de ventes par magasin"
               >
@@ -1627,10 +1260,19 @@ const StatsPage: React.FC = () => {
 
       {loading ? (
         <div className="stats-refresh" role="status" aria-live="polite">
-          <KrispyKremeLoader size="md" label="Actualisation des statistiques…" />
+          <KrispyKremeLoader size="md" label={loadProgress.total > 0 ? `Chargement des statistiques : ${loadProgress.completed} période${loadProgress.completed > 1 ? 's' : ''} sur ${loadProgress.total} (${loadProgress.label})` : 'Préparation du chargement des statistiques…'} />
         </div>
       ) : (
       <div className="stats-content-ready">
+
+      {loadState === 'error' ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-6" role="alert">
+          <h2 className="text-lg font-bold text-red-900">Statistiques indisponibles</h2>
+          <p className="mt-2 text-sm text-red-800">{error || 'Impossible de charger les statistiques.'}</p>
+          <p className="mt-2 text-sm text-red-700">Aucune valeur à zéro ni aucun export ne sont présentés comme réels.</p>
+          <button onClick={loadProductionData} className="mt-4 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800">Réessayer</button>
+        </div>
+      ) : (<>
 
       <MetricStrip items={[
         { label: 'Ventes potentielles', value: totalProduction.toLocaleString('fr-FR'), detail: 'doughnuts sur la période', tone: 'green' },
@@ -1653,6 +1295,17 @@ const StatsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {comparisonWarning && !error && (
+        <div className="mb-6 border-l-4 border-amber-400 bg-amber-50 p-4 text-sm text-amber-900" role="status">
+          <p>{comparisonWarning}</p>
+          {failedBatches.length > 0 && <button onClick={retryFailedStatisticsBatches} className="mt-2 rounded-md border border-amber-500 px-3 py-1.5 font-semibold hover:bg-amber-100">Relancer uniquement les lots échoués</button>}
+        </div>
+      )}
+
+      {loadDiagnostics && <p className="mb-4 text-right text-xs text-gray-500">{loadDiagnostics.requests} requête(s) · {loadDiagnostics.rows} plan(s) · {(loadDiagnostics.bytes / 1024).toFixed(1)} Ko · {(loadDiagnostics.durationMs / 1000).toFixed(1)} s</p>}
+
+      {(pdfProgress || pdfMessage) && <div className={`mb-4 rounded-lg border px-4 py-3 text-sm ${pdfProgress ? 'border-green-200 bg-green-50 text-green-900' : 'border-gray-200 bg-white text-gray-700'}`} role="status" aria-live="polite">{pdfProgress || pdfMessage}</div>}
 
        {kpiLoading ? (
         <div className="forecast-panel mb-6 rounded-lg p-4" role="status" aria-label="Chargement des indicateurs prévisionnels">
@@ -2272,6 +1925,20 @@ const StatsPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      <div className="mt-8 flex flex-wrap justify-end gap-3">
+        <button onClick={() => generateDecisionReport(false)} disabled={loadState !== 'success' || safeProductMetrics.length === 0 || !!pdfProgress} className="inline-flex min-h-11 items-center rounded-lg bg-krispy-green px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50">
+          <Printer className="mr-2 h-4 w-4" />{pdfProgress ? pdfProgress : 'Rapport synthétique'}
+        </button>
+        <button onClick={() => generateDecisionReport(true)} disabled={loadState !== 'success' || safeProductMetrics.length === 0 || !!pdfProgress} className="inline-flex min-h-11 items-center rounded-lg border border-krispy-green bg-white px-4 py-2.5 text-sm font-semibold text-krispy-green hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-50">
+          <Printer className="mr-2 h-4 w-4" />Rapport détaillé avec annexes
+        </button>
+      </div>
+      <StoreAnalyticsView
+        metrics={safeProductMetrics}
+        stores={stores.filter(store => store.isActive && (selectedStores.length === 0 || selectedStores.includes(store.id)))}
+      />
+      </>)}
       </div>
       )}
     </div>
