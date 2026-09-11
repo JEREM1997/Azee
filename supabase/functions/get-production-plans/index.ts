@@ -52,18 +52,23 @@ async function fetchApprovedOrdersForRange(
   startDate: string,
   endDate: string
 ) {
-  const { data: ordersData, error: ordersError } = await supabaseClient
-    .from('orders')
-    .select('id, store_id, store_name, delivery_date, production_date, conditioning, customer_name, company_name, customer_phone, delivery_address, billing_address, order_type, payment_status, handled_by, delivered_by, comments')
-    .eq('production_approved', true)
-    .gte('production_date', startDate)
-    .lte('production_date', endDate);
-
-  if (ordersError) {
-    if (isMissingTableError(ordersError)) {
-      return [];
+  const pageSize = 500;
+  const ordersData: any[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error: ordersError } = await supabaseClient
+      .from('orders')
+      .select('id, store_id, store_name, delivery_date, production_date, conditioning, customer_name, company_name, customer_phone, delivery_address, billing_address, order_type, payment_status, handled_by, delivered_by, comments')
+      .eq('production_approved', true)
+      .gte('production_date', startDate)
+      .lte('production_date', endDate)
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (ordersError) {
+      if (isMissingTableError(ordersError)) return [];
+      throw Object.assign(new Error(`Orders query failed: ${ordersError.message}`), { code: ordersError.code, stage: 'orders' });
     }
-    throw new Error(`Orders query failed: ${ordersError.message}`);
+    ordersData.push(...(data || []));
+    if (!data || data.length < pageSize) break;
   }
 
   if (!ordersData?.length) {
@@ -72,16 +77,19 @@ async function fetchApprovedOrdersForRange(
 
   const orderIds = ordersData.map((order: any) => order.id);
 
-  const orderItemsQuery = supabaseClient.from('order_items');
-  const { data: itemsData, error: itemsError } = await orderItemsQuery
-    .select('order_id, variety_id, quantity, conditioning')
-    .in('order_id', orderIds);
-  
-  if (itemsError) {
-    if (isMissingTableError(itemsError)) {
-      return [];
+  const itemsData: any[] = [];
+  // Keep PostgREST URLs bounded and avoid the implicit maximum-row response.
+  for (let index = 0; index < orderIds.length; index += 100) {
+    const idChunk = orderIds.slice(index, index + 100);
+    const { data, error: itemsError } = await supabaseClient.from('order_items')
+      .select('order_id, variety_id, quantity, conditioning')
+      .in('order_id', idChunk)
+      .order('order_id', { ascending: true });
+    if (itemsError) {
+      if (isMissingTableError(itemsError)) return [];
+      throw Object.assign(new Error(`Order items query failed: ${itemsError.message}`), { code: itemsError.code, stage: 'order_items' });
     }
-    throw new Error(`Order items query failed: ${itemsError.message}`);
+    itemsData.push(...(data || []));
   }
 
   const itemsByOrder = (itemsData || []).reduce((acc: Record<string, any[]>, item: any) => {
@@ -296,6 +304,9 @@ Deno.serve(async req => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startedAt = performance.now();
+  let stage = 'initialization';
+  let requestedRange: { startDate?: string; endDate?: string } = {};
   try {
     // @ts-ignore - Deno env
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -331,6 +342,7 @@ Deno.serve(async req => {
     const url = new URL(req.url);
     const startDate = requestBody?.startDate || url.searchParams.get('startDate');
     const endDate = requestBody?.endDate || url.searchParams.get('endDate');
+    requestedRange = { startDate, endDate };
 
     if (!startDate || !endDate) {
       throw new Error('Missing required startDate or endDate');
@@ -343,6 +355,7 @@ Deno.serve(async req => {
     const role = user.user_metadata?.role || user.app_metadata?.role;
     const storeIds = normalizeStoreIds(user.user_metadata?.store_ids ?? user.app_metadata?.store_ids);
 
+    stage = 'production_plans';
     const { data: plans, error: dbError } = await supabaseClient
       .from('production_plans')
       .select(`
@@ -386,9 +399,10 @@ Deno.serve(async req => {
       .order('created_at', { ascending: false });
 
     if (dbError) {
-      throw new Error(`Database error: ${dbError.message}`);
+      throw Object.assign(new Error(`Database error: ${dbError.message}`), { code: dbError.code, stage });
     }
 
+    stage = 'approved_orders';
     const approvedOrders = await fetchApprovedOrdersForRange(supabaseClient, startDate, endDate);
 
     const plansByDate = new Map<string, any>();
@@ -429,6 +443,12 @@ Deno.serve(async req => {
       .map(plan => (role === 'store' ? filterPlanForStoreRole(plan, storeIds) : plan))
       .filter(Boolean);
 
+    console.log('[get-production-plans] completed', {
+      ...requestedRange,
+      plans: mergedPlans.length,
+      approvedOrders: approvedOrders.length,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
     return new Response(JSON.stringify(mergedPlans), {
       headers: {
         'Content-Type': 'application/json',
@@ -436,11 +456,19 @@ Deno.serve(async req => {
       },
     });
   } catch (error: any) {
-    console.error('[get-production-plans] Edge function error:', error);
+    console.error('[get-production-plans] Edge function error:', {
+      message: error?.message,
+      code: error?.code,
+      stage: error?.stage || stage,
+      range: requestedRange,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
     return new Response(
       JSON.stringify({
         error: error?.message || 'Unknown error',
-        details: error?.stack,
+        code: error?.code || null,
+        stage: error?.stage || stage,
+        durationMs: Math.round(performance.now() - startedAt),
       }),
       {
         status: 500,

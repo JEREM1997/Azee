@@ -1,11 +1,14 @@
 import ContentSkeleton from '../components/ContentSkeleton';
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Eye, FileText, AlertTriangle, RefreshCw, Edit, Trash2, Plus } from 'lucide-react';
+import { Calendar, Eye, FileText, AlertTriangle, RefreshCw, Edit, Trash2, Plus, Printer } from 'lucide-react';
 import { productionService } from '../services/productionService';
 import { useAuth } from '../context/AuthContext';
 import { useAdmin } from '../context/AdminContext';
 import { ProductionPlan, StorePlan, ProductionItem, BoxProduction } from '../types';
 import { EmptyState, PageError, PageHeader } from '../components/PageExperience';
+import { buildProductionPlanPdf } from '../pdf/reports';
+import { loadPdfImage } from '../pdf/pdfKit';
+import kkOpsLogo from '../assets/digital_72_png-KK_logo_Red_Green_FNL.png';
 
 const PlansPage: React.FC = () => {
   const [plans, setPlans] = useState<ProductionPlan[]>([]);
@@ -17,6 +20,7 @@ const PlansPage: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [recentlySavedPlanId, setRecentlySavedPlanId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   // Modal state for creating a plan on a user-chosen date
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlanDate, setNewPlanDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -413,6 +417,21 @@ const PlansPage: React.FC = () => {
   const closeModal = () => {
     setSelectedPlan(null);
     setShowModal(false);
+  };
+
+  const downloadProductionPlan = async () => {
+    if (!selectedPlan || generatingPdf) return;
+    try {
+      setGeneratingPdf(true);
+      const logo = await loadPdfImage(kkOpsLogo);
+      const report = buildProductionPlanPdf({ date: selectedPlan.date, stores: (selectedPlan.stores || []).map(store => ({
+        name: store.store_name,
+        deliveryDate: store.delivery_date || (store as any).deliverydate || selectedPlan.date,
+        items: (store.production_items || []).map(item => ({ name: item.variety_name, form: item.form_name, quantity: item.quantity })),
+        boxes: (store.box_productions || []).map(boxProduction => ({ name: boxProduction.box_name, quantity: boxProduction.quantity, size: boxes.find(box => box.id === boxProduction.box_id)?.size ?? null })),
+      })) }, logo);
+      report.doc.save(report.filename);
+    } finally { setGeneratingPdf(false); }
   };
 
   const refreshPlans = async () => {
@@ -916,7 +935,10 @@ const PlansPage: React.FC = () => {
                 ))}
               </div>
 
-              <div className="mt-6 flex justify-end">
+              <div className="mt-6 flex flex-wrap justify-end gap-3">
+                <button onClick={downloadProductionPlan} disabled={generatingPdf} className="inline-flex items-center rounded-md bg-krispy-green px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-50">
+                  <Printer className="mr-2 h-4 w-4" />{generatingPdf ? 'Préparation du PDF…' : 'Télécharger le plan PDF'}
+                </button>
                 <button
                   onClick={closeModal}
                   className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green"
