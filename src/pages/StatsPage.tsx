@@ -4,8 +4,9 @@ import { BarChart2, PieChart, TrendingUp, DollarSign, Store, Target, Package, Pr
 import { useAdmin } from '../context/AdminContext';
 import { apiService } from '../services/apiService';
 import { productionService } from '../services/productionService';
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import { buildDecisionPdf, buildSalesPdf } from '../pdf/reports';
+import { loadPdfImage } from '../pdf/pdfKit';
+import kkOpsLogo from '../assets/krispy-kreme-ops-logo.png';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 import { MetricStrip } from '../components/PageExperience';
 import StoreAnalyticsView from '../components/StoreAnalyticsView';
@@ -1023,434 +1024,33 @@ const StatsPage: React.FC = () => {
     }
   }, [rawProductionPlans, data, totalIndividualDoughnuts, totalBoxes]);
 
-  // Generate PDF Sales Report
-  const generateSalesReport = () => {
-    const doc = new jsPDF();
-
-    // Set up the document
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Rapport de Ventes Détaillé par Magasin', 20, 25);
-
-    // Add period information
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-
-    let periodText = '';
-    switch (selectedPeriod) {
-      case 'day':
-        periodText = `Jour: ${new Date(selectedDate).toLocaleDateString('fr-FR')}`;
-        break;
-      case 'range':
-        periodText = `Du ${new Date(selectedStartDate).toLocaleDateString('fr-FR')} au ${new Date(selectedEndDate).toLocaleDateString('fr-FR')}`;
-        break;
-      case 'month':
-        const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-          'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-        periodText = `${monthNames[selectedMonth - 1]} ${selectedYear}`;
-        break;
-      case 'year':
-        periodText = `Année ${selectedYear}`;
-        break;
-    }
-
-    doc.text(`Période: ${periodText}`, 20, 35);
-    doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, 20, 45);
-
-    // Filter stores if specific stores are selected
-    const filteredStoreNames = selectedStores.length > 0
-      ? stores.filter(store => selectedStores.includes(store.id)).map(store => store.name)
-      : ['Tous les magasins'];
-
-    doc.setFontSize(10);
-    doc.text(`Magasins: ${filteredStoreNames.join(', ')}`, 20, 55);
-
-    // Get filtered dates to match our current selection
-    const filteredDates = data.map(d => d.date);
-
-    // Extract detailed sales data from raw production plans
-    const detailedSalesData: Array<{
-      storeName: string;
-      variety: string;
-      boxFormat: string;
-      received: number;
-      waste: number;
-      sales: number;
-    }> = [];
-
-    rawProductionPlans.forEach(plan => {
-      // Only process plans that match our filtered date range
-      if (!filteredDates.includes(plan.date)) return;
-
-      const planEntries = getPlanEntries(plan);
-      if (planEntries.length > 0) {
-        planEntries.forEach((store: any) => {
-          // Filter by selected stores if any are selected
-          if (selectedStores.length > 0 && !selectedStores.includes(store.store_id)) {
-            return;
-          }
-
-          const storeName = store.store_name;
-
-          // Process individual production items (varieties)
-          if (store.production_items && Array.isArray(store.production_items)) {
-            store.production_items.forEach((item: any) => {
-              const variety = varieties.find(v => v.id === item.variety_id);
-              const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
-
-              if (!store.delivery_confirmed || !store.waste_reported || item.received == null || item.waste == null) return;
-              const received = item.received;
-              const waste = item.waste;
-              const sales = received - waste;
-
-              detailedSalesData.push({
-                storeName: storeName,
-                variety: variety?.name || 'Variété inconnue',
-                boxFormat: form?.name ? `Individuel (${form.name})` : 'Individuel',
-                received: received,
-                waste: waste,
-                sales: sales
-              });
-            });
-          }
-
-          // Process box productions
-          if (store.box_productions && Array.isArray(store.box_productions)) {
-            store.box_productions.forEach((boxProd: any) => {
-              const box = boxes.find(b => b.name === boxProd.box_name);
-              const boxQuantity = boxProd.quantity || 0;
-
-              if (box) {
-                const boxSize = box.size;
-                if (!store.delivery_confirmed || !store.waste_reported || boxProd.received == null || boxProd.waste == null) return;
-                const receivedBoxes = boxProd.received;
-                const wasteBoxes = boxProd.waste;
-                const salesBoxes = receivedBoxes - wasteBoxes;
-
-                // Convert to doughnuts
-                const receivedDoughnuts = receivedBoxes * boxSize;
-                const wasteDoughnuts = wasteBoxes * boxSize;
-                const salesDoughnuts = salesBoxes * boxSize;
-
-                // Get varieties in this box for description
-                const boxVarieties = box.varieties ?
-                  box.varieties.map(bv => {
-                    const v = varieties.find(variety => variety.id === bv.varietyId);
-                    return v?.name || 'Inconnue';
-                  }).join(', ') : 'Non configurées';
-
-                detailedSalesData.push({
-                  storeName: storeName,
-                  variety: boxVarieties,
-                  boxFormat: `Boîte ${box.name} (${boxSize} unités)`,
-                  received: receivedDoughnuts,
-                  waste: wasteDoughnuts,
-                  sales: salesDoughnuts
-                });
-              }
-            });
-          }
-        });
-      }
-    });
-
-    // Sort by store name, then by variety/box format
-    detailedSalesData.sort((a, b) => {
-      if (a.storeName !== b.storeName) {
-        return a.storeName.localeCompare(b.storeName);
-      }
-      return a.variety.localeCompare(b.variety);
-    });
-
-    // Prepare table data
-    const tableHeaders = [
-      ['Magasin', 'Variété', 'Format', 'Reçu', 'Déchets', 'Ventes', '% Déchets']
-    ];
-
-    const tableData = detailedSalesData.map(row => [
-      row.storeName,
-      row.variety,
-      row.boxFormat,
-      formatNum(row.received),
-      formatNum(row.waste),
-      formatNum(row.sales),
-      row.received > 0 ? ((row.waste / row.received) * 100).toFixed(1) + '%' : '0%'
-    ]);
-
-    // Add the table
-    (doc as any).autoTable({
-      startY: 70,
-      head: tableHeaders,
-      body: tableData,
-      theme: 'grid',
-      styles: {
-        fontSize: 7,
-        cellPadding: 2
-      },
-      headStyles: {
-        fillColor: [34, 197, 94], // Green color
-        textColor: 255,
-        fontStyle: 'bold'
-      },
-      columnStyles: {
-        0: { cellWidth: 30 }, // Store name
-        1: { cellWidth: 40 }, // Variety
-        2: { cellWidth: 35 }, // Box format
-        3: { cellWidth: 20, halign: 'center' }, // Received
-        4: { cellWidth: 20, halign: 'center' }, // Waste
-        5: { cellWidth: 20, halign: 'center' }, // Sales
-        6: { cellWidth: 20, halign: 'center' } // Waste %
-      }
-    });
-
-    // Add summary section
-    const finalY = Math.max((doc as any).lastAutoTable?.finalY + 20, 120); // Ensure minimum Y position
-
-    // Calculate totals
-    const totals = detailedSalesData.reduce((acc, row) => ({
-      received: acc.received + row.received,
-      waste: acc.waste + row.waste,
-      sales: acc.sales + row.sales
-    }), {
-      received: 0,
-      waste: 0,
-      sales: 0
-    });
-
-    // Calculate overall waste percentage for PDF summary
-    const overallWastePercent = totals.received > 0 ? (totals.waste / totals.received) * 100 : 0;
-
-    // Prepare summary data
-    const summaryData = [
-      ['Total Reçu:', formatNum(totals.received) + ' doughnuts'],
-      ['Total Ventes:', formatNum(totals.sales) + ' doughnuts'],
-      ['Total Déchets:', formatNum(totals.waste) + ' doughnuts (' + overallWastePercent.toFixed(1) + '%)'],
-      ['Coût de Production:', 'CHF ' + totalProductionCost.toFixed(2)],
-      ['Coût des Déchets:', 'CHF ' + totalWasteCost.toFixed(2)]
-    ];
-
-    // Check if we need a new page for the summary
-    const summaryHeight = 60; // Approximate height needed for summary
-    if (finalY + summaryHeight > 280) { // Page height limit
-      doc.addPage();
-      const newPageY = 30;
-
-      // Summary box on new page
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Résumé Global', 20, newPageY);
-
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-
-      summaryData.forEach((row, index) => {
-        doc.text(row[0], 20, newPageY + 15 + (index * 8));
-        doc.text(row[1], 80, newPageY + 15 + (index * 8));
-      });
-    } else {
-      // Summary box on same page
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Résumé Global', 20, finalY);
-
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-
-      summaryData.forEach((row, index) => {
-        doc.text(row[0], 20, finalY + 15 + (index * 8));
-        doc.text(row[1], 80, finalY + 15 + (index * 8));
-      });
-    }
-
-    // Save the PDF
-    const storeFilter = selectedStores.length > 0 ? `-${selectedStores.length}magasins` : '-tous-magasins';
-    const filename = `rapport-ventes-detaille${storeFilter}-${periodText.replace(/[^a-zA-Z0-9]/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(filename);
+  const [pdfProgress, setPdfProgress] = useState<string | null>(null);
+  const [pdfMessage, setPdfMessage] = useState<string | null>(null);
+  const reportContext = () => ({
+    periodStart: comparisonWindows.current.start,
+    periodEnd: comparisonWindows.current.end,
+    scope: selectedStores.length ? stores.filter(store => selectedStores.includes(store.id)).map(store => store.name).join(', ') : 'Tous-magasins',
+  });
+  const eligibleObservations = () => normalizeProductionPlans(rawProductionPlans, new Set(boxes.map(box => box.id))).filter(observation => selectedStores.length === 0 || selectedStores.includes(observation.storeId));
+  const runPdfGeneration = async (builder: (logo: string | null) => { doc: any; filename: string }) => {
+    if (loadState !== 'success' || pdfProgress) { setPdfMessage('Impossible de générer le rapport : les statistiques sont incomplètes.'); return; }
+    try {
+      setPdfMessage(null); setPdfProgress('Préparation du rapport…');
+      await new Promise(resolve => window.setTimeout(resolve, 0));
+      const logo = await loadPdfImage(kkOpsLogo);
+      setPdfProgress('Génération des tableaux…'); await new Promise(resolve => window.setTimeout(resolve, 0));
+      const report = builder(logo);
+      setPdfProgress('Finalisation du PDF…'); await new Promise(resolve => window.setTimeout(resolve, 0));
+      report.doc.save(report.filename); setPdfMessage('Rapport téléchargé avec succès.');
+    } catch (error) { console.error('PDF generation failed', error); setPdfMessage('Impossible de générer le rapport. Réessayez dans quelques instants.'); }
+    finally { setPdfProgress(null); }
   };
-
-  // Generate Individual Store PDF Report
+  const generateSalesReport = () => runPdfGeneration(logo => buildSalesPdf(eligibleObservations(), { ...reportContext(), logo }));
   const generateStoreReport = (storeId: string) => {
-    const store = storePerformance.find(s => s.id === storeId);
-    if (!store) return;
-
-    const doc = new jsPDF();
-
-    // Set up the document
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Rapport de Ventes - ${store.name}`, 20, 25);
-
-    // Add period information
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-
-    let periodText = '';
-    switch (selectedPeriod) {
-      case 'day':
-        periodText = `Jour: ${new Date(selectedDate).toLocaleDateString('fr-FR')}`;
-        break;
-      case 'range':
-        periodText = `Du ${new Date(selectedStartDate).toLocaleDateString('fr-FR')} au ${new Date(selectedEndDate).toLocaleDateString('fr-FR')}`;
-        break;
-      case 'month':
-        const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-          'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-        periodText = `${monthNames[selectedMonth - 1]} ${selectedYear}`;
-        break;
-      case 'year':
-        periodText = `Année ${selectedYear}`;
-        break;
-    }
-
-    doc.text(`Période: ${periodText}`, 20, 35);
-    doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, 20, 45);
-
-    // Store overview
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Aperçu du Magasin', 20, 65);
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-
-    const sales = store.received - store.waste;
-    const overviewData = [
-      ['Production Totale:', formatNum(store.production) + ' doughnuts'],
-      ['Quantité Reçue:', formatNum(store.received) + ' doughnuts'],
-      ['Ventes Réalisées:', formatNum(sales) + ' doughnuts'],
-      ['Déchets:', formatNum(store.waste) + ' doughnuts (' + store.wastePercent.toFixed(1) + '%)'],
-      ['Coût de Production:', 'CHF ' + store.cost.toFixed(2)],
-      ['Coût des Déchets:', 'CHF ' + store.wasteCost.toFixed(2)]
-    ];
-
-    overviewData.forEach((row, index) => {
-      doc.text(row[0], 20, 80 + (index * 8));
-      doc.text(row[1], 80, 80 + (index * 8));
-    });
-
-    // Get detailed store data
-    const filteredDates = data.map(d => d.date);
-    const storeDetailedData: Array<{
-      variety: string;
-      boxFormat: string;
-      received: number;
-      waste: number;
-      sales: number;
-    }> = [];
-
-    rawProductionPlans.forEach(plan => {
-      if (!filteredDates.includes(plan.date)) return;
-
-      const planEntries = getPlanEntries(plan);
-      if (planEntries.length > 0) {
-        planEntries.forEach((planStore: any) => {
-          if (planStore.store_id !== storeId) return;
-
-          // Process individual production items
-          if (planStore.production_items && Array.isArray(planStore.production_items)) {
-            planStore.production_items.forEach((item: any) => {
-              const variety = varieties.find(v => v.id === item.variety_id);
-              const form = variety?.formId ? forms.find(f => f.id === variety.formId) : null;
-
-              if (!planStore.delivery_confirmed || !planStore.waste_reported || item.received == null || item.waste == null) return;
-              const received = item.received;
-              const waste = item.waste;
-              const sales = received - waste;
-
-              storeDetailedData.push({
-                variety: variety?.name || 'Variété inconnue',
-                boxFormat: form?.name ? `Individuel (${form.name})` : 'Individuel',
-                received: received,
-                waste: waste,
-                sales: sales
-              });
-            });
-          }
-
-          // Process box productions
-          if (planStore.box_productions && Array.isArray(planStore.box_productions)) {
-            planStore.box_productions.forEach((boxProd: any) => {
-              const box = boxes.find(b => b.name === boxProd.box_name);
-              if (box) {
-                const boxQuantity = boxProd.quantity || 0;
-                const boxSize = box.size;
-                if (!planStore.delivery_confirmed || !planStore.waste_reported || boxProd.received == null || boxProd.waste == null) return;
-                const receivedBoxes = boxProd.received;
-                const wasteBoxes = boxProd.waste;
-                const salesBoxes = receivedBoxes - wasteBoxes;
-
-                const receivedDoughnuts = receivedBoxes * boxSize;
-                const wasteDoughnuts = wasteBoxes * boxSize;
-                const salesDoughnuts = salesBoxes * boxSize;
-
-                const boxVarieties = box.varieties ?
-                  box.varieties.map(bv => {
-                    const v = varieties.find(variety => variety.id === bv.varietyId);
-                    return v?.name || 'Inconnue';
-                  }).join(', ') : 'Non configurées';
-
-                storeDetailedData.push({
-                  variety: boxVarieties,
-                  boxFormat: `Boîte ${box.name} (${boxSize} unités)`,
-                  received: receivedDoughnuts,
-                  waste: wasteDoughnuts,
-                  sales: salesDoughnuts
-                });
-              }
-            });
-          }
-        });
-      }
-    });
-
-    // Add detailed breakdown table
-    if (storeDetailedData.length > 0) {
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Détail par Variété et Format', 20, 130);
-
-      const tableHeaders = [
-        ['Variété', 'Format', 'Reçu', 'Déchets', 'Ventes', '% Déchets']
-      ];
-
-      const tableData = storeDetailedData.map(row => [
-        row.variety,
-        row.boxFormat,
-        formatNum(row.received),
-        formatNum(row.waste),
-        formatNum(row.sales),
-        row.received > 0 ? ((row.waste / row.received) * 100).toFixed(1) + '%' : '0%'
-      ]);
-
-      (doc as any).autoTable({
-        startY: 140,
-        head: tableHeaders,
-        body: tableData,
-        theme: 'grid',
-        styles: {
-          fontSize: 8,
-          cellPadding: 3
-        },
-        headStyles: {
-          fillColor: [34, 197, 94],
-          textColor: 255,
-          fontStyle: 'bold'
-        },
-        columnStyles: {
-          0: { cellWidth: 50 }, // Variety
-          1: { cellWidth: 45 }, // Format
-          2: { cellWidth: 25, halign: 'center' }, // Received
-          3: { cellWidth: 25, halign: 'center' }, // Waste
-          4: { cellWidth: 25, halign: 'center' }, // Sales
-          5: { cellWidth: 25, halign: 'center' } // Waste %
-        }
-      });
-    }
-
-    // Save the PDF
-    const filename = `rapport-magasin-${store.name.replace(/[^a-zA-Z0-9]/g, '-')}-${periodText.replace(/[^a-zA-Z0-9]/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(filename);
+    const store = stores.find(item => item.id === storeId); if (!store) return;
+    return runPdfGeneration(logo => buildSalesPdf(eligibleObservations(), { ...reportContext(), scope: store.name, logo }, store.name));
   };
+  const generateDecisionReport = () => runPdfGeneration(logo => buildDecisionPdf(safeProductMetrics.filter(metric => selectedStores.length === 0 || selectedStores.includes(metric.storeId)), { ...reportContext(), logo }));
 
   // Format data for variety pie chart
   const getVarietyChartData = () => {
@@ -1704,6 +1304,8 @@ const StatsPage: React.FC = () => {
       )}
 
       {loadDiagnostics && <p className="mb-4 text-right text-xs text-gray-500">{loadDiagnostics.requests} requête(s) · {loadDiagnostics.rows} plan(s) · {(loadDiagnostics.bytes / 1024).toFixed(1)} Ko · {(loadDiagnostics.durationMs / 1000).toFixed(1)} s</p>}
+
+      {(pdfProgress || pdfMessage) && <div className={`mb-4 rounded-lg border px-4 py-3 text-sm ${pdfProgress ? 'border-green-200 bg-green-50 text-green-900' : 'border-gray-200 bg-white text-gray-700'}`} role="status" aria-live="polite">{pdfProgress || pdfMessage}</div>}
 
        {kpiLoading ? (
         <div className="forecast-panel mb-6 rounded-lg p-4" role="status" aria-label="Chargement des indicateurs prévisionnels">
@@ -2324,6 +1926,11 @@ const StatsPage: React.FC = () => {
         </div>
       </div>
 
+      <div className="mt-8 flex justify-end">
+        <button onClick={generateDecisionReport} disabled={loadState !== 'success' || safeProductMetrics.length === 0 || !!pdfProgress} className="inline-flex min-h-11 items-center rounded-lg bg-krispy-green px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50">
+          <Printer className="mr-2 h-4 w-4" />{pdfProgress ? pdfProgress : 'Télécharger le rapport d’aide à la décision'}
+        </button>
+      </div>
       <StoreAnalyticsView
         metrics={safeProductMetrics}
         stores={stores.filter(store => store.isActive && (selectedStores.length === 0 || selectedStores.includes(store.id)))}
