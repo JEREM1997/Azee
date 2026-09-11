@@ -125,7 +125,29 @@ export const productionService = {
 
     if (error) {
       console.error('[productionService] Error calling get-production-plans:', error);
-      throw error;
+      const context = (error as any)?.context as Response | undefined;
+      let details: any = null;
+      if (context) {
+        try {
+          details = await context.clone().json();
+        } catch (_) {
+          try { details = { error: await context.clone().text() }; } catch (_) { /* no readable response body */ }
+        }
+      }
+      const message = details?.error || details?.message || error.message || 'Impossible de charger les plans';
+      const enriched = Object.assign(new Error(message), {
+        status: context?.status,
+        code: details?.code || details?.details?.code,
+        functionName: 'get-production-plans',
+        range: { startDate, endDate: formattedEndDate },
+      });
+      console.error('[productionService] get-production-plans diagnostics', {
+        status: enriched.status,
+        code: enriched.code,
+        range: enriched.range,
+        message: enriched.message,
+      });
+      throw enriched;
     }
 
     return (data as ProductionPlan[]) || [];

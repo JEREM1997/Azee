@@ -11,6 +11,7 @@ import { MetricStrip } from '../components/PageExperience';
 import StoreAnalyticsView from '../components/StoreAnalyticsView';
 import { calculateProductMetrics, normalizeProductionPlans } from '../analytics/engine';
 import { getComparisonWindows } from '../analytics/salesDate';
+import { canExportStatistics, friendlyStatisticsError, loadStatisticsWindows, type BatchFailure } from '../services/statisticsLoader';
 
 // Helper: consistent number format for PDF (comma as thousands separator)
 const formatNum = (n: number) => n.toLocaleString('en-US');
@@ -89,6 +90,10 @@ const StatsPage: React.FC = () => {
   const requestIdRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [comparisonWarning, setComparisonWarning] = useState<string | null>(null);
+  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'success' | 'partial' | 'error'>('idle');
+  const [loadProgress, setLoadProgress] = useState({ completed: 0, total: 0, label: '' });
+  const [failedBatches, setFailedBatches] = useState<BatchFailure[]>([]);
+  const [loadDiagnostics, setLoadDiagnostics] = useState<{ requests: number; rows: number; bytes: number; durationMs: number } | null>(null);
   const [kpiSnapshot, setKpiSnapshot] = useState<{
     snapshot_date: string;
     range_start: string;
@@ -127,8 +132,11 @@ const StatsPage: React.FC = () => {
     const requestId = ++requestIdRef.current;
     try {
       setLoading(true);
+      setLoadState('loading');
       setError(null);
       setComparisonWarning(null);
+      setFailedBatches([]);
+      setLoadProgress({ completed: 0, total: 0, label: '' });
 
       let startDateStr = comparisonWindows.current.start;
       let endDateStr = comparisonWindows.current.end;
@@ -156,6 +164,7 @@ const StatsPage: React.FC = () => {
 
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
         setError('Veuillez sélectionner une période valide.');
+        setLoadState('error');
         setProductionData([]);
         setRawProductionPlans([]);
         return;
@@ -163,6 +172,7 @@ const StatsPage: React.FC = () => {
 
       if (startDate > endDate) {
         setError('La date de début doit être antérieure ou égale à la date de fin.');
+        setLoadState('error');
         setProductionData([]);
         setRawProductionPlans([]);
         return;
@@ -177,29 +187,44 @@ const StatsPage: React.FC = () => {
         endDateStr
       );
 
-      // Keep requests bounded to their own windows. Fetching the union of an
-      // eight-week period and its predecessor made the Edge Function scan up
-      // to sixteen weeks and regularly time out in production.
-      const [currentResult, previousResult] = await Promise.allSettled([
-        productionService.getProductionPlans(startDateStr, endDateStr),
-        productionService.getProductionPlans(comparisonWindows.previous.start, comparisonWindows.previous.end),
-      ]);
+      const result = await loadStatisticsWindows({
+        current: { start: startDateStr, end: endDateStr },
+        previous: comparisonWindows.previous,
+        fetchBatch: (start, end) => productionService.getProductionPlans(start, end),
+        concurrency: 2,
+        retries: 1,
+        isStale: () => requestId !== requestIdRef.current,
+        onProgress: progress => {
+          if (requestId !== requestIdRef.current) return;
+          setLoadProgress({ completed: progress.completed, total: progress.total, label: `${progress.batch.start} → ${progress.batch.end}` });
+        },
+      });
 
-      if (currentResult.status === 'rejected') {
-        throw currentResult.reason;
+      const plans = result.current;
+      const previousPlans = result.previous;
+      setFailedBatches(result.failures);
+      setLoadDiagnostics({ requests: result.requestCount, rows: result.rowCount, bytes: result.responseBytes, durationMs: result.durationMs });
+
+      const currentFailures = result.failures.filter(failure => failure.scopes.includes('current'));
+      const previousFailures = result.failures.filter(failure => failure.scopes.includes('previous'));
+      if (currentFailures.length === result.batches.filter(batch => batch.scopes.includes('current')).length) {
+        const first = currentFailures[0];
+        throw Object.assign(new Error(`Impossible de charger les statistiques : ${friendlyStatisticsError(first)}`), { failures: currentFailures });
       }
-
-      const plans = currentResult.value || [];
-      const previousPlans = previousResult.status === 'fulfilled' ? previousResult.value || [] : [];
-
-      if (previousResult.status === 'rejected') {
-        console.warn('Unable to load comparison period:', previousResult.reason);
-        setComparisonWarning('La période actuelle est affichée, mais la comparaison précédente est momentanément indisponible.');
+      if (result.failures.length) {
+        setLoadState('partial');
+        const missing = result.failures.map(failure => `${failure.start} → ${failure.end}`).join(', ');
+        setComparisonWarning(`Chargement partiel : périodes indisponibles ${missing}. Les recommandations sont suspendues.`);
+      } else {
+        setLoadState('success');
+      }
+      if (previousFailures.length && !currentFailures.length) {
+        setComparisonWarning(`La période actuelle est complète, mais ${previousFailures.length} lot(s) de comparaison sont indisponibles. Les tendances sont suspendues.`);
       }
 
       if (requestId !== requestIdRef.current) return;
 
-      if (!plans || plans.length === 0) {
+      if (plans.length === 0) {
         setProductionData([]);
         setRawProductionPlans([]);
         setPreviousProductionPlans([]);
@@ -279,6 +304,8 @@ const StatsPage: React.FC = () => {
     } catch (err) {
       console.error('Error loading production data:', err);
       if (requestId !== requestIdRef.current) return;
+      if ((err as any)?.code === 'STALE_REQUEST') return;
+      setLoadState('error');
       setError(
         err instanceof Error
           ? err.message
@@ -301,7 +328,6 @@ const StatsPage: React.FC = () => {
     selectedYear,
     selectedStartDate,
     selectedEndDate,
-    selectedStores,
     adminLoading,
     comparisonWindows.current.start,
     comparisonWindows.current.end,
@@ -365,6 +391,7 @@ const StatsPage: React.FC = () => {
     normalizeProductionPlans(rawProductionPlans, new Set(boxes.map(box => box.id))),
     normalizeProductionPlans(previousProductionPlans, new Set(boxes.map(box => box.id)))
   ), [rawProductionPlans, previousProductionPlans, boxes]);
+  const safeProductMetrics = loadState === 'success' ? productMetrics : [];
 
   // Calculate store performance from real data (this respects store filtering)
   const getStorePerformance = (): StorePerformance[] => {
@@ -1476,6 +1503,36 @@ const StatsPage: React.FC = () => {
   const isInitialCriticalLoading = adminLoading || (loading && !hasLoadedCriticalData);
   const beginFilterRefresh = () => setLoading(true);
 
+  const retryFailedStatisticsBatches = async () => {
+    if (!failedBatches.length) return;
+    const requestId = ++requestIdRef.current;
+    setLoading(true);
+    setLoadState('loading');
+    const results = await Promise.allSettled(failedBatches.map(batch =>
+      productionService.getProductionPlans(batch.start, batch.end)
+    ));
+    if (requestId !== requestIdRef.current) return;
+    const remaining: BatchFailure[] = [];
+    const currentRecovered: any[] = [];
+    const previousRecovered: any[] = [];
+    results.forEach((result, index) => {
+      const batch = failedBatches[index];
+      if (result.status === 'rejected') {
+        remaining.push({ ...batch, message: result.reason?.message || batch.message });
+        return;
+      }
+      if (batch.scopes.includes('current')) currentRecovered.push(...result.value);
+      if (batch.scopes.includes('previous')) previousRecovered.push(...result.value);
+    });
+    const merge = (existing: any[], recovered: any[]) => [...new Map([...existing, ...recovered].map(plan => [plan.id || plan.date, plan])).values()];
+    setRawProductionPlans(existing => merge(existing, currentRecovered));
+    setPreviousProductionPlans(existing => merge(existing, previousRecovered));
+    setFailedBatches(remaining);
+    setComparisonWarning(remaining.length ? `Chargement encore partiel : ${remaining.map(batch => `${batch.start} → ${batch.end}`).join(', ')}.` : null);
+    setLoadState(remaining.length ? 'partial' : 'success');
+    setLoading(false);
+  };
+
   if (isInitialCriticalLoading) {
     return <KrispyKremeLoader size="lg" label="Calcul des performances…" fullscreen />;
   }
@@ -1589,7 +1646,7 @@ const StatsPage: React.FC = () => {
 
               <button
                 onClick={generateSalesReport}
-                disabled={storePerformance.length === 0}
+                disabled={!canExportStatistics(loadState, storePerformance.length)}
                 className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krispy-green disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Télécharger le rapport de ventes par magasin"
               >
@@ -1603,10 +1660,19 @@ const StatsPage: React.FC = () => {
 
       {loading ? (
         <div className="stats-refresh" role="status" aria-live="polite">
-          <KrispyKremeLoader size="md" label="Actualisation des statistiques…" />
+          <KrispyKremeLoader size="md" label={loadProgress.total > 0 ? `Chargement des statistiques : ${loadProgress.completed} période${loadProgress.completed > 1 ? 's' : ''} sur ${loadProgress.total} (${loadProgress.label})` : 'Préparation du chargement des statistiques…'} />
         </div>
       ) : (
       <div className="stats-content-ready">
+
+      {loadState === 'error' ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-6" role="alert">
+          <h2 className="text-lg font-bold text-red-900">Statistiques indisponibles</h2>
+          <p className="mt-2 text-sm text-red-800">{error || 'Impossible de charger les statistiques.'}</p>
+          <p className="mt-2 text-sm text-red-700">Aucune valeur à zéro ni aucun export ne sont présentés comme réels.</p>
+          <button onClick={loadProductionData} className="mt-4 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800">Réessayer</button>
+        </div>
+      ) : (<>
 
       <MetricStrip items={[
         { label: 'Ventes potentielles', value: totalProduction.toLocaleString('fr-FR'), detail: 'doughnuts sur la période', tone: 'green' },
@@ -1632,9 +1698,12 @@ const StatsPage: React.FC = () => {
 
       {comparisonWarning && !error && (
         <div className="mb-6 border-l-4 border-amber-400 bg-amber-50 p-4 text-sm text-amber-900" role="status">
-          {comparisonWarning}
+          <p>{comparisonWarning}</p>
+          {failedBatches.length > 0 && <button onClick={retryFailedStatisticsBatches} className="mt-2 rounded-md border border-amber-500 px-3 py-1.5 font-semibold hover:bg-amber-100">Relancer uniquement les lots échoués</button>}
         </div>
       )}
+
+      {loadDiagnostics && <p className="mb-4 text-right text-xs text-gray-500">{loadDiagnostics.requests} requête(s) · {loadDiagnostics.rows} plan(s) · {(loadDiagnostics.bytes / 1024).toFixed(1)} Ko · {(loadDiagnostics.durationMs / 1000).toFixed(1)} s</p>}
 
        {kpiLoading ? (
         <div className="forecast-panel mb-6 rounded-lg p-4" role="status" aria-label="Chargement des indicateurs prévisionnels">
@@ -2256,9 +2325,10 @@ const StatsPage: React.FC = () => {
       </div>
 
       <StoreAnalyticsView
-        metrics={productMetrics}
+        metrics={safeProductMetrics}
         stores={stores.filter(store => store.isActive && (selectedStores.length === 0 || selectedStores.includes(store.id)))}
       />
+      </>)}
       </div>
       )}
     </div>
