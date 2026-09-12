@@ -182,6 +182,7 @@ function createDeliveryEntryFromOrder(order: any) {
     billing_address: order.billing_address || null,
     order_type: order.order_type || null,
     payment_status: order.payment_status || null,
+    conditioning: order.conditioning || null,
     handled_by: order.handled_by || null,
     delivered_by: order.delivered_by || null,
     comments: order.comments || null,

@@ -52,14 +52,34 @@ export const buildDecisionPdf=(metrics:ProductMetrics[],ctx:ReportContext,includ
   addDocumentFooters(doc,{documentName:'Aide à la décision',period:period(ctx),generatedAt:generated});return{doc,filename:safePdfFilename(['KKOPS',includeAnnex?'Aide-decision-detail-annexes':'Aide-decision-synthese',ctx.scope,ctx.periodStart,ctx.periodEnd])};
 };
 
-export interface DeliveryPdfData {storeName:string;productionDate:string;deliveryDate:string;sourceLabel:string;reference?:string;comments?:string;items:Array<{name:string;conditioning?:string;planned:number;received:number|null;waste:number|null}>;boxes:Array<{name:string;planned:number;received:number|null;waste:number|null}>}
+export interface DeliveryPdfData {storeName:string;productionDate?:string;deliveryDate:string;sourceLabel:string;reference?:string;customerName?:string;customerPhone?:string;orderType?:string;paymentStatus?:string;companyName?:string;billingAddress?:string;deliveryAddress?:string;conditioning?:string;handledBy?:string;deliveredBy?:string;comments?:string;items:Array<{name:string;conditioning?:string;planned:number;received:number|null;waste:number|null}>;boxes:Array<{name:string;planned:number;received:number|null;waste:number|null}>}
+const present=(value:unknown):value is string=>typeof value==='string'&&value.trim().length>0;
+const orderTypeLabel=(value:string)=>({b2b:'B2B',retail:'Retail'}[value.toLowerCase()]||value);
+const paymentStatusLabel=(value:string)=>({a_facturer:'À facturer',deja_paye:'Déjà payé',a_la_livraison:'À la livraison'}[value.toLowerCase()]||value);
 export const buildDeliveryPdf=(data:DeliveryPdfData,logo?:PdfImage|null)=>{
   const doc=createPdf('portrait',{title:`Bon de livraison - ${data.storeName}`,subject:'Contrôle de livraison'});
   let y=addDocumentHeader(doc,{title:'Bon de livraison',subtitle:data.sourceLabel,period:data.deliveryDate,scope:data.storeName,logo});
   const isOrder=/commande|b2b|client|externe/i.test(data.sourceLabel)||!!data.reference;
-  const showConditioning=isOrder&&data.items.some(item=>!!item.conditioning?.trim());
-  const info=[['Production',data.productionDate],['Livraison',data.deliveryDate],['Magasin',data.storeName],...(data.reference?[['Référence',data.reference]]:[])];
-  y=addDataTable(doc,{y,head:[['Document','Information']],body:info,compact:true})+4;
+  const showConditioning=isOrder&&data.items.some(item=>present(item.conditioning));
+  const documentInfo:[string,string][]=[['Magasin demandeur',data.storeName],['Date de livraison',data.deliveryDate]];
+  if(present(data.productionDate))documentInfo.push(['Date de production',data.productionDate]);
+  if(present(data.reference))documentInfo.push(['Référence',data.reference]);
+  y=addDataTable(doc,{y,head:[['Commande','Information']],body:documentInfo,compact:true})+4;
+  if(isOrder){
+    const customerInfo:[string,string][]=[];
+    if(present(data.customerName))customerInfo.push(['Nom du client',data.customerName.trim()]);
+    if(present(data.customerPhone))customerInfo.push(['Téléphone',data.customerPhone.trim()]);
+    if(present(data.orderType))customerInfo.push(['Type de commande',orderTypeLabel(data.orderType.trim())]);
+    if(present(data.paymentStatus))customerInfo.push(['Statut de facturation',paymentStatusLabel(data.paymentStatus.trim())]);
+    if(present(data.companyName))customerInfo.push(['Société',data.companyName.trim()]);
+    if(present(data.billingAddress))customerInfo.push(['Adresse de facturation',data.billingAddress.trim()]);
+    if(present(data.deliveryAddress))customerInfo.push(['Adresse de livraison',data.deliveryAddress.trim()]);
+    if(present(data.conditioning))customerInfo.push(['Conditionnement général',data.conditioning.trim()]);
+    if(present(data.comments))customerInfo.push(['Commentaire',data.comments.trim()]);
+    if(present(data.handledBy))customerInfo.push(['Commande saisie par',data.handledBy.trim()]);
+    if(present(data.deliveredBy))customerInfo.push(['Livraison effectuée par',data.deliveredBy.trim()]);
+    if(customerInfo.length){y=addSectionTitle(doc,'Client et livraison',y);y=addDataTable(doc,{y,head:[['Champ','Valeur']],body:customerInfo,compact:true})+4;}
+  }
   y=addSectionTitle(doc,'Doughnuts individuels',y);
   const itemHead=showConditioning?['Produit','Conditionnement','Prévu','Reçu','Déchets']:['Produit','Prévu','Reçu','Déchets'];
   const itemBody=data.items.map(item=>showConditioning
@@ -73,9 +93,8 @@ export const buildDeliveryPdf=(data:DeliveryPdfData,logo?:PdfImage|null)=>{
     y=addDataTable(doc,{y,head:[['Boîte','Prévu','Reçu','Déchets']],body:data.boxes.map(box=>[box.name,box.planned,formatWritableValue(box.received),formatWritableValue(box.waste)]),compact:true,columnStyles:standardColumns});
   }
   const pageHeight=doc.internal.pageSize.getHeight();
-  const receptionY=Math.max(y+4,pageHeight-37);
-  if(receptionY+16>pageHeight-PDF_FOOTER)throw new Error('Le bon de livraison contient trop de lignes pour une page A4.');
-  if(data.comments){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(...PDF_COLORS.muted);doc.text(doc.splitTextToSize(`Commentaire : ${data.comments}`,170),PDF_MARGIN,receptionY-3);}
+  let receptionY=Math.max(y+4,pageHeight-37);
+  if(receptionY+16>pageHeight-PDF_FOOTER){doc.addPage();receptionY=addDocumentHeader(doc,{title:'Bon de livraison - suite',subtitle:data.sourceLabel,period:data.deliveryDate,scope:data.storeName,logo})+4;}
   doc.setDrawColor(...PDF_COLORS.line);doc.roundedRect(PDF_MARGIN,receptionY,doc.internal.pageSize.getWidth()-PDF_MARGIN*2,16,2,2,'S');
   doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(...PDF_COLORS.muted);doc.text('RÉCEPTION MAGASIN',PDF_MARGIN+4,receptionY+5);
   doc.setFont('helvetica','normal');doc.text('Nom / initiales :',PDF_MARGIN+4,receptionY+11);doc.text('Heure :',92,receptionY+11);doc.text('Signature :',135,receptionY+11);
