@@ -53,6 +53,7 @@ interface DeliveryStoreProduction {
   billing_address?: string | null;
   order_type?: string | null;
   payment_status?: string | null;
+  conditioning?: string | null;
   handledBy?: string | null;
   deliveredBy?: string | null;
   comments?: string | null;
@@ -358,6 +359,7 @@ const DeliveryPage: React.FC = () => {
               billing_address: store.billing_address || null,
               order_type: store.order_type || null,
               payment_status: store.payment_status || null,
+              conditioning: store.conditioning || null,
               handledBy: store.handled_by || store.handledBy || null,
               deliveredBy: store.delivered_by || store.deliveredBy || null,
               comments: store.comments || null,
@@ -489,6 +491,16 @@ const DeliveryPage: React.FC = () => {
       deliveryDate,
       sourceLabel: storeDetails.source_label || 'Plan habituel',
       reference: storeDetails.source_order_id || undefined,
+      customerName: storeDetails.customer_name || undefined,
+      customerPhone: storeDetails.customer_phone || undefined,
+      orderType: storeDetails.order_type || undefined,
+      paymentStatus: storeDetails.payment_status || undefined,
+      companyName: storeDetails.company_name || undefined,
+      billingAddress: storeDetails.billing_address || undefined,
+      deliveryAddress: storeDetails.delivery_address || undefined,
+      conditioning: storeDetails.conditioning || undefined,
+      handledBy: storeDetails.handledBy || undefined,
+      deliveredBy: storeDetails.deliveredBy || undefined,
       comments: storeDetails.comments || undefined,
       items: (storeDetails.production_items || []).slice().sort((a,b)=>compareText(a.variety_name,b.variety_name)).map(item=>({
         name: getVarietyDisplayName(item), conditioning:item.conditioning || undefined, planned:item.quantity,

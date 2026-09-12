@@ -58,6 +58,25 @@ test('conditioning is limited to real orders and writable cells preserve null ve
   assert.equal(formatWritableValue(null),'');assert.equal(formatWritableValue(undefined),'');assert.equal(formatWritableValue(0),'0');
 });
 
+test('order delivery PDF restores every persisted order field and translates stored statuses',()=>{
+  const report=buildDeliveryPdf({
+    storeName:'KK - Lausanne',productionDate:'2026-09-10',deliveryDate:'2026-09-11',sourceLabel:'Commande',reference:'order-42',
+    customerName:'Alice Martin',customerPhone:'+41 79 123 45 67',orderType:'b2b',paymentStatus:'a_facturer',
+    companyName:'ACME SA',billingAddress:'Rue des Factures 1',deliveryAddress:'Quai de Livraison 2',
+    conditioning:'Plateaux scellés',comments:'Appeler à l’arrivée',handledBy:'Camille',deliveredBy:'Morgan',
+    items:[{name:'Original Glazed',conditioning:'Carton de 12',planned:24,received:null,waste:null}],boxes:[],
+  });
+  const pdfCommands=(report.doc.internal.pages as any[]).flat().join('\n');
+  for(const expected of ['Magasin demandeur','KK - Lausanne','Date de livraison','2026-09-11','Date de production','2026-09-10','Nom du client','Alice Martin','Téléphone','+41 79 123 45 67','Type de commande','B2B','Statut de facturation','À facturer','Société','ACME SA','Adresse de facturation','Rue des Factures 1','Adresse de livraison','Quai de Livraison 2','Conditionnement général','Plateaux scellés','Commentaire','Appeler','arrivée','Commande saisie par','Camille','Livraison effectuée par','Morgan','Original Glazed','Carton de 12','Reçu','Déchets'])assert.ok(pdfCommands.includes(expected),`missing ${expected}`);
+});
+
+test('optional empty order fields produce neither placeholder nor empty metadata rows',()=>{
+  const report=buildDeliveryPdf({storeName:'Balexert',deliveryDate:'2026-09-11',sourceLabel:'Commande',customerName:'Client minimal',customerPhone:'',companyName:'   ',deliveryAddress:undefined,comments:undefined,items:[{name:'Original',planned:2,received:null,waste:null}],boxes:[]});
+  const pdfCommands=(report.doc.internal.pages as any[]).flat().join('\n');
+  assert.ok(pdfCommands.includes('Client minimal'));
+  for(const unwanted of ['Téléphone','Société','Adresse de livraison','undefined','null','N/A'])assert.equal(pdfCommands.includes(unwanted),false,`unexpected ${unwanted}`);
+});
+
 test('production plan PDF is landscape and preserves unknown box configuration',()=>{
   const report=buildProductionPlanPdf({date:'2026-09-12',stores:[{name:'Lausanne',deliveryDate:'2026-09-13',items:[{name:'Original',form:'Anneau',quantity:12}],boxes:[{name:'Configuration ancienne',quantity:2,size:null}]}]});
   assert.equal(report.doc.internal.pageSize.getWidth()>report.doc.internal.pageSize.getHeight(),true);assert.equal(new TextDecoder().decode(bytes(report.doc).slice(0,5)),'%PDF-');
