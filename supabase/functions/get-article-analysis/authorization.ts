@@ -1,0 +1,6 @@
+export type KkOpsRole = 'admin' | 'production' | 'store';
+export interface RoleRecord { role?: unknown; store_ids?: unknown }
+export interface AuthUserLike { user_metadata?: Record<string,unknown>; app_metadata?: Record<string,unknown> }
+export const normalizeKkOpsRole=(value:unknown):KkOpsRole|null=>{if(typeof value!=='string')return null;const role=value.trim().toLowerCase();if(role==='magasin')return'store';return role==='admin'||role==='production'||role==='store'?role:null};
+export const resolveKkOpsAuthorization=(roleRow:RoleRecord|null,user:AuthUserLike)=>{const metadataRole=user.user_metadata?.role,appRole=user.app_metadata?.role,rawRole=roleRow?.role??metadataRole??appRole,role=normalizeKkOpsRole(rawRole),rawStoreIds=roleRow?.store_ids??user.user_metadata?.store_ids??user.app_metadata?.store_ids,storeIds=Array.isArray(rawStoreIds)?rawStoreIds.filter((value):value is string=>typeof value==='string'&&value.trim().length>0):[];return{role,storeIds,roleSource:roleRow?.role!=null?'user_roles':metadataRole!=null?'user_metadata':appRole!=null?'app_metadata':'missing'}};
+export const restrictRequestedStores=(role:KkOpsRole,assignedStoreIds:string[],requestedStoreIds:string[])=>role==='store'?(requestedStoreIds.length?requestedStoreIds.filter(id=>assignedStoreIds.includes(id)):assignedStoreIds):requestedStoreIds;
