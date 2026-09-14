@@ -35,3 +35,10 @@ export const articleSeries = (rows:ArticleRow[], granularity:'day'|'week'|'month
 };
 
 export const comparisonChange = (current:number|null, previous:number|null) => current===null||previous===null ? null : ({quantity:current-previous,percent:previous===0?null:(current-previous)/previous});
+
+
+/** Reduces full-plan fallback responses to the requested article and stores before normalization. */
+export const filterPlansForArticle = (plans:any[],args:{productType:ProductType;productId:string;storeIds:string[]}) => {
+  const entries=(input:any[])=>(input||[]).filter((store:any)=>!args.storeIds.length||args.storeIds.includes(store.store_id)).map((store:any)=>({...store,production_items:args.productType==='variety'?(store.production_items||[]).filter((row:any)=>row.variety_id===args.productId):[],box_productions:args.productType==='box'?(store.box_productions||[]).filter((row:any)=>row.box_id===args.productId):[]})).filter((store:any)=>store.production_items.length||store.box_productions.length);
+  return plans.map(plan=>({...plan,stores:entries(plan.stores),delivery_entries:entries(plan.delivery_entries)})).filter(plan=>plan.stores.length||plan.delivery_entries.length);
+};

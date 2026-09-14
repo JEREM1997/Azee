@@ -42,3 +42,16 @@ test('article PDF uses the same rows, series and totals as the screen model',asy
   const report=buildArticlePdf({rows,totals,series,article:'Original Glazed',type:'Doughnut individuel'},{periodStart:'2026-07-04',periodEnd:'2026-07-04',scope:'Tous les magasins'});
   assert.match(report.filename,/Rapport-article_Original-Glazed/);assert.ok(report.doc.getNumberOfPages()>=1);assert.ok(report.doc.output('arraybuffer').byteLength>1000);
 });
+
+test('fallback plan filtering supports boxes, varieties, all stores and selected stores',async()=>{
+  const {filterPlansForArticle}=await import('../articleAnalysis.ts');
+  const plans=[{date:'2026-08-14',stores:[{store_id:'one',production_items:[{variety_id:'v'}],box_productions:[{box_id:'b'}]},{store_id:'two',production_items:[{variety_id:'other'}],box_productions:[{box_id:'b'}]}],delivery_entries:[{store_id:'one',production_items:[],box_productions:[{box_id:'b'}]}]}];
+  const boxes=filterPlansForArticle(plans,{productType:'box',productId:'b',storeIds:[]});assert.equal(boxes[0].stores.length,2);assert.equal(boxes[0].delivery_entries.length,1);
+  const variety=filterPlansForArticle(plans,{productType:'variety',productId:'v',storeIds:['one']});assert.equal(variety[0].stores.length,1);assert.equal(variety[0].stores[0].store_id,'one');assert.equal(variety[0].delivery_entries.length,0);
+  assert.deepEqual(filterPlansForArticle(plans,{productType:'box',productId:'absent',storeIds:[]}),[]);
+});
+
+test('HTTP failures distinguish invalid parameters, permissions, database, timeout and internal errors',async()=>{
+  const {classifyArticleError,isArticleFunctionUnavailable}=await import('../articleErrors.ts');
+  assert.equal(classifyArticleError({status:400}).kind,'invalid_parameters');assert.equal(classifyArticleError({status:403}).kind,'unauthorized');assert.equal(classifyArticleError({status:503,code:'DATABASE_ERROR'}).kind,'database');assert.equal(classifyArticleError({status:504}).kind,'timeout');assert.equal(classifyArticleError({status:500}).kind,'internal');assert.equal(isArticleFunctionUnavailable({status:404,code:'NOT_FOUND'}),true);
+});
