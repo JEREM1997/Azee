@@ -10,6 +10,7 @@ import kkOpsLogo from '../assets/digital_72_png-KK_logo_Red_Green_FNL.png';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 import { MetricStrip } from '../components/PageExperience';
 import StoreAnalyticsView from '../components/StoreAnalyticsView';
+import ArticleAnalysis from '../components/ArticleAnalysis';
 import { calculateProductMetrics, normalizeProductionPlans } from '../analytics/engine';
 import { getComparisonWindows } from '../analytics/salesDate';
 import { canExportStatistics, friendlyStatisticsError, loadStatisticsWindows, type BatchFailure } from '../services/statisticsLoader';
@@ -1257,6 +1258,8 @@ const StatsPage: React.FC = () => {
           </div>
         </div>
       </header>
+
+      <ArticleAnalysis stores={stores} varieties={varieties} boxes={boxes} />
 
       {loading ? (
         <div className="stats-refresh" role="status" aria-live="polite">

@@ -1,9 +1,27 @@
 import type { AnalyticsObservation, ProductMetrics } from '../analytics/types.ts';
-import { addContainedImage, addDataTable, addDocumentFooters, addDocumentHeader, addEmptyMessage, addKpiCard, addSectionTitle, createPdf, ensurePageSpace, formatPdfNumber, formatPdfPercent, formatWritableValue, safePdfFilename, PDF_COLORS, PDF_FOOTER, PDF_MARGIN, type PdfImage } from './pdfKit.ts';
+import type { ArticleRow, ArticleSeries, ArticleTotals } from '../analytics/articleAnalysis.ts';
+import { addContainedImage, addDataTable, addDocumentFooters, addDocumentHeader, addEmptyMessage, addKpiCard, addSectionTitle, createPdf, ensurePageSpace, formatPdfDate, formatPdfNumber, formatPdfPercent, formatWritableValue, safePdfFilename, PDF_COLORS, PDF_FOOTER, PDF_MARGIN, type PdfImage } from './pdfKit.ts';
 
 export interface ReportContext { periodStart:string;periodEnd:string;scope:string;logo?:PdfImage|null;generatedAt?:Date }
 const period=(ctx:ReportContext)=>`${ctx.periodStart} — ${ctx.periodEnd}`;
 const validSalesRows=(observations:AnalyticsObservation[])=>observations.filter(o=>o.quality==='valid');
+
+export const buildArticlePdf=(args:{rows:ArticleRow[];series:ArticleSeries[];totals:ArticleTotals;article:string;type:string},ctx:ReportContext)=>{
+  const doc=createPdf('landscape',{title:`Rapport article - ${args.article}`,subject:'Production, réception, ventes et déchets'}),generated=ctx.generatedAt||new Date();
+  let y=addDocumentHeader(doc,{title:'Rapport d’analyse par article',subtitle:`${args.article} · ${args.type}`,period:period(ctx),scope:ctx.scope,logo:ctx.logo});
+  const c=args.totals.coverage,detail=(known:number)=>known===c.totalLines?`${known}/${c.totalLines} lignes complètes`:`Partiel · ${known}/${c.totalLines} lignes`;
+  const cards=[['PRÉVU / PRODUIT',formatPdfNumber(args.totals.planned),detail(c.totalLines)],['RÉCEPTIONNÉ',formatPdfNumber(args.totals.received),detail(c.receivedKnownLines)],['VENDU',formatPdfNumber(args.totals.sold),detail(c.soldKnownLines)],['DÉCHETS',formatPdfNumber(args.totals.waste),detail(c.wasteKnownLines)],['TAUX DÉCHETS',formatPdfPercent(args.totals.wasteRate),detail(c.completeLines)],['ÉCART RÉCEPTION',formatPdfNumber(args.totals.receptionGap),detail(c.receivedKnownLines)]];
+  const width=(doc.internal.pageSize.getWidth()-PDF_MARGIN*2-15)/6;cards.forEach(([label,value,cardDetail],i)=>addKpiCard(doc,{x:PDF_MARGIN+i*(width+3),y,width,label,value,detail:cardDetail}));y+=34;
+  y=addSectionTitle(doc,'Évolution des volumes',y);
+  if(args.series.length){const x=PDF_MARGIN+8,w=doc.internal.pageSize.getWidth()-PDF_MARGIN*2-16,h=46,max=Math.max(1,...args.series.flatMap(s=>[s.planned,s.received,s.sold,s.waste].filter((v):v is number=>v!==null)));
+    doc.setDrawColor(...PDF_COLORS.line);doc.line(x,y+h,x+w,y+h);const colors=[PDF_COLORS.green,[54,121,184] as const,[4,106,56] as const,PDF_COLORS.red],keys=['planned','received','sold','waste'] as const;
+    keys.forEach((key,ki)=>{doc.setDrawColor(...colors[ki]);doc.setLineWidth(.7);let previous:null|[number,number]=null;args.series.forEach((point,i)=>{const value=point[key];if(value===null){previous=null;return;}const px=x+(args.series.length===1?w/2:i*w/(args.series.length-1)),py=y+h-value/max*h;if(previous)doc.line(previous[0],previous[1],px,py);doc.circle(px,py,.7,'F');previous=[px,py];});});
+    doc.setFontSize(7);doc.setTextColor(...PDF_COLORS.muted);doc.text(args.series[0].label,x,y+h+5);if(args.series.length>1)doc.text(args.series.at(-1)!.label,x+w,y+h+5,{align:'right'});y+=h+12;
+  }else y=addEmptyMessage(doc,'Aucune série disponible.',y);
+  y=addSectionTitle(doc,'Détail des observations',y+3);
+  addDataTable(doc,{y,head:[['Production','Livraison / vente','Magasin','Article','Prévu','Reçu','Déchets','Vendu','Taux','Complétude']],body:args.rows.map(r=>[formatPdfDate(r.productionDate),formatPdfDate(r.salesDate),r.storeName,r.productName,formatPdfNumber(r.planned),formatPdfNumber(r.receivedKnown?r.received:null),formatPdfNumber(r.wasteKnown?r.waste:null),formatPdfNumber(r.sold),r.status==='Complet'&&r.received!==null&&r.received>0?formatPdfPercent(r.waste!/r.received):'—',r.status]),compact:true,columnStyles:{0:{cellWidth:22},1:{cellWidth:25},2:{cellWidth:33},3:{cellWidth:45},4:{cellWidth:17,halign:'right'},5:{cellWidth:17,halign:'right'},6:{cellWidth:17,halign:'right'},7:{cellWidth:17,halign:'right'},8:{cellWidth:18,halign:'right'},9:{cellWidth:37}}});
+  addDocumentFooters(doc,{documentName:`Analyse article - ${args.article}`,period:period(ctx),generatedAt:generated});return{doc,filename:safePdfFilename(['KKOPS','Rapport-article',args.article,ctx.periodStart,ctx.periodEnd])};
+};
 
 export const buildSalesPdf=(observations:AnalyticsObservation[],ctx:ReportContext,storeName?:string)=>{
   const doc=createPdf('landscape',{title:storeName?`Rapport de ventes — ${storeName}`:'Rapport de ventes',subject:'Ventes et déchets confirmés'});
